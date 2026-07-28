@@ -1,0 +1,231 @@
+// Trader Dashboard — Prisma schema
+// SQLite datasource, see prisma.config.ts for connection config
+
+generator client {
+  provider = "prisma-client"
+  output   = "../src/generated/prisma"
+}
+
+datasource db {
+  provider = "sqlite"
+}
+
+// ---------- Prop Firm accounts ----------
+
+model PropFirmAccount {
+  id          String   @id @default(cuid())
+  firmName    String
+  accountName String
+  accountType String // "eval" | "funded"
+  status      String   @default("active") // "active" | "passed" | "failed" | "closed"
+  createdAt   DateTime @default(now())
+
+  trades   Trade[]
+  expenses AccountExpense[]
+  payouts  AccountPayout[]
+}
+
+model AccountExpense {
+  id        String   @id @default(cuid())
+  accountId String
+  account   PropFirmAccount @relation(fields: [accountId], references: [id], onDelete: Cascade)
+  kind      String // "evaluation_fee" | "recurring_fee"
+  amount    Float
+  date      DateTime
+  note      String?
+  createdAt DateTime @default(now())
+}
+
+model AccountPayout {
+  id        String   @id @default(cuid())
+  accountId String
+  account   PropFirmAccount @relation(fields: [accountId], references: [id], onDelete: Cascade)
+  amount    Float
+  date      DateTime
+  note      String?
+  createdAt DateTime @default(now())
+}
+
+// ---------- Daily journal ----------
+
+model TradingDay {
+  id        String   @id @default(cuid())
+  date      DateTime @unique
+
+  // Pre-market plan
+  htfBias           String?
+  keyLevels         String?
+  sessionTiming     String?
+  news              String?
+  maxLossPlan       Float?
+  positionSizePlan  String?
+  maxTradeCountPlan Int?
+
+  // Post-session review
+  planAdherenceGrade String? // "A+" | "A" | "B" | "C"
+  psychologyLog      String?
+  freeformNotes      String?
+
+  // AI
+  aiSummary String?
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  trades         Trade[]
+  missedTrades   MissedTrade[]
+  ruleViolations RuleViolationChecklistItem[]
+}
+
+model RuleViolationChecklistItem {
+  id     String  @id @default(cuid())
+  label  String  @unique
+  active Boolean @default(true)
+
+  tradingDays TradingDay[]
+}
+
+// ---------- Trades ----------
+
+model Trade {
+  id           String   @id @default(cuid())
+  tradingDayId String
+  tradingDay   TradingDay @relation(fields: [tradingDayId], references: [id], onDelete: Cascade)
+  accountId    String?
+  account      PropFirmAccount? @relation(fields: [accountId], references: [id])
+
+  symbol    String
+  direction String // "long" | "short"
+
+  entryPrice Float
+  exitPrice  Float?
+  entryTime  DateTime
+  exitTime   DateTime?
+
+  stopLossPlanned Float?
+  stopLossActual  Float?
+  targetPlanned   Float?
+  targetActual    Float?
+
+  positionSize Int
+
+  grossPnl Float?
+  commission Float?
+  netPnl   Float?
+  rMultiple Float?
+
+  htfTimeframe          String?
+  intermediateTimeframe String?
+  entryTimeframe        String?
+
+  entryModel String?
+  session    String?
+  setupGrade String? // "A+" | "A" | "B" | "C"
+
+  dailyBias String?
+  htfPoi    String?
+  htfDol    String?
+
+  writeup String?
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  confluenceFactors ConfluenceFactor[] @relation("TradeConfluenceFactors")
+  mistakes          MistakeType[]      @relation("TradeMistakes")
+  screenshots       Screenshot[]
+}
+
+model MissedTrade {
+  id           String   @id @default(cuid())
+  tradingDayId String
+  tradingDay   TradingDay @relation(fields: [tradingDayId], references: [id], onDelete: Cascade)
+
+  symbol           String
+  setupDescription String?
+  reasonMissed     String?
+  entryModel       String?
+  session          String?
+
+  createdAt DateTime @default(now())
+
+  confluenceFactors ConfluenceFactor[] @relation("MissedTradeConfluenceFactors")
+}
+
+model Screenshot {
+  id       String @id @default(cuid())
+  tradeId  String
+  trade    Trade  @relation(fields: [tradeId], references: [id], onDelete: Cascade)
+  filePath String
+
+  createdAt DateTime @default(now())
+}
+
+// ---------- Editable ICT taxonomy lookups ----------
+
+model ConfluenceFactor {
+  id     String  @id @default(cuid())
+  label  String  @unique
+  active Boolean @default(true)
+
+  trades       Trade[]       @relation("TradeConfluenceFactors")
+  missedTrades MissedTrade[] @relation("MissedTradeConfluenceFactors")
+}
+
+model EntryModel {
+  id     String  @id @default(cuid())
+  label  String  @unique
+  active Boolean @default(true)
+}
+
+model TradeSession {
+  id     String  @id @default(cuid())
+  label  String  @unique
+  active Boolean @default(true)
+}
+
+model MistakeType {
+  id     String  @id @default(cuid())
+  label  String  @unique
+  active Boolean @default(true)
+
+  trades Trade[] @relation("TradeMistakes")
+}
+
+// ---------- Goals ----------
+
+model Goal {
+  id          String   @id @default(cuid())
+  tier        String // "weekly" | "monthly" | "yearly"
+  targetAmount Float
+  periodStart DateTime
+  periodEnd   DateTime
+
+  createdAt DateTime @default(now())
+}
+
+model ProcessGoal {
+  id          String   @id @default(cuid())
+  label       String
+  metric      String // "journaling_days" | "discipline_score" | "zero_violation_days" | "clean_setup_days"
+  targetValue Float
+  periodStart DateTime
+  periodEnd   DateTime
+
+  createdAt DateTime @default(now())
+}
+
+// ---------- Config ----------
+
+model InstrumentConfig {
+  id         String @id @default(cuid())
+  symbol     String @unique
+  tickValue  Float
+  tickSize   Float
+  pointValue Float?
+}
+
+model AppSettings {
+  id       Int    @id @default(1)
+  timezone String @default("America/New_York")
+}
