@@ -226,6 +226,7 @@ model InstrumentConfig {
 }
 
 model AppSettings {
-  id       Int    @id @default(1)
-  timezone String @default("America/New_York")
+  id              Int     @id @default(1)
+  timezone        String  @default("America/New_York")
+  anthropicApiKey String?
 }
