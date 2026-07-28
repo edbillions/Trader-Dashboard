@@ -1,12 +1,16 @@
 import Link from "next/link";
 import { PageHeader } from "@/components/layout/page-header";
 import { getDashboardData } from "@/lib/data/dashboard";
+import { getAnalyticsData } from "@/lib/data/analytics";
 import { formatCurrency } from "@/lib/pnl";
 
 export const dynamic = "force-dynamic";
 
 export default async function DashboardPage() {
-  const data = await getDashboardData();
+  const [data, analytics] = await Promise.all([
+    getDashboardData(),
+    getAnalyticsData(),
+  ]);
 
   return (
     <div>
@@ -45,6 +49,14 @@ export default async function DashboardPage() {
           label="Win rate"
           value={data.winRate != null ? `${data.winRate.toFixed(1)}%` : "—"}
         />
+        <Stat
+          label="Composite score"
+          value={
+            analytics.composite.overall != null
+              ? Math.round(analytics.composite.overall).toString()
+              : "—"
+          }
+        />
       </div>
 
       <section>
@@ -68,7 +80,9 @@ export default async function DashboardPage() {
                 className="flex items-center justify-between rounded-lg border border-border bg-surface px-4 py-3 text-sm hover:bg-surface-raised"
               >
                 <span className="text-foreground">{day.date}</span>
-                <span className="text-muted">{day.tradeCount} trades</span>
+                <span className="text-muted">
+                  {day.tradeCount} trade{day.tradeCount === 1 ? "" : "s"}
+                </span>
                 <span
                   className={
                     day.netPnl >= 0
