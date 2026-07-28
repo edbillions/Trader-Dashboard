@@ -1,12 +1,80 @@
+import Link from "next/link";
 import { PageHeader } from "@/components/layout/page-header";
+import { listTradingDays } from "@/lib/data/trading-day";
+import { formatCurrency } from "@/lib/pnl";
 
-export default function JournalPage() {
+export const dynamic = "force-dynamic";
+
+export default async function JournalPage() {
+  const days = await listTradingDays();
+
   return (
     <div>
       <PageHeader
         title="Journal"
-        description="Daily guided wizard, coming in Phase 2."
+        description="Every logged trading day, most recent first."
+        actions={
+          <Link
+            href="/journal/new"
+            className="rounded-lg bg-accent px-4 py-2 text-sm font-medium text-white"
+          >
+            Log a day
+          </Link>
+        }
       />
+
+      {days.length === 0 ? (
+        <div className="rounded-xl border border-dashed border-border p-8 text-center text-sm text-muted">
+          No journal entries yet.{" "}
+          <Link href="/journal/new" className="text-accent hover:underline">
+            Log your first day
+          </Link>
+          .
+        </div>
+      ) : (
+        <div className="overflow-hidden rounded-xl border border-border">
+          <table className="w-full text-sm">
+            <thead className="bg-surface-raised text-left text-xs uppercase tracking-wide text-muted">
+              <tr>
+                <th className="px-4 py-3">Date</th>
+                <th className="px-4 py-3">Trades</th>
+                <th className="px-4 py-3">Net P&L</th>
+                <th className="px-4 py-3">Plan adherence</th>
+              </tr>
+            </thead>
+            <tbody>
+              {days.map((day) => (
+                <tr
+                  key={day.id}
+                  className="border-t border-border hover:bg-surface"
+                >
+                  <td className="px-4 py-3">
+                    <Link
+                      href={`/journal/${day.date}`}
+                      className="font-medium text-foreground hover:text-accent"
+                    >
+                      {day.date}
+                    </Link>
+                  </td>
+                  <td className="px-4 py-3 text-muted">{day.tradeCount}</td>
+                  <td
+                    className={
+                      day.netPnl >= 0
+                        ? "px-4 py-3 font-medium text-profit"
+                        : "px-4 py-3 font-medium text-loss"
+                    }
+                  >
+                    {formatCurrency(day.netPnl)}
+                  </td>
+                  <td className="px-4 py-3 text-muted">
+                    {day.planAdherenceGrade ?? "—"}
+                  </td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+      )}
     </div>
   );
 }
