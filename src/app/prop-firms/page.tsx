@@ -1,12 +1,91 @@
+import Link from "next/link";
 import { PageHeader } from "@/components/layout/page-header";
+import { listAccountsWithRollup } from "@/lib/data/prop-firms";
+import { formatCurrency } from "@/lib/pnl";
 
-export default function PropFirmsPage() {
+export const dynamic = "force-dynamic";
+
+export default async function PropFirmsPage() {
+  const accounts = await listAccountsWithRollup();
+
+  const totalNet = accounts.reduce(
+    (sum, a) => sum + a.netPnl + a.tradingPnl,
+    0,
+  );
+
   return (
     <div>
       <PageHeader
         title="Prop Firms"
-        description="Accounts, fees, and payouts, coming in Phase 3."
+        description="Accounts, fees, payouts, and true net profitability."
+        actions={
+          <Link
+            href="/prop-firms/new"
+            className="rounded-lg bg-accent px-4 py-2 text-sm font-medium text-white"
+          >
+            New account
+          </Link>
+        }
       />
+
+      <div className="mb-8 rounded-xl border border-border bg-surface p-4">
+        <p className="text-xs font-medium text-muted">
+          Total across all accounts (trading P&L + payouts − fees)
+        </p>
+        <p
+          className={
+            totalNet >= 0
+              ? "mt-1 text-2xl font-semibold text-profit"
+              : "mt-1 text-2xl font-semibold text-loss"
+          }
+        >
+          {formatCurrency(totalNet)}
+        </p>
+      </div>
+
+      {accounts.length === 0 ? (
+        <div className="rounded-xl border border-dashed border-border p-8 text-center text-sm text-muted">
+          No accounts yet.{" "}
+          <Link href="/prop-firms/new" className="text-accent hover:underline">
+            Add your first account
+          </Link>
+          .
+        </div>
+      ) : (
+        <div className="flex flex-col gap-3">
+          {accounts.map((account) => (
+            <Link
+              key={account.id}
+              href={`/prop-firms/${account.id}`}
+              className="flex items-center justify-between rounded-xl border border-border bg-surface p-4 hover:bg-surface-raised"
+            >
+              <div>
+                <p className="font-medium text-foreground">
+                  {account.firmName} · {account.accountName}
+                </p>
+                <p className="text-xs text-muted">
+                  {account.accountType} · {account.status} ·{" "}
+                  {account.tradeCount} trades
+                </p>
+              </div>
+              <div className="text-right">
+                <p className="text-xs text-muted">
+                  Trading P&L {formatCurrency(account.tradingPnl)}
+                </p>
+                <p
+                  className={
+                    account.netPnl + account.tradingPnl >= 0
+                      ? "font-semibold text-profit"
+                      : "font-semibold text-loss"
+                  }
+                >
+                  {formatCurrency(account.netPnl + account.tradingPnl)} net
+                </p>
+              </div>
+            </Link>
+          ))}
+        </div>
+      )}
     </div>
   );
 }
