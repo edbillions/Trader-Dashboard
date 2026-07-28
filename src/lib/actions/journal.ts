@@ -7,6 +7,8 @@ import { revalidatePath } from "next/cache";
 import { redirect } from "next/navigation";
 import { prisma } from "@/lib/prisma";
 import { calculateTrade } from "@/lib/pnl";
+import { getTradingDayDetail } from "@/lib/data/trading-day";
+import { summarizeTradingDay } from "@/lib/ai/summarize";
 import type { SaveTradingDayInput } from "@/lib/types/journal";
 
 export async function uploadScreenshotAction(
@@ -165,6 +167,21 @@ export async function saveTradingDayAction(
 
     return day;
   });
+
+  try {
+    const detail = await getTradingDayDetail(input.date);
+    if (detail) {
+      const summary = await summarizeTradingDay(detail);
+      if (summary) {
+        await prisma.tradingDay.update({
+          where: { id: tradingDay.id },
+          data: { aiSummary: summary },
+        });
+      }
+    }
+  } catch (error) {
+    console.error("AI summary failed:", error);
+  }
 
   revalidatePath("/dashboard");
   revalidatePath("/journal");

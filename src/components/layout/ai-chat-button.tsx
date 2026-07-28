@@ -1,19 +1,122 @@
 "use client";
 
-import { useState } from "react";
+import { useRef, useState } from "react";
+
+interface ChatMessage {
+  role: "user" | "assistant";
+  content: string;
+}
 
 export function AiChatButton() {
   const [open, setOpen] = useState(false);
+  const [messages, setMessages] = useState<ChatMessage[]>([]);
+  const [input, setInput] = useState("");
+  const [isStreaming, setIsStreaming] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+  const scrollRef = useRef<HTMLDivElement>(null);
+
+  async function sendMessage() {
+    const text = input.trim();
+    if (!text || isStreaming) return;
+
+    setError(null);
+    setInput("");
+    const nextMessages: ChatMessage[] = [
+      ...messages,
+      { role: "user", content: text },
+    ];
+    setMessages([...nextMessages, { role: "assistant", content: "" }]);
+    setIsStreaming(true);
+
+    try {
+      const res = await fetch("/api/chat", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ messages: nextMessages }),
+      });
+
+      if (!res.ok || !res.body) {
+        const data = await res.json().catch(() => null);
+        setError(data?.error ?? "Something went wrong.");
+        setMessages(nextMessages);
+        setIsStreaming(false);
+        return;
+      }
+
+      const reader = res.body.getReader();
+      const decoder = new TextDecoder();
+      let accumulated = "";
+
+      while (true) {
+        const { done, value } = await reader.read();
+        if (done) break;
+        accumulated += decoder.decode(value, { stream: true });
+        setMessages([
+          ...nextMessages,
+          { role: "assistant", content: accumulated },
+        ]);
+        scrollRef.current?.scrollTo({ top: scrollRef.current.scrollHeight });
+      }
+    } catch {
+      setError("Something went wrong.");
+      setMessages(nextMessages);
+    } finally {
+      setIsStreaming(false);
+    }
+  }
 
   return (
     <div className="fixed bottom-6 right-6 z-50">
       {open && (
-        <div className="mb-3 w-80 rounded-xl border border-border bg-surface-raised p-4 shadow-xl">
-          <p className="text-sm font-semibold text-foreground">Ask AI</p>
-          <p className="mt-2 text-sm text-muted">
-            Conversational Q&amp;A over your journal data is wired up in a
-            later phase. Add your Claude API key in Settings to enable it.
-          </p>
+        <div className="mb-3 flex h-96 w-80 flex-col rounded-xl border border-border bg-surface-raised shadow-xl">
+          <div className="border-b border-border px-4 py-3">
+            <p className="text-sm font-semibold text-foreground">Ask AI</p>
+          </div>
+          <div
+            ref={scrollRef}
+            className="flex-1 overflow-y-auto px-4 py-3 text-sm"
+          >
+            {messages.length === 0 && (
+              <p className="text-muted">
+                Ask about your trades, sessions, patterns, or discipline —
+                e.g. &quot;How do I do trading the NY AM session?&quot;
+              </p>
+            )}
+            <div className="flex flex-col gap-3">
+              {messages.map((m, i) => (
+                <div key={i}>
+                  <p className="text-xs font-medium text-muted">
+                    {m.role === "user" ? "You" : "AI"}
+                  </p>
+                  <p className="whitespace-pre-line text-foreground">
+                    {m.content || (isStreaming ? "..." : "")}
+                  </p>
+                </div>
+              ))}
+            </div>
+            {error && <p className="mt-2 text-xs text-loss">{error}</p>}
+          </div>
+          <div className="flex gap-2 border-t border-border p-3">
+            <input
+              value={input}
+              onChange={(e) => setInput(e.target.value)}
+              onKeyDown={(e) => {
+                if (e.key === "Enter" && !e.shiftKey) {
+                  e.preventDefault();
+                  sendMessage();
+                }
+              }}
+              placeholder="Ask a question..."
+              className="flex-1 rounded-lg border border-border bg-surface px-3 py-2 text-sm text-foreground placeholder:text-muted/60 focus:border-accent focus:outline-none"
+            />
+            <button
+              onClick={sendMessage}
+              disabled={isStreaming}
+              className="rounded-lg bg-accent px-3 py-2 text-sm font-medium text-white disabled:opacity-60"
+            >
+              Send
+            </button>
+          </div>
         </div>
       )}
       <button

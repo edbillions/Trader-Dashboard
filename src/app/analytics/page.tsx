@@ -4,6 +4,7 @@ import { formatCurrency } from "@/lib/pnl";
 import { CompositeRadar } from "@/components/analytics/composite-radar";
 import { NetPnlBarChart } from "@/components/analytics/net-pnl-bar-chart";
 import { BreakdownTable } from "@/components/analytics/breakdown-table";
+import { PatternInsights } from "@/components/analytics/pattern-insights";
 
 export const dynamic = "force-dynamic";
 
@@ -17,6 +18,8 @@ export default async function AnalyticsPage() {
         title="Analytics"
         description={`${totals.tradeCount} trade${totals.tradeCount === 1 ? "" : "s"} analyzed.`}
       />
+
+      <PatternInsights />
 
       <div className="mb-8 grid grid-cols-1 gap-4 lg:grid-cols-3">
         <div className="rounded-xl border border-border bg-surface p-4 lg:col-span-1">

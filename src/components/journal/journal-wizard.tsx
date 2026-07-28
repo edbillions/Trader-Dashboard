@@ -10,6 +10,7 @@ import {
   type SaveTradingDayInput,
 } from "@/lib/types/journal";
 import { saveTradingDayAction } from "@/lib/actions/journal";
+import { suggestRuleViolationsAction } from "@/lib/actions/ai";
 import { Field, TextInput, TextArea, Select } from "@/components/ui/field";
 import { TradeCard } from "@/components/journal/trade-card";
 import { MissedTradeCard } from "@/components/journal/missed-trade-card";
@@ -32,6 +33,11 @@ export function JournalWizard({
   const [data, setData] = useState<SaveTradingDayInput>(initial);
   const [isSaving, startSave] = useTransition();
   const [error, setError] = useState<string | null>(null);
+  const [isSuggesting, startSuggest] = useTransition();
+  const [suggestions, setSuggestions] = useState<
+    { id: string; label: string; reason: string }[] | null
+  >(null);
+  const [aiUnavailable, setAiUnavailable] = useState(false);
   const router = useRouter();
 
   const step = STEPS[stepIndex];
@@ -41,6 +47,19 @@ export function JournalWizard({
     val: SaveTradingDayInput[K],
   ) {
     setData((d) => ({ ...d, [key]: val }));
+  }
+
+  function handleSuggest() {
+    setAiUnavailable(false);
+    startSuggest(async () => {
+      const result = await suggestRuleViolationsAction(data);
+      if (!result.available) {
+        setAiUnavailable(true);
+        setSuggestions(null);
+        return;
+      }
+      setSuggestions(result.suggestions);
+    });
   }
 
   function handleSave() {
@@ -286,6 +305,59 @@ export function JournalWizard({
                 </span>
               )}
             </div>
+            <button
+              type="button"
+              onClick={handleSuggest}
+              disabled={isSuggesting}
+              className="mt-1 w-fit rounded-lg border border-accent/40 px-3 py-1.5 text-xs font-medium text-accent hover:bg-accent/10 disabled:opacity-60"
+            >
+              {isSuggesting ? "Asking AI..." : "Get AI suggestions"}
+            </button>
+            {aiUnavailable && (
+              <p className="text-xs text-muted">
+                AI features aren&apos;t available — add your Claude API key in
+                Settings.
+              </p>
+            )}
+            {suggestions && (
+              <div className="flex flex-col gap-2 rounded-lg border border-accent/30 bg-accent/5 p-3">
+                {suggestions.length === 0 ? (
+                  <span className="text-sm text-muted">
+                    AI found no clear rule violations today.
+                  </span>
+                ) : (
+                  suggestions.map((s) => {
+                    const alreadyAdded = data.ruleViolationIds.includes(s.id);
+                    return (
+                      <div
+                        key={s.id}
+                        className="flex items-start justify-between gap-3 text-sm"
+                      >
+                        <div>
+                          <span className="font-medium text-foreground">
+                            {s.label}
+                          </span>
+                          <p className="text-xs text-muted">{s.reason}</p>
+                        </div>
+                        <button
+                          type="button"
+                          disabled={alreadyAdded}
+                          onClick={() =>
+                            set("ruleViolationIds", [
+                              ...data.ruleViolationIds,
+                              s.id,
+                            ])
+                          }
+                          className="shrink-0 rounded-lg border border-border px-2 py-1 text-xs text-foreground hover:bg-surface-raised disabled:opacity-50"
+                        >
+                          {alreadyAdded ? "Added" : "Add"}
+                        </button>
+                      </div>
+                    );
+                  })
+                )}
+              </div>
+            )}
           </div>
         </div>
       )}
