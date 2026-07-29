@@ -17,6 +17,15 @@ export default async function DashboardPage() {
 
   return (
     <div>
+      <div className="mb-8 overflow-hidden rounded-2xl border border-border">
+        {/* eslint-disable-next-line @next/next/no-img-element */}
+        <img
+          src="/dashboard-banner.jpg"
+          alt="Eddie Billions — Family, Train, Trade, Real Estate, Repeat."
+          className="w-full object-cover"
+        />
+      </div>
+
       <PageHeader
         title="Dashboard"
         description="Your trading day, at a glance."
