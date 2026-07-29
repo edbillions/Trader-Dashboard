@@ -3,6 +3,19 @@ import { notFound } from "next/navigation";
 import { PageHeader } from "@/components/layout/page-header";
 import { getTradingDayDetail } from "@/lib/data/trading-day";
 import { formatCurrency, formatR } from "@/lib/pnl";
+import {
+  parsePreMarketChecklist,
+  MINDSET_RESET_ITEMS,
+  STRUCTURE_OPTIONS,
+  DOL_OPTIONS,
+} from "@/lib/types/premarket-checklist";
+import {
+  SCORECARD_CATEGORIES,
+  SCORECARD_MAX_POINTS,
+  parseScorecard,
+  scorecardTotal,
+  scorecardBand,
+} from "@/lib/types/scorecard";
 
 export default async function JournalDayPage({
   params,
@@ -15,6 +28,13 @@ export default async function JournalDayPage({
   if (!day) notFound();
 
   const netPnl = day.trades.reduce((sum, t) => sum + (t.netPnl ?? 0), 0);
+  const checklist = parsePreMarketChecklist(day.preMarketChecklist);
+  const structureLabel = (key: string | null) =>
+    STRUCTURE_OPTIONS.find((o) => o.key === key)?.label ?? null;
+  const yesNo = (v: boolean | null) => (v == null ? null : v ? "Yes" : "No");
+  const scorecard = parseScorecard(day.scorecard);
+  const scorecardTotalValue = scorecardTotal(scorecard);
+  const scorecardBandValue = scorecardBand(scorecardTotalValue);
 
   return (
     <div>
@@ -72,6 +92,118 @@ export default async function JournalDayPage({
             ))}
           </div>
         )}
+      </section>
+
+      <section className="mb-8 rounded-xl border border-border bg-surface p-5">
+        <h2 className="mb-3 text-sm font-semibold text-foreground">
+          Pre-market checklist
+        </h2>
+        <div className="grid grid-cols-1 gap-4 text-sm sm:grid-cols-2">
+          <div>
+            <span className="text-xs font-medium text-muted">
+              Mindset & physiology reset
+            </span>
+            <ul className="mt-1 flex flex-col gap-1">
+              {MINDSET_RESET_ITEMS.map((item) => (
+                <li key={item.key} className="text-foreground">
+                  {checklist.mindsetReset[item.key] ? "✅" : "⬜"} {item.label}
+                </li>
+              ))}
+            </ul>
+          </div>
+          <div className="flex flex-col gap-2">
+            <Info label="Instrument" value={checklist.symbol} />
+            <Info
+              label="Recent expansion?"
+              value={yesNo(checklist.sessionAnalysis.hadRecentExpansion)}
+            />
+            <Info
+              label="Expansion note"
+              value={checklist.sessionAnalysis.expansionNote}
+            />
+            {checklist.sessionAnalysis.hadRecentExpansion && (
+              <Info
+                label="Caution note"
+                value={checklist.sessionAnalysis.cautionNote}
+              />
+            )}
+          </div>
+          <Info
+            label={`${checklist.symbol || "HTF"} 4H structure`}
+            value={structureLabel(checklist.htf4hStructure)}
+          />
+          <Info
+            label={`${checklist.symbol || "HTF"} 1H structure`}
+            value={structureLabel(checklist.htf1hStructure)}
+          />
+          <Info
+            label="Daily range location"
+            value={
+              checklist.dailyRangeLocation
+                ? checklist.dailyRangeLocation[0].toUpperCase() +
+                  checklist.dailyRangeLocation.slice(1)
+                : null
+            }
+          />
+          <Info
+            label="Bias"
+            value={
+              checklist.biasDirection
+                ? checklist.biasDirection[0].toUpperCase() +
+                  checklist.biasDirection.slice(1)
+                : null
+            }
+          />
+          <div className="sm:col-span-2">
+            <span className="text-xs font-medium text-muted">
+              Draw on liquidity
+            </span>
+            {checklist.drawOnLiquidity.length === 0 ? (
+              <p className="mt-0.5 text-foreground">—</p>
+            ) : (
+              <div className="mt-1.5 flex flex-wrap gap-1.5">
+                {checklist.drawOnLiquidity.map((key) => (
+                  <span
+                    key={key}
+                    className="rounded-full bg-surface-raised px-2 py-0.5 text-xs text-muted"
+                  >
+                    {DOL_OPTIONS.find((o) => o.key === key)?.label ?? key}
+                  </span>
+                ))}
+              </div>
+            )}
+          </div>
+          <Info
+            label="Liquidity modeled"
+            value={checklist.liquidityModelingDone ? "Yes" : "No"}
+          />
+          <Info
+            label="Energy 7/10+"
+            value={yesNo(checklist.personalCheck.energyOk)}
+          />
+          <Info
+            label="Slept 6+ hours"
+            value={yesNo(checklist.personalCheck.sleptEnough)}
+          />
+          <Info
+            label="Emotionally neutral"
+            value={yesNo(checklist.personalCheck.emotionallyNeutral)}
+          />
+          <Info
+            label="Stressor present"
+            value={yesNo(checklist.personalCheck.hasStressor)}
+          />
+          {checklist.personalCheck.hasStressor && (
+            <Info
+              label="Stressor note"
+              value={checklist.personalCheck.stressorNote}
+            />
+          )}
+          <Info
+            label="Following process, not chasing payout"
+            value={yesNo(checklist.personalCheck.followingProcess)}
+          />
+        </div>
       </section>
 
       <section className="mb-8">
@@ -200,6 +332,33 @@ export default async function JournalDayPage({
             </div>
           </div>
         )}
+      </section>
+
+      <section className="mt-8 rounded-xl border border-border bg-surface p-5">
+        <h2 className="mb-3 text-sm font-semibold text-foreground">
+          Daily process scorecard
+        </h2>
+        <div className="flex flex-col">
+          {SCORECARD_CATEGORIES.map((cat) => (
+            <div
+              key={cat.key}
+              className="flex items-center justify-between gap-4 border-b border-border py-2 text-sm last:border-b-0"
+            >
+              <span className="text-foreground">{cat.label}</span>
+              <span className="font-medium text-foreground">
+                {scorecard[cat.key] ?? "—"}
+              </span>
+            </div>
+          ))}
+        </div>
+        <div className="mt-3 flex flex-col gap-1 border-t border-border pt-3">
+          <span className="text-sm font-semibold text-foreground">
+            Total daily score: {scorecardTotalValue} / {SCORECARD_MAX_POINTS}
+          </span>
+          <span className={`text-xs font-medium ${scorecardBandValue.colorClass}`}>
+            {scorecardBandValue.label}
+          </span>
+        </div>
       </section>
     </div>
   );

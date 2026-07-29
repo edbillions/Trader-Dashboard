@@ -1,5 +1,7 @@
 import { prisma } from "@/lib/prisma";
 import type { SaveTradingDayInput } from "@/lib/types/journal";
+import { parsePreMarketChecklist } from "@/lib/types/premarket-checklist";
+import { parseScorecard } from "@/lib/types/scorecard";
 
 function toDateKey(d: Date) {
   return d.toISOString().slice(0, 10);
@@ -58,9 +60,11 @@ export async function getTradingDayInputForDate(
     positionSizePlan: day.positionSizePlan ?? "",
     maxTradeCountPlan: day.maxTradeCountPlan,
     planScreenshotPaths: day.planScreenshots.map((s) => s.filePath),
+    preMarketChecklist: parsePreMarketChecklist(day.preMarketChecklist),
     planAdherenceGrade: day.planAdherenceGrade ?? "",
     psychologyLog: day.psychologyLog ?? "",
     freeformNotes: day.freeformNotes ?? "",
+    scorecard: parseScorecard(day.scorecard),
     ruleViolationIds: day.ruleViolations.map((r) => r.id),
     trades: day.trades.map((t) => ({
       id: t.id,

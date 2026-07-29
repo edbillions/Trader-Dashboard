@@ -60,11 +60,13 @@ model TradingDay {
   maxLossPlan       Float?
   positionSizePlan  String?
   maxTradeCountPlan Int?
+  preMarketChecklist String? // JSON-serialized PreMarketChecklist
 
   // Post-session review
   planAdherenceGrade String? // "A+" | "A" | "B" | "C"
   psychologyLog      String?
   freeformNotes      String?
+  scorecard          String? // JSON-serialized ScorecardScores
 
   // AI
   aiSummary String?

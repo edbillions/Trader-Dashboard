@@ -14,6 +14,18 @@ import { suggestRuleViolationsAction } from "@/lib/actions/ai";
 import { Field, TextInput, TextArea, Select } from "@/components/ui/field";
 import { TradeCard } from "@/components/journal/trade-card";
 import { MissedTradeCard } from "@/components/journal/missed-trade-card";
+import type { PreMarketChecklist } from "@/lib/types/premarket-checklist";
+import {
+  MINDSET_RESET_ITEMS,
+  STRUCTURE_OPTIONS,
+  DOL_OPTIONS,
+} from "@/lib/types/premarket-checklist";
+import {
+  SCORECARD_CATEGORIES,
+  SCORECARD_MAX_POINTS,
+  scorecardTotal,
+  scorecardBand,
+} from "@/lib/types/scorecard";
 
 const STEPS = [
   { key: "plan", label: "Pre-Market Plan" },
@@ -75,6 +87,51 @@ export function JournalWizard({
     val: SaveTradingDayInput[K],
   ) {
     setData((d) => ({ ...d, [key]: val }));
+  }
+
+  function setChecklist(patch: Partial<PreMarketChecklist>) {
+    set("preMarketChecklist", { ...data.preMarketChecklist, ...patch });
+  }
+
+  function setMindset(
+    key: keyof PreMarketChecklist["mindsetReset"],
+    val: boolean,
+  ) {
+    setChecklist({
+      mindsetReset: { ...data.preMarketChecklist.mindsetReset, [key]: val },
+    });
+  }
+
+  function setSessionAnalysis(
+    patch: Partial<PreMarketChecklist["sessionAnalysis"]>,
+  ) {
+    setChecklist({
+      sessionAnalysis: { ...data.preMarketChecklist.sessionAnalysis, ...patch },
+    });
+  }
+
+  function setPersonalCheck(
+    patch: Partial<PreMarketChecklist["personalCheck"]>,
+  ) {
+    setChecklist({
+      personalCheck: { ...data.preMarketChecklist.personalCheck, ...patch },
+    });
+  }
+
+  function setScoreFor(key: string, points: number) {
+    set("scorecard", {
+      ...data.scorecard,
+      [key]: data.scorecard[key] === points ? null : points,
+    });
+  }
+
+  function toggleDol(key: string) {
+    const current = data.preMarketChecklist.drawOnLiquidity;
+    setChecklist({
+      drawOnLiquidity: current.includes(key)
+        ? current.filter((k) => k !== key)
+        : [...current, key],
+    });
   }
 
   function handlePlanFileChange(e: React.ChangeEvent<HTMLInputElement>) {
@@ -139,81 +196,259 @@ export function JournalWizard({
       </div>
 
       {step.key === "plan" && (
-        <div className="flex flex-col gap-4">
+        <div className="flex flex-col gap-6">
           <Field label="Date">
             <TextInput
               type="date"
               value={data.date}
               onChange={(e) => set("date", e.target.value)}
+              className="max-w-xs"
             />
           </Field>
-          <div className="grid grid-cols-2 gap-4">
-            <Field label="HTF bias">
+
+          <PlanSection title="🧘 Mindset & Physiology Reset (5 min)">
+            <div className="flex flex-col gap-2">
+              {MINDSET_RESET_ITEMS.map((item) => (
+                <CheckRow
+                  key={item.key}
+                  label={item.label}
+                  checked={data.preMarketChecklist.mindsetReset[item.key]}
+                  onChange={(v) => setMindset(item.key, v)}
+                />
+              ))}
+            </div>
+          </PlanSection>
+
+          <PlanSection title="🔍 Session Analysis">
+            <Field label="Instrument">
               <TextInput
-                value={data.htfBias}
-                onChange={(e) => set("htfBias", e.target.value)}
-                placeholder="Bullish above yesterday's high..."
+                value={data.preMarketChecklist.symbol}
+                onChange={(e) => setChecklist({ symbol: e.target.value })}
+                placeholder="NQ"
+                className="max-w-xs"
               />
             </Field>
-            <Field label="Key levels">
+            <Field
+              label={`Has there been a large expansion recently? (${data.preMarketChecklist.symbol || "instrument"}, M15)`}
+            >
               <TextInput
-                value={data.keyLevels}
-                onChange={(e) => set("keyLevels", e.target.value)}
-                placeholder="PDH 5920, PWL 5875..."
-              />
-            </Field>
-          </div>
-          <div className="grid grid-cols-2 gap-4">
-            <Field label="Session timing & killzones">
-              <TextInput
-                value={data.sessionTiming}
-                onChange={(e) => set("sessionTiming", e.target.value)}
-                placeholder="Focused on NY AM silver bullet"
-              />
-            </Field>
-            <Field label="News / economic calendar">
-              <TextInput
-                value={data.news}
-                onChange={(e) => set("news", e.target.value)}
-                placeholder="CPI at 8:30am"
-              />
-            </Field>
-          </div>
-          <div className="grid grid-cols-3 gap-4">
-            <Field label="Max loss for the day ($)">
-              <TextInput
-                type="number"
-                step="any"
-                value={data.maxLossPlan ?? ""}
+                value={data.preMarketChecklist.sessionAnalysis.expansionNote}
                 onChange={(e) =>
-                  set(
-                    "maxLossPlan",
-                    e.target.value === "" ? null : Number(e.target.value),
-                  )
+                  setSessionAnalysis({ expansionNote: e.target.value })
+                }
+                placeholder="Over 400pts during overnight session"
+              />
+            </Field>
+            <YesNoRow
+              label="Recent expansion?"
+              value={data.preMarketChecklist.sessionAnalysis.hadRecentExpansion}
+              onChange={(v) => setSessionAnalysis({ hadRecentExpansion: v })}
+            />
+            {data.preMarketChecklist.sessionAnalysis.hadRecentExpansion && (
+              <Field label="Caution note">
+                <TextInput
+                  value={data.preMarketChecklist.sessionAnalysis.cautionNote}
+                  onChange={(e) =>
+                    setSessionAnalysis({ cautionNote: e.target.value })
+                  }
+                  placeholder="Be cautious, will likely chop"
+                />
+              </Field>
+            )}
+          </PlanSection>
+
+          <PlanSection
+            title={`${data.preMarketChecklist.symbol || "HTF"} 4H structure`}
+          >
+            <PillGroup
+              options={STRUCTURE_OPTIONS}
+              value={data.preMarketChecklist.htf4hStructure}
+              onChange={(v) => setChecklist({ htf4hStructure: v })}
+            />
+          </PlanSection>
+
+          <PlanSection
+            title={`${data.preMarketChecklist.symbol || "HTF"} 1H structure`}
+          >
+            <PillGroup
+              options={STRUCTURE_OPTIONS}
+              value={data.preMarketChecklist.htf1hStructure}
+              onChange={(v) => setChecklist({ htf1hStructure: v })}
+            />
+          </PlanSection>
+
+          <PlanSection title="Daily bias">
+            <p className="-mt-1 text-xs text-muted">
+              Determine Daily Bias based on where price is located within
+              daily range.
+            </p>
+            <Field label="Range location">
+              <PillGroup
+                options={[
+                  { key: "premium", label: "Premium" },
+                  { key: "discount", label: "Discount" },
+                  { key: "equilibrium", label: "Equilibrium" },
+                ]}
+                value={data.preMarketChecklist.dailyRangeLocation}
+                onChange={(v) =>
+                  setChecklist({
+                    dailyRangeLocation: v as PreMarketChecklist["dailyRangeLocation"],
+                  })
                 }
               />
             </Field>
-            <Field label="Position sizing plan">
-              <TextInput
-                value={data.positionSizePlan}
-                onChange={(e) => set("positionSizePlan", e.target.value)}
-                placeholder="2 contracts max"
-              />
-            </Field>
-            <Field label="Max trade count">
-              <TextInput
-                type="number"
-                min={0}
-                value={data.maxTradeCountPlan ?? ""}
-                onChange={(e) =>
-                  set(
-                    "maxTradeCountPlan",
-                    e.target.value === "" ? null : Number(e.target.value),
-                  )
+            <Field label="Bias">
+              <PillGroup
+                options={[
+                  { key: "bullish", label: "Bullish" },
+                  { key: "bearish", label: "Bearish" },
+                  { key: "neutral", label: "Neutral" },
+                ]}
+                value={data.preMarketChecklist.biasDirection}
+                onChange={(v) =>
+                  setChecklist({
+                    biasDirection: v as PreMarketChecklist["biasDirection"],
+                  })
                 }
               />
             </Field>
-          </div>
+          </PlanSection>
+
+          <PlanSection title="💧 Draw on Liquidity (DOL) (5m/15m/1h)">
+            <span className="text-xs font-medium text-muted">
+              Select Draw on Liquidity (DOL):
+            </span>
+            <div className="flex flex-col gap-2">
+              {DOL_OPTIONS.map((opt) => (
+                <CheckRow
+                  key={opt.key}
+                  label={opt.label}
+                  hint={opt.hint}
+                  checked={data.preMarketChecklist.drawOnLiquidity.includes(
+                    opt.key,
+                  )}
+                  onChange={() => toggleDol(opt.key)}
+                />
+              ))}
+            </div>
+            <span className="mt-2 text-xs font-medium text-muted">
+              Liquidity Modeling — where is price likely to go first?
+            </span>
+            <CheckRow
+              label="Map the likely sweep → reversal zone → expansion path"
+              checked={data.preMarketChecklist.liquidityModelingDone}
+              onChange={(v) => setChecklist({ liquidityModelingDone: v })}
+            />
+          </PlanSection>
+
+          <PlanSection title="🛡️ Personal Check">
+            <YesNoRow
+              label="Energy level 7/10 or better?"
+              value={data.preMarketChecklist.personalCheck.energyOk}
+              onChange={(v) => setPersonalCheck({ energyOk: v })}
+            />
+            <YesNoRow
+              label="Slept 6+ hours? (NO TRADES IF LESS THAN 6 HOURS OF SLEEP)"
+              value={data.preMarketChecklist.personalCheck.sleptEnough}
+              onChange={(v) => setPersonalCheck({ sleptEnough: v })}
+            />
+            <YesNoRow
+              label="Am I emotionally neutral before the session?"
+              value={data.preMarketChecklist.personalCheck.emotionallyNeutral}
+              onChange={(v) => setPersonalCheck({ emotionallyNeutral: v })}
+            />
+            <YesNoRow
+              label="Is there a big stressor I'm dealing with right now?"
+              value={data.preMarketChecklist.personalCheck.hasStressor}
+              onChange={(v) => setPersonalCheck({ hasStressor: v })}
+            />
+            {data.preMarketChecklist.personalCheck.hasStressor && (
+              <Field label="Explain">
+                <TextInput
+                  value={data.preMarketChecklist.personalCheck.stressorNote}
+                  onChange={(e) =>
+                    setPersonalCheck({ stressorNote: e.target.value })
+                  }
+                />
+              </Field>
+            )}
+            <YesNoRow
+              label="Am I here to follow process, not chase payout?"
+              value={data.preMarketChecklist.personalCheck.followingProcess}
+              onChange={(v) => setPersonalCheck({ followingProcess: v })}
+            />
+          </PlanSection>
+
+          <PlanSection title="Plan notes & risk">
+            <div className="grid grid-cols-2 gap-4">
+              <Field label="HTF bias notes">
+                <TextInput
+                  value={data.htfBias}
+                  onChange={(e) => set("htfBias", e.target.value)}
+                  placeholder="Bullish above yesterday's high..."
+                />
+              </Field>
+              <Field label="Key levels">
+                <TextInput
+                  value={data.keyLevels}
+                  onChange={(e) => set("keyLevels", e.target.value)}
+                  placeholder="PDH 5920, PWL 5875..."
+                />
+              </Field>
+            </div>
+            <div className="grid grid-cols-2 gap-4">
+              <Field label="Session timing & killzones">
+                <TextInput
+                  value={data.sessionTiming}
+                  onChange={(e) => set("sessionTiming", e.target.value)}
+                  placeholder="Focused on NY AM silver bullet"
+                />
+              </Field>
+              <Field label="News / economic calendar">
+                <TextInput
+                  value={data.news}
+                  onChange={(e) => set("news", e.target.value)}
+                  placeholder="CPI at 8:30am"
+                />
+              </Field>
+            </div>
+            <div className="grid grid-cols-3 gap-4">
+              <Field label="Max loss for the day ($)">
+                <TextInput
+                  type="number"
+                  step="any"
+                  value={data.maxLossPlan ?? ""}
+                  onChange={(e) =>
+                    set(
+                      "maxLossPlan",
+                      e.target.value === "" ? null : Number(e.target.value),
+                    )
+                  }
+                />
+              </Field>
+              <Field label="Position sizing plan">
+                <TextInput
+                  value={data.positionSizePlan}
+                  onChange={(e) => set("positionSizePlan", e.target.value)}
+                  placeholder="2 contracts max"
+                />
+              </Field>
+              <Field label="Max trade count">
+                <TextInput
+                  type="number"
+                  min={0}
+                  value={data.maxTradeCountPlan ?? ""}
+                  onChange={(e) =>
+                    set(
+                      "maxTradeCountPlan",
+                      e.target.value === "" ? null : Number(e.target.value),
+                    )
+                  }
+                />
+              </Field>
+            </div>
+          </PlanSection>
+
           <div className="flex flex-col gap-1.5">
             <span className="text-xs font-medium text-muted">
               Screenshots
@@ -425,6 +660,74 @@ export function JournalWizard({
               </div>
             )}
           </div>
+          <PlanSection title="📊 Daily Process Scorecard">
+            <div className="flex flex-col">
+              {SCORECARD_CATEGORIES.map((cat) => (
+                <div
+                  key={cat.key}
+                  className="flex items-start justify-between gap-4 border-b border-border py-3 last:border-b-0"
+                >
+                  <div>
+                    <p className="text-sm font-medium text-foreground">
+                      {cat.label}
+                    </p>
+                    <p className="text-xs text-muted">{cat.description}</p>
+                  </div>
+                  <div className="flex shrink-0 gap-1">
+                    {[1, 2, 3, 4, 5].map((n) => {
+                      const active = data.scorecard[cat.key] === n;
+                      return (
+                        <button
+                          key={n}
+                          type="button"
+                          onClick={() => setScoreFor(cat.key, n)}
+                          className={clsx(
+                            "h-7 w-7 rounded-full border text-xs font-medium transition-colors",
+                            active
+                              ? "border-accent bg-accent/20 text-foreground"
+                              : "border-border bg-surface text-muted hover:text-foreground",
+                          )}
+                        >
+                          {n}
+                        </button>
+                      );
+                    })}
+                  </div>
+                </div>
+              ))}
+            </div>
+            {(() => {
+              const total = scorecardTotal(data.scorecard);
+              const band = scorecardBand(total);
+              return (
+                <div className="flex flex-col gap-1 border-t border-border pt-3">
+                  <span className="text-sm font-semibold text-foreground">
+                    🏆 TOTAL DAILY SCORE: {total} / {SCORECARD_MAX_POINTS}
+                  </span>
+                  <span className={clsx("text-xs font-medium", band.colorClass)}>
+                    {band.label}
+                  </span>
+                  <span className="text-xs text-muted">
+                    45+ = Elite Discipline Day · 35–44 = Solid but Review What
+                    Slipped · &lt;35 = Audit Yourself + Rewrite Intentions
+                  </span>
+                </div>
+              );
+            })()}
+          </PlanSection>
+          <blockquote className="rounded-xl border border-border bg-surface p-5 text-center text-sm italic text-muted">
+            <p>
+              &ldquo;I am a professional operator. My job is to execute my
+              process.
+            </p>
+            <p className="mt-2">
+              I do not chase. I do not gamble. I do not deviate.
+            </p>
+            <p className="mt-2">
+              Every day I get more precise, more calm, more
+              disciplined.&rdquo;
+            </p>
+          </blockquote>
         </div>
       )}
 
@@ -459,6 +762,120 @@ export function JournalWizard({
             {isSaving ? "Saving..." : "Save day"}
           </button>
         )}
+      </div>
+    </div>
+  );
+}
+
+function PlanSection({
+  title,
+  children,
+}: {
+  title: string;
+  children: React.ReactNode;
+}) {
+  return (
+    <div className="flex flex-col gap-3 rounded-xl border border-border bg-surface p-4">
+      <h3 className="text-sm font-semibold text-foreground">{title}</h3>
+      {children}
+    </div>
+  );
+}
+
+function CheckRow({
+  label,
+  hint,
+  checked,
+  onChange,
+}: {
+  label: string;
+  hint?: string;
+  checked: boolean;
+  onChange: (val: boolean) => void;
+}) {
+  return (
+    <label className="flex items-start gap-2 text-sm text-foreground">
+      <input
+        type="checkbox"
+        checked={checked}
+        onChange={(e) => onChange(e.target.checked)}
+        className="mt-0.5"
+      />
+      <span>
+        {label}
+        {hint && <span className="block text-xs text-muted">{hint}</span>}
+      </span>
+    </label>
+  );
+}
+
+function PillGroup({
+  options,
+  value,
+  onChange,
+}: {
+  options: { key: string; label: string; bias?: string }[];
+  value: string | null;
+  onChange: (val: string) => void;
+}) {
+  return (
+    <div className="flex flex-wrap gap-2">
+      {options.map((opt) => {
+        const active = value === opt.key;
+        return (
+          <button
+            key={opt.key}
+            type="button"
+            onClick={() => onChange(opt.key)}
+            className={clsx(
+              "rounded-full border px-3 py-1 text-xs font-medium transition-colors",
+              active
+                ? "border-accent bg-accent/20 text-foreground"
+                : "border-border bg-surface text-muted hover:text-foreground",
+            )}
+          >
+            {opt.label}
+            {opt.bias && (
+              <span className="ml-1 opacity-60">| {opt.bias}</span>
+            )}
+          </button>
+        );
+      })}
+    </div>
+  );
+}
+
+function YesNoRow({
+  label,
+  value,
+  onChange,
+}: {
+  label: string;
+  value: boolean | null;
+  onChange: (val: boolean) => void;
+}) {
+  return (
+    <div className="flex flex-col gap-1.5">
+      <span className="text-sm text-foreground">{label}</span>
+      <div className="flex gap-2">
+        {([true, false] as const).map((opt) => {
+          const active = value === opt;
+          return (
+            <button
+              key={String(opt)}
+              type="button"
+              onClick={() => onChange(opt)}
+              className={clsx(
+                "rounded-full border px-3 py-1 text-xs font-medium transition-colors",
+                active
+                  ? "border-accent bg-accent/20 text-foreground"
+                  : "border-border bg-surface text-muted hover:text-foreground",
+              )}
+            >
+              {opt ? "Yes" : "No"}
+            </button>
+          );
+        })}
       </div>
     </div>
   );

@@ -1,3 +1,8 @@
+import type { PreMarketChecklist } from "@/lib/types/premarket-checklist";
+import { emptyPreMarketChecklist } from "@/lib/types/premarket-checklist";
+import type { ScorecardScores } from "@/lib/types/scorecard";
+import { emptyScorecard } from "@/lib/types/scorecard";
+
 export interface TradeInput {
   id?: string;
   accountId: string | null;
@@ -48,11 +53,13 @@ export interface SaveTradingDayInput {
   positionSizePlan: string;
   maxTradeCountPlan: number | null;
   planScreenshotPaths: string[];
+  preMarketChecklist: PreMarketChecklist;
   trades: TradeInput[];
   missedTrades: MissedTradeInput[];
   planAdherenceGrade: string;
   psychologyLog: string;
   freeformNotes: string;
+  scorecard: ScorecardScores;
   ruleViolationIds: string[];
 }
 
@@ -109,11 +116,13 @@ export function emptyTradingDay(date: string): SaveTradingDayInput {
     positionSizePlan: "",
     maxTradeCountPlan: null,
     planScreenshotPaths: [],
+    preMarketChecklist: emptyPreMarketChecklist(),
     trades: [],
     missedTrades: [],
     planAdherenceGrade: "",
     psychologyLog: "",
     freeformNotes: "",
+    scorecard: emptyScorecard(),
     ruleViolationIds: [],
   };
 }

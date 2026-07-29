@@ -57,9 +57,11 @@ export async function saveTradingDayAction(
         maxLossPlan: input.maxLossPlan,
         positionSizePlan: input.positionSizePlan || null,
         maxTradeCountPlan: input.maxTradeCountPlan,
+        preMarketChecklist: JSON.stringify(input.preMarketChecklist),
         planAdherenceGrade: input.planAdherenceGrade || null,
         psychologyLog: input.psychologyLog || null,
         freeformNotes: input.freeformNotes || null,
+        scorecard: JSON.stringify(input.scorecard),
         ruleViolations: {
           set: input.ruleViolationIds.map((id) => ({ id })),
         },
@@ -73,9 +75,11 @@ export async function saveTradingDayAction(
         maxLossPlan: input.maxLossPlan,
         positionSizePlan: input.positionSizePlan || null,
         maxTradeCountPlan: input.maxTradeCountPlan,
+        preMarketChecklist: JSON.stringify(input.preMarketChecklist),
         planAdherenceGrade: input.planAdherenceGrade || null,
         psychologyLog: input.psychologyLog || null,
         freeformNotes: input.freeformNotes || null,
+        scorecard: JSON.stringify(input.scorecard),
         ruleViolations: {
           connect: input.ruleViolationIds.map((id) => ({ id })),
         },
