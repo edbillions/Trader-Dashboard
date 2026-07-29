@@ -21,14 +21,12 @@ const NAV_GROUPS = [
       { href: "/analytics", label: "Analytics" },
     ],
   },
-  {
-    label: "Manage",
-    items: [
-      { href: "/coach", label: "Coach" },
-      { href: "/prop-firms", label: "Prop Firms" },
-      { href: "/settings", label: "Settings" },
-    ],
-  },
+];
+
+const STANDALONE_ITEMS = [
+  { href: "/coach", label: "Coach" },
+  { href: "/prop-firms", label: "Prop Firms" },
+  { href: "/settings", label: "Settings" },
 ];
 
 export function Sidebar() {
@@ -68,6 +66,26 @@ export function Sidebar() {
             })}
           </div>
         ))}
+        <div className="flex flex-col gap-1">
+          {STANDALONE_ITEMS.map((item) => {
+            const active =
+              pathname === item.href || pathname.startsWith(`${item.href}/`);
+            return (
+              <Link
+                key={item.href}
+                href={item.href}
+                className={clsx(
+                  "rounded-lg px-3 py-2 text-sm font-medium transition-colors",
+                  active
+                    ? "bg-surface-raised text-foreground"
+                    : "text-muted hover:bg-surface-raised hover:text-foreground",
+                )}
+              >
+                {item.label}
+              </Link>
+            );
+          })}
+        </div>
       </nav>
     </aside>
   );
