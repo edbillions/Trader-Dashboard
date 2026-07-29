@@ -15,17 +15,18 @@ function pad(n: number) {
 function getZonedParts(tz: string, date: Date) {
   const parts = new Intl.DateTimeFormat("en-US", {
     timeZone: tz,
-    hour: "2-digit",
+    hour: "numeric",
     minute: "2-digit",
     second: "2-digit",
-    hour12: false,
+    hour12: true,
     timeZoneName: "short",
   }).formatToParts(date);
   const map = Object.fromEntries(parts.map((p) => [p.type, p.value]));
   return {
-    hour: Number(map.hour) % 24,
+    hour: Number(map.hour),
     minute: Number(map.minute),
     second: Number(map.second),
+    dayPeriod: map.dayPeriod ?? "",
     tzAbbr: map.timeZoneName ?? "",
   };
 }
@@ -97,8 +98,8 @@ function ClockFace({
       <div className="text-center leading-tight">
         <p className="font-mono text-xs tabular-nums text-foreground">
           {parts
-            ? `${pad(parts.hour)}:${pad(parts.minute)}:${pad(parts.second)}`
-            : "--:--:--"}
+            ? `${parts.hour}:${pad(parts.minute)}:${pad(parts.second)} ${parts.dayPeriod}`
+            : "--:--:-- --"}
         </p>
         <p className="text-[10px] uppercase tracking-wide text-muted">
           {parts?.tzAbbr ?? ""}

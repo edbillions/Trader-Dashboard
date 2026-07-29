@@ -157,6 +157,91 @@ export default async function DashboardPage() {
         </section>
       )}
 
+      <div className="mb-8 flex justify-center">
+        <SessionClocks />
+      </div>
+
+      <DashboardTodoWidget todos={todayTodos} />
+
+      <div className="mb-8 grid grid-cols-2 gap-4 sm:grid-cols-3">
+        <Stat label="Total trades" value={data.totalTrades.toString()} />
+        <Stat
+          label="Net P&L (all-time)"
+          value={formatCurrency(data.netPnl)}
+          positive={data.netPnl >= 0}
+        />
+        <Stat
+          label="Win rate"
+          value={data.winRate != null ? `${data.winRate.toFixed(1)}%` : "—"}
+        />
+      </div>
+
+      <section className="mb-8 rounded-xl border border-border bg-surface p-4">
+        <div className="mb-3 flex items-center justify-between">
+          <h3 className="text-sm font-semibold text-foreground">
+            Equity curve
+          </h3>
+          <span
+            className={
+              data.netPnl >= 0
+                ? "text-sm font-semibold text-profit"
+                : "text-sm font-semibold text-loss"
+            }
+          >
+            {formatCurrency(data.netPnl)} all-time
+          </span>
+        </div>
+        {data.equityCurve.length > 1 ? (
+          <EquityCurveChart data={data.equityCurve} />
+        ) : (
+          <p className="py-8 text-center text-sm text-muted">
+            Log a few more days to see your equity curve.
+          </p>
+        )}
+      </section>
+
+      <div className="mb-8 grid grid-cols-1 gap-4 lg:grid-cols-3">
+        <div className="rounded-xl border border-border bg-surface p-4 lg:col-span-1">
+          <h3 className="mb-1 text-sm font-semibold text-foreground">
+            Composite score
+          </h3>
+          <p className="mb-2 text-3xl font-semibold text-foreground">
+            {analytics.composite.overall != null
+              ? Math.round(analytics.composite.overall)
+              : "—"}
+          </p>
+          <CompositeRadar breakdown={analytics.composite.breakdown} />
+        </div>
+
+        <div className="grid grid-cols-2 gap-4 lg:col-span-2">
+          <Stat label="Win rate" value={fmtPct(analytics.totals.winRate)} />
+          <Stat
+            label="Profit factor"
+            value={
+              analytics.totals.profitFactor != null
+                ? analytics.totals.profitFactor.toFixed(2)
+                : "—"
+            }
+          />
+          <Stat
+            label="Avg win / avg loss"
+            value={
+              formatCurrency(analytics.totals.avgWin) +
+              " / " +
+              formatCurrency(analytics.totals.avgLoss)
+            }
+          />
+          <Stat
+            label="Discipline score"
+            value={
+              analytics.totals.disciplineScore != null
+                ? Math.round(analytics.totals.disciplineScore).toString()
+                : "—"
+            }
+          />
+        </div>
+      </div>
+
       <div className="mb-8 grid grid-cols-1 gap-4 sm:grid-cols-2">
         <StreakCard
           label="No rule breaks"
@@ -203,94 +288,6 @@ export default async function DashboardPage() {
                 : "profit"
           }
         />
-      </div>
-
-      <DashboardTodoWidget todos={todayTodos} />
-
-      <div className="mb-8 grid grid-cols-2 gap-4 sm:grid-cols-3">
-        <Stat label="Total trades" value={data.totalTrades.toString()} />
-        <Stat
-          label="Net P&L (all-time)"
-          value={formatCurrency(data.netPnl)}
-          positive={data.netPnl >= 0}
-        />
-        <Stat
-          label="Win rate"
-          value={data.winRate != null ? `${data.winRate.toFixed(1)}%` : "—"}
-        />
-      </div>
-
-      <section className="mb-8 rounded-xl border border-border bg-surface p-4">
-        <div className="mb-3 flex items-center justify-between">
-          <h3 className="text-sm font-semibold text-foreground">
-            Equity curve
-          </h3>
-          <span
-            className={
-              data.netPnl >= 0
-                ? "text-sm font-semibold text-profit"
-                : "text-sm font-semibold text-loss"
-            }
-          >
-            {formatCurrency(data.netPnl)} all-time
-          </span>
-        </div>
-        {data.equityCurve.length > 1 ? (
-          <EquityCurveChart data={data.equityCurve} />
-        ) : (
-          <p className="py-8 text-center text-sm text-muted">
-            Log a few more days to see your equity curve.
-          </p>
-        )}
-      </section>
-
-      <div className="mb-8 grid grid-cols-1 gap-4 lg:grid-cols-5">
-        <div className="rounded-xl border border-border bg-surface p-4 lg:col-span-1">
-          <h3 className="mb-1 text-sm font-semibold text-foreground">
-            Composite score
-          </h3>
-          <p className="mb-2 text-3xl font-semibold text-foreground">
-            {analytics.composite.overall != null
-              ? Math.round(analytics.composite.overall)
-              : "—"}
-          </p>
-          <CompositeRadar breakdown={analytics.composite.breakdown} />
-        </div>
-
-        <div className="grid grid-cols-2 gap-4 lg:col-span-2">
-          <Stat label="Win rate" value={fmtPct(analytics.totals.winRate)} />
-          <Stat
-            label="Profit factor"
-            value={
-              analytics.totals.profitFactor != null
-                ? analytics.totals.profitFactor.toFixed(2)
-                : "—"
-            }
-          />
-          <Stat
-            label="Avg win / avg loss"
-            value={
-              formatCurrency(analytics.totals.avgWin) +
-              " / " +
-              formatCurrency(analytics.totals.avgLoss)
-            }
-          />
-          <Stat
-            label="Discipline score"
-            value={
-              analytics.totals.disciplineScore != null
-                ? Math.round(analytics.totals.disciplineScore).toString()
-                : "—"
-            }
-          />
-        </div>
-
-        <div className="rounded-xl border border-border bg-surface p-4 lg:col-span-2">
-          <h3 className="mb-3 text-sm font-semibold text-foreground">
-            Session clocks
-          </h3>
-          <SessionClocks />
-        </div>
       </div>
 
       <section>
