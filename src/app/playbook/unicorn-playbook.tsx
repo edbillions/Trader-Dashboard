@@ -1,6 +1,3 @@
-"use client";
-
-import { useState } from "react";
 import "./playbook.css";
 
 const BODY_HTML = `
@@ -327,23 +324,14 @@ const BODY_HTML = `
 `;
 
 export function UnicornPlaybook() {
-  const [light, setLight] = useState(false);
-
   return (
-    <div className={`unicorn-playbook${light ? " light" : ""}`}>
+    <div className="unicorn-playbook">
       <div className="app">
         <div className="hdr">
           <div className="logo">
             🦄 UNICORN <span>PLAYBOOK</span>
           </div>
           <div className="hdr-mid">NQ / ES · NY AM SESSION</div>
-          <button
-            type="button"
-            className="theme-btn"
-            onClick={() => setLight((v) => !v)}
-          >
-            {light ? "🌙 DARK" : "☀ LIGHT"}
-          </button>
         </div>
         <div dangerouslySetInnerHTML={{ __html: BODY_HTML }} />
       </div>
