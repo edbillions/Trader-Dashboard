@@ -227,6 +227,20 @@ model ProcessGoal {
   createdAt DateTime @default(now())
 }
 
+// ---------- Coach layer ----------
+
+model Tendency {
+  id          String    @id @default(cuid())
+  title       String
+  description String?
+  status      String    @default("watching") // "watching" | "resolved" | "eliminated"
+  seenCount   Int       @default(0)
+  lastSeenAt  DateTime?
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+}
+
 // ---------- Config ----------
 
 model InstrumentConfig {
