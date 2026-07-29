@@ -1,7 +1,9 @@
 import Link from "next/link";
 import { PageHeader } from "@/components/layout/page-header";
 import { listAccountsWithRollup } from "@/lib/data/prop-firms";
+import { deleteAccountAction } from "@/lib/actions/prop-firms";
 import { formatCurrency } from "@/lib/pnl";
+import { ConfirmSubmitButton } from "@/components/ui/confirm-submit-button";
 
 export const dynamic = "force-dynamic";
 
@@ -54,12 +56,14 @@ export default async function PropFirmsPage() {
       ) : (
         <div className="flex flex-col gap-3">
           {accounts.map((account) => (
-            <Link
+            <div
               key={account.id}
-              href={`/prop-firms/${account.id}`}
               className="flex items-center justify-between rounded-xl border border-border bg-surface p-4 hover:bg-surface-raised"
             >
-              <div>
+              <Link
+                href={`/prop-firms/${account.id}`}
+                className="flex-1"
+              >
                 <p className="font-medium text-foreground">
                   {account.firmName} · {account.accountName}
                 </p>
@@ -67,22 +71,33 @@ export default async function PropFirmsPage() {
                   {account.accountType} · {account.status} ·{" "}
                   {account.tradeCount} trades
                 </p>
+              </Link>
+              <div className="flex items-center gap-4">
+                <Link href={`/prop-firms/${account.id}`} className="text-right">
+                  <p className="text-xs text-muted">
+                    Trading P&L {formatCurrency(account.tradingPnl)}
+                  </p>
+                  <p
+                    className={
+                      account.netPnl + account.tradingPnl >= 0
+                        ? "font-semibold text-profit"
+                        : "font-semibold text-loss"
+                    }
+                  >
+                    {formatCurrency(account.netPnl + account.tradingPnl)} net
+                  </p>
+                </Link>
+                <form action={deleteAccountAction}>
+                  <input type="hidden" name="id" value={account.id} />
+                  <ConfirmSubmitButton
+                    confirmMessage={`Delete ${account.firmName} · ${account.accountName}? This removes its fees and payouts too, and unlinks any trades from it. This can't be undone.`}
+                    className="shrink-0 text-xs font-medium text-loss hover:underline"
+                  >
+                    Delete
+                  </ConfirmSubmitButton>
+                </form>
               </div>
-              <div className="text-right">
-                <p className="text-xs text-muted">
-                  Trading P&L {formatCurrency(account.tradingPnl)}
-                </p>
-                <p
-                  className={
-                    account.netPnl + account.tradingPnl >= 0
-                      ? "font-semibold text-profit"
-                      : "font-semibold text-loss"
-                  }
-                >
-                  {formatCurrency(account.netPnl + account.tradingPnl)} net
-                </p>
-              </div>
-            </Link>
+            </div>
           ))}
         </div>
       )}

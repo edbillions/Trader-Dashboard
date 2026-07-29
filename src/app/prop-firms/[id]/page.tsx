@@ -7,10 +7,12 @@ import { formatCurrency, formatR } from "@/lib/pnl";
 import {
   addExpenseAction,
   addPayoutAction,
+  deleteAccountAction,
   deleteExpenseAction,
   deletePayoutAction,
   updateAccountStatusAction,
 } from "@/lib/actions/prop-firms";
+import { ConfirmSubmitButton } from "@/components/ui/confirm-submit-button";
 
 export const dynamic = "force-dynamic";
 
@@ -38,21 +40,33 @@ export default async function AccountDetailPage({
         title={`${account.firmName} · ${account.accountName}`}
         description={`${account.accountType} account`}
         actions={
-          <form action={updateAccountStatusAction} className="flex gap-2">
-            <input type="hidden" name="accountId" value={account.id} />
-            <Select name="status" defaultValue={account.status}>
-              <option value="active">Active</option>
-              <option value="passed">Passed</option>
-              <option value="failed">Failed</option>
-              <option value="closed">Closed</option>
-            </Select>
-            <button
-              type="submit"
-              className="rounded-lg border border-border px-3 py-2 text-sm font-medium text-foreground hover:bg-surface-raised"
-            >
-              Update status
-            </button>
-          </form>
+          <div className="flex items-center gap-2">
+            <form action={updateAccountStatusAction} className="flex gap-2">
+              <input type="hidden" name="accountId" value={account.id} />
+              <Select name="status" defaultValue={account.status}>
+                <option value="active">Active</option>
+                <option value="passed">Passed</option>
+                <option value="failed">Failed</option>
+                <option value="closed">Closed</option>
+              </Select>
+              <button
+                type="submit"
+                className="rounded-lg border border-border px-3 py-2 text-sm font-medium text-foreground hover:bg-surface-raised"
+              >
+                Update status
+              </button>
+            </form>
+            <form action={deleteAccountAction}>
+              <input type="hidden" name="id" value={account.id} />
+              <input type="hidden" name="redirect" value="true" />
+              <ConfirmSubmitButton
+                confirmMessage={`Delete ${account.firmName} · ${account.accountName}? This removes its fees and payouts too, and unlinks any trades from it. This can't be undone.`}
+                className="rounded-lg border border-loss/40 px-3 py-2 text-sm font-medium text-loss hover:bg-loss-muted"
+              >
+                Delete account
+              </ConfirmSubmitButton>
+            </form>
+          </div>
         }
       />
 

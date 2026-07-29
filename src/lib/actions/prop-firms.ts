@@ -101,3 +101,17 @@ export async function deletePayoutAction(formData: FormData) {
   revalidatePath("/prop-firms");
   revalidatePath(`/prop-firms/${accountId}`);
 }
+
+export async function deleteAccountAction(formData: FormData) {
+  const id = requiredString(formData, "id");
+  const redirectAfter = formData.get("redirect") === "true";
+
+  await prisma.propFirmAccount.delete({ where: { id } });
+
+  revalidatePath("/prop-firms");
+  revalidatePath("/trades");
+
+  if (redirectAfter) {
+    redirect("/prop-firms");
+  }
+}
