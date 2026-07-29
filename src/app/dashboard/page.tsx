@@ -8,6 +8,7 @@ import { CompositeRadar } from "@/components/analytics/composite-radar";
 import { EquityCurveChart } from "@/components/dashboard/equity-curve-chart";
 import { DashboardTodoWidget } from "@/components/dashboard/dashboard-todo-widget";
 import { StreakCard } from "@/components/dashboard/streak-card";
+import { TodayRiskWidget } from "@/components/dashboard/today-risk-widget";
 import { SessionClocks } from "@/components/layout/session-clocks";
 import { quoteOfTheDay } from "@/lib/motivational-quotes";
 import { getTodoWidgetItems } from "@/lib/data/todos";
@@ -156,6 +157,8 @@ export default async function DashboardPage() {
           )}
         </section>
       )}
+
+      <TodayRiskWidget risk={data.todayRisk} />
 
       <div className="mb-8 rounded-xl border border-border bg-surface p-6">
         <SessionClocks />

@@ -73,6 +73,8 @@ export default async function TradeDetailPage({
           <Info label="Daily bias" value={trade.dailyBias} />
           <Info label="HTF POI" value={trade.htfPoi} />
           <Info label="HTF DOL" value={trade.htfDol} />
+          <Info label="Max favorable excursion" value={trade.mfeR != null ? formatR(trade.mfeR) : null} />
+          <Info label="Max adverse excursion" value={trade.maeR != null ? `${trade.maeR.toFixed(2)}R` : null} />
         </dl>
       </section>
 

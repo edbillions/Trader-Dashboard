@@ -1,4 +1,5 @@
 import { prisma } from "@/lib/prisma";
+import { computeDrawdown } from "@/lib/domain/drawdown";
 
 export async function listAccountsWithRollup() {
   const accounts = await prisma.propFirmAccount.findMany({
@@ -23,6 +24,8 @@ export async function listAccountsWithRollup() {
       (sum, t) => sum + (t.netPnl ?? 0),
       0,
     );
+    const wins = account.trades.filter((t) => (t.netPnl ?? 0) > 0).length;
+    const losses = account.trades.filter((t) => (t.netPnl ?? 0) < 0).length;
 
     return {
       id: account.id,
@@ -31,6 +34,7 @@ export async function listAccountsWithRollup() {
       accountType: account.accountType,
       status: account.status,
       tradeCount: account.trades.length,
+      winRate: wins + losses > 0 ? (wins / (wins + losses)) * 100 : null,
       totalExpenses,
       totalPayouts,
       tradingPnl,
@@ -40,7 +44,7 @@ export async function listAccountsWithRollup() {
 }
 
 export async function getAccountDetail(id: string) {
-  return prisma.propFirmAccount.findUnique({
+  const account = await prisma.propFirmAccount.findUnique({
     where: { id },
     include: {
       expenses: { orderBy: { date: "desc" } },
@@ -51,4 +55,16 @@ export async function getAccountDetail(id: string) {
       },
     },
   });
+
+  if (!account) return null;
+
+  const chronologicalPnls = [...account.trades]
+    .reverse()
+    .map((t) => t.netPnl ?? 0);
+  const drawdown =
+    account.startingBalance != null
+      ? computeDrawdown(account.startingBalance, chronologicalPnls)
+      : null;
+
+  return { ...account, drawdown };
 }

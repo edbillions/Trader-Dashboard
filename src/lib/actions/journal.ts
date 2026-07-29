@@ -148,6 +148,8 @@ export async function saveTradingDayAction(
           dailyBias: trade.dailyBias || null,
           htfPoi: trade.htfPoi || null,
           htfDol: trade.htfDol || null,
+          mfeR: trade.mfeR,
+          maeR: trade.maeR,
           writeup: trade.writeup || null,
           confluenceFactors: {
             connect: trade.confluenceFactorIds.map((id) => ({ id })),

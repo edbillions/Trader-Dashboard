@@ -90,6 +90,8 @@ export async function getTradingDayInputForDate(
       dailyBias: t.dailyBias ?? "",
       htfPoi: t.htfPoi ?? "",
       htfDol: t.htfDol ?? "",
+      mfeR: t.mfeR,
+      maeR: t.maeR,
       writeup: t.writeup ?? "",
       confluenceFactorIds: t.confluenceFactors.map((c) => c.id),
       mistakeIds: t.mistakes.map((m) => m.id),

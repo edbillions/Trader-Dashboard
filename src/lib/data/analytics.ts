@@ -140,6 +140,37 @@ export async function getAnalyticsData() {
     .map(([label, group]) => groupStats(group, () => label)[0])
     .sort((a, b) => b.netPnl - a.netPnl);
 
+  const excursionTrades = trades.filter(
+    (t) => t.mfeR != null && t.rMultiple != null,
+  );
+  const avgMfeR =
+    excursionTrades.length > 0
+      ? excursionTrades.reduce((s, t) => s + (t.mfeR ?? 0), 0) /
+        excursionTrades.length
+      : null;
+  const maeTrades = trades.filter((t) => t.maeR != null);
+  const avgMaeR =
+    maeTrades.length > 0
+      ? maeTrades.reduce((s, t) => s + (t.maeR ?? 0), 0) / maeTrades.length
+      : null;
+  const avgRealizedR =
+    excursionTrades.length > 0
+      ? excursionTrades.reduce((s, t) => s + (t.rMultiple ?? 0), 0) /
+        excursionTrades.length
+      : null;
+  const captureRate =
+    avgRealizedR != null && avgMfeR != null && avgMfeR > 0
+      ? (avgRealizedR / avgMfeR) * 100
+      : null;
+
+  const excursion = {
+    sampleSize: excursionTrades.length,
+    avgMfeR,
+    avgMaeR,
+    avgRealizedR,
+    captureRate,
+  };
+
   return {
     totals: {
       tradeCount: trades.length,
@@ -162,6 +193,7 @@ export async function getAnalyticsData() {
       bySetupGrade,
       byConfluenceFactor,
     },
+    excursion,
   };
 }
 

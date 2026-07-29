@@ -20,17 +20,49 @@ function requiredNumber(formData: FormData, key: string): number {
   return value;
 }
 
+function optionalNumber(formData: FormData, key: string): number | null {
+  const raw = formData.get(key);
+  if (typeof raw !== "string" || raw.trim() === "") return null;
+  const value = Number(raw);
+  return Number.isFinite(value) ? value : null;
+}
+
 export async function createAccountAction(formData: FormData) {
   const firmName = requiredString(formData, "firmName");
   const accountName = requiredString(formData, "accountName");
   const accountType = requiredString(formData, "accountType");
+  const startingBalance = optionalNumber(formData, "startingBalance");
+  const maxDrawdownLimit = optionalNumber(formData, "maxDrawdownLimit");
+  const dailyLossLimit = optionalNumber(formData, "dailyLossLimit");
 
   const account = await prisma.propFirmAccount.create({
-    data: { firmName, accountName, accountType },
+    data: {
+      firmName,
+      accountName,
+      accountType,
+      startingBalance,
+      maxDrawdownLimit,
+      dailyLossLimit,
+    },
   });
 
   revalidatePath("/prop-firms");
   redirect(`/prop-firms/${account.id}`);
+}
+
+export async function updateAccountLimitsAction(formData: FormData) {
+  const accountId = requiredString(formData, "accountId");
+  const startingBalance = optionalNumber(formData, "startingBalance");
+  const maxDrawdownLimit = optionalNumber(formData, "maxDrawdownLimit");
+  const dailyLossLimit = optionalNumber(formData, "dailyLossLimit");
+
+  await prisma.propFirmAccount.update({
+    where: { id: accountId },
+    data: { startingBalance, maxDrawdownLimit, dailyLossLimit },
+  });
+
+  revalidatePath("/prop-firms");
+  revalidatePath(`/prop-firms/${accountId}`);
 }
 
 export async function updateAccountStatusAction(formData: FormData) {

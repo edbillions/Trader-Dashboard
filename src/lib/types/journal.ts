@@ -27,6 +27,8 @@ export interface TradeInput {
   dailyBias: string;
   htfPoi: string;
   htfDol: string;
+  mfeR: number | null;
+  maeR: number | null;
   writeup: string;
   confluenceFactorIds: string[];
   mistakeIds: string[];
@@ -87,6 +89,8 @@ export function emptyTrade(): TradeInput {
     dailyBias: "",
     htfPoi: "",
     htfDol: "",
+    mfeR: null,
+    maeR: null,
     writeup: "",
     confluenceFactorIds: [],
     mistakeIds: [],

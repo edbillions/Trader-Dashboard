@@ -20,6 +20,10 @@ model PropFirmAccount {
   status      String   @default("active") // "active" | "passed" | "failed" | "closed"
   createdAt   DateTime @default(now())
 
+  startingBalance  Float?
+  maxDrawdownLimit Float? // $ trailing/static max drawdown allowed by the firm
+  dailyLossLimit   Float? // $ max loss allowed in a single day
+
   trades   Trade[]
   expenses AccountExpense[]
   payouts  AccountPayout[]
@@ -137,6 +141,9 @@ model Trade {
   dailyBias String?
   htfPoi    String?
   htfDol    String?
+
+  mfeR Float? // max favorable excursion reached before exit, in R-multiples
+  maeR Float? // max adverse excursion reached before exit, in R-multiples
 
   writeup String?
 

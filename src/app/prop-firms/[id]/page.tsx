@@ -10,9 +10,11 @@ import {
   deleteAccountAction,
   deleteExpenseAction,
   deletePayoutAction,
+  updateAccountLimitsAction,
   updateAccountStatusAction,
 } from "@/lib/actions/prop-firms";
 import { ConfirmSubmitButton } from "@/components/ui/confirm-submit-button";
+import { DrawdownCard } from "@/components/prop-firms/drawdown-card";
 
 export const dynamic = "force-dynamic";
 
@@ -33,6 +35,12 @@ export default async function AccountDetailPage({
   const totalPayouts = account.payouts.reduce((s, p) => s + p.amount, 0);
   const tradingPnl = account.trades.reduce((s, t) => s + (t.netPnl ?? 0), 0);
   const netPnl = totalPayouts - totalExpenses + tradingPnl;
+
+  const todayKey = dateKey(new Date());
+  const todayNetPnl = account.trades
+    .filter((t) => dateKey(t.tradingDay.date) === todayKey)
+    .reduce((s, t) => s + (t.netPnl ?? 0), 0);
+  const todayLoss = todayNetPnl < 0 ? Math.abs(todayNetPnl) : 0;
 
   return (
     <div>
@@ -75,6 +83,61 @@ export default async function AccountDetailPage({
         <Stat label="Total fees" value={formatCurrency(totalExpenses)} negative />
         <Stat label="Total payouts" value={formatCurrency(totalPayouts)} />
         <Stat label="Net" value={formatCurrency(netPnl)} accent={netPnl >= 0} />
+      </div>
+
+      <div className="mb-8 grid grid-cols-1 gap-4 lg:grid-cols-2">
+        <DrawdownCard
+          startingBalance={account.startingBalance}
+          maxDrawdownLimit={account.maxDrawdownLimit}
+          dailyLossLimit={account.dailyLossLimit}
+          drawdown={account.drawdown}
+          todayLoss={todayLoss}
+        />
+
+        <form
+          action={updateAccountLimitsAction}
+          className="flex flex-col gap-3 rounded-xl border border-border bg-surface p-4"
+        >
+          <h3 className="text-sm font-semibold text-foreground">
+            Account limits
+          </h3>
+          <input type="hidden" name="accountId" value={account.id} />
+          <div className="grid grid-cols-1 gap-3 sm:grid-cols-3">
+            <Field label="Starting balance">
+              <TextInput
+                name="startingBalance"
+                type="number"
+                step="any"
+                defaultValue={account.startingBalance ?? ""}
+                placeholder="50000"
+              />
+            </Field>
+            <Field label="Max drawdown limit ($)">
+              <TextInput
+                name="maxDrawdownLimit"
+                type="number"
+                step="any"
+                defaultValue={account.maxDrawdownLimit ?? ""}
+                placeholder="2000"
+              />
+            </Field>
+            <Field label="Daily loss limit ($)">
+              <TextInput
+                name="dailyLossLimit"
+                type="number"
+                step="any"
+                defaultValue={account.dailyLossLimit ?? ""}
+                placeholder="1000"
+              />
+            </Field>
+          </div>
+          <button
+            type="submit"
+            className="mt-1 self-start rounded-lg bg-accent px-4 py-2 text-sm font-medium text-white"
+          >
+            Save limits
+          </button>
+        </form>
       </div>
 
       <div className="grid grid-cols-1 gap-8 lg:grid-cols-2">

@@ -4,6 +4,7 @@ import { listAccountsWithRollup } from "@/lib/data/prop-firms";
 import { deleteAccountAction } from "@/lib/actions/prop-firms";
 import { formatCurrency } from "@/lib/pnl";
 import { ConfirmSubmitButton } from "@/components/ui/confirm-submit-button";
+import { AccountComparisonChart } from "@/components/prop-firms/account-comparison-chart";
 
 export const dynamic = "force-dynamic";
 
@@ -54,6 +55,22 @@ export default async function PropFirmsPage() {
           .
         </div>
       ) : (
+        <>
+          {accounts.length > 1 && (
+            <section className="mb-8 rounded-xl border border-border bg-surface p-4">
+              <h3 className="mb-3 text-sm font-semibold text-foreground">
+                Account comparison
+              </h3>
+              <AccountComparisonChart
+                stats={accounts.map((a) => ({
+                  label: `${a.firmName} · ${a.accountName}`,
+                  netPnl: a.netPnl + a.tradingPnl,
+                  tradeCount: a.tradeCount,
+                  winRate: a.winRate,
+                }))}
+              />
+            </section>
+          )}
         <div className="flex flex-col gap-3">
           {accounts.map((account) => (
             <div
@@ -100,6 +117,7 @@ export default async function PropFirmsPage() {
             </div>
           ))}
         </div>
+        </>
       )}
     </div>
   );

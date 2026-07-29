@@ -72,6 +72,15 @@ export async function getDashboardData() {
   const todayNetPnl =
     todayEntry?.trades.reduce((sum, t) => sum + (t.netPnl ?? 0), 0) ?? 0;
 
+  const todayRisk = todayEntry
+    ? {
+        maxLossPlan: todayEntry.maxLossPlan,
+        lossUsed: todayNetPnl < 0 ? Math.abs(todayNetPnl) : 0,
+        maxTradeCountPlan: todayEntry.maxTradeCountPlan,
+        tradesTaken: todayEntry.trades.length,
+      }
+    : null;
+
   return {
     hasLoggedToday: Boolean(todayEntry),
     today,
@@ -81,6 +90,7 @@ export async function getDashboardData() {
     equityCurve,
     noRuleBreakStreak,
     tradeStreaks,
+    todayRisk,
     todaySummary: todayEntry
       ? {
           tradeCount: todayEntry.trades.length,

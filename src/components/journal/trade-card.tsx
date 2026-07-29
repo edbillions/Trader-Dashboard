@@ -293,6 +293,31 @@ export function TradeCard({
         </Field>
       </div>
 
+      <div className="mt-4 grid grid-cols-2 gap-4">
+        <Field label="Max favorable excursion (R)">
+          <TextInput
+            type="number"
+            step="any"
+            value={value.mfeR ?? ""}
+            onChange={(e) =>
+              set("mfeR", e.target.value === "" ? null : Number(e.target.value))
+            }
+            placeholder="How far it ran in your favor, e.g. 2.5"
+          />
+        </Field>
+        <Field label="Max adverse excursion (R)">
+          <TextInput
+            type="number"
+            step="any"
+            value={value.maeR ?? ""}
+            onChange={(e) =>
+              set("maeR", e.target.value === "" ? null : Number(e.target.value))
+            }
+            placeholder="How far it ran against you, e.g. 0.4"
+          />
+        </Field>
+      </div>
+
       <div className="mt-4">
         <ChipMultiSelect
           label="Confluence factors"
