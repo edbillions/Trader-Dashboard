@@ -166,16 +166,12 @@ export default async function DashboardPage() {
 
       <DashboardTodoWidget todos={todayTodos} />
 
-      <div className="mb-8 grid grid-cols-2 gap-4 sm:grid-cols-3">
+      <div className="mb-8 grid grid-cols-2 gap-4">
         <Stat label="Total trades" value={data.totalTrades.toString()} />
         <Stat
           label="Net P&L (all-time)"
           value={formatCurrency(data.netPnl)}
           positive={data.netPnl >= 0}
-        />
-        <Stat
-          label="Win rate"
-          value={data.winRate != null ? `${data.winRate.toFixed(1)}%` : "—"}
         />
       </div>
 
