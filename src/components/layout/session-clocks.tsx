@@ -49,59 +49,59 @@ function ClockFace({
   const minuteAngle = parts ? (parts.minute + parts.second / 60) * 6 : 0;
 
   return (
-    <div className="flex flex-col items-center gap-2">
-      <span className="text-sm font-semibold text-foreground">{label}</span>
-      <svg width="84" height="84" viewBox="0 0 84 84">
+    <div className="flex flex-col items-center gap-3">
+      <span className="text-lg font-semibold text-foreground">{label}</span>
+      <svg width="150" height="150" viewBox="0 0 150 150">
         <circle
-          cx="42"
-          cy="42"
-          r="38"
+          cx="75"
+          cy="75"
+          r="67"
           fill="none"
           stroke="var(--border)"
-          strokeWidth="1.5"
+          strokeWidth="2"
         />
         {TICKS.map((angle) => (
           <line
             key={angle}
-            x1="42"
-            y1="6"
-            x2="42"
-            y2="11"
+            x1="75"
+            y1="9"
+            x2="75"
+            y2="18"
             stroke="var(--muted)"
-            strokeWidth="1.5"
+            strokeWidth="2"
             strokeLinecap="round"
-            transform={`rotate(${angle} 42 42)`}
+            transform={`rotate(${angle} 75 75)`}
           />
         ))}
         <line
-          x1="42"
-          y1="42"
-          x2="42"
-          y2="21"
+          x1="75"
+          y1="75"
+          x2="75"
+          y2="40"
           stroke="var(--foreground)"
-          strokeWidth="2.5"
+          strokeWidth="4"
           strokeLinecap="round"
-          transform={`rotate(${hourAngle} 42 42)`}
+          transform={`rotate(${hourAngle} 75 75)`}
         />
         <line
-          x1="42"
-          y1="42"
-          x2="42"
-          y2="13"
+          x1="75"
+          y1="75"
+          x2="75"
+          y2="26"
           stroke="var(--accent)"
-          strokeWidth="2"
+          strokeWidth="3"
           strokeLinecap="round"
-          transform={`rotate(${minuteAngle} 42 42)`}
+          transform={`rotate(${minuteAngle} 75 75)`}
         />
-        <circle cx="42" cy="42" r="2" fill="var(--foreground)" />
+        <circle cx="75" cy="75" r="4" fill="var(--foreground)" />
       </svg>
       <div className="text-center leading-tight">
-        <p className="font-mono text-xs tabular-nums text-foreground">
+        <p className="font-mono text-base tabular-nums text-foreground">
           {parts
             ? `${parts.hour}:${pad(parts.minute)}:${pad(parts.second)} ${parts.dayPeriod}`
             : "--:--:-- --"}
         </p>
-        <p className="text-[10px] uppercase tracking-wide text-muted">
+        <p className="text-xs uppercase tracking-wide text-muted">
           {parts?.tzAbbr ?? ""}
         </p>
       </div>
@@ -119,7 +119,7 @@ export function SessionClocks() {
   }, []);
 
   return (
-    <div className="flex items-center justify-around gap-4">
+    <div className="flex w-full items-center justify-around gap-4">
       {ZONES.map((z) => (
         <ClockFace key={z.tz} label={z.label} tz={z.tz} now={now} />
       ))}

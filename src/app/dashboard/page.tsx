@@ -157,7 +157,7 @@ export default async function DashboardPage() {
         </section>
       )}
 
-      <div className="mb-8 flex justify-center">
+      <div className="mb-8 rounded-xl border border-border bg-surface p-6">
         <SessionClocks />
       </div>
 
