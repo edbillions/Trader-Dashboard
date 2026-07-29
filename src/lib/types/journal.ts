@@ -47,6 +47,7 @@ export interface SaveTradingDayInput {
   maxLossPlan: number | null;
   positionSizePlan: string;
   maxTradeCountPlan: number | null;
+  planScreenshotPaths: string[];
   trades: TradeInput[];
   missedTrades: MissedTradeInput[];
   planAdherenceGrade: string;
@@ -107,6 +108,7 @@ export function emptyTradingDay(date: string): SaveTradingDayInput {
     maxLossPlan: null,
     positionSizePlan: "",
     maxTradeCountPlan: null,
+    planScreenshotPaths: [],
     trades: [],
     missedTrades: [],
     planAdherenceGrade: "",

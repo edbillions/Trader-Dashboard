@@ -19,14 +19,17 @@ export async function uploadScreenshotAction(
     throw new Error("No file provided");
   }
 
+  const folder = formData.get("folder");
+  const subdir = folder === "plans" ? "plans" : "trades";
+
   const bytes = Buffer.from(await file.arrayBuffer());
   const ext = path.extname(file.name) || ".png";
   const filename = `${randomUUID()}${ext}`;
-  const uploadsDir = path.join(process.cwd(), "public", "uploads", "trades");
+  const uploadsDir = path.join(process.cwd(), "public", "uploads", subdir);
   await mkdir(uploadsDir, { recursive: true });
   await writeFile(path.join(uploadsDir, filename), bytes);
 
-  return { path: `/uploads/trades/${filename}` };
+  return { path: `/uploads/${subdir}/${filename}` };
 }
 
 export async function saveTradingDayAction(
@@ -79,10 +82,23 @@ export async function saveTradingDayAction(
       },
     });
 
-    // Replace trades and missed trades wholesale for this day, since the
-    // journal wizard always submits the day's complete, authoritative state.
+    // Replace trades, missed trades, and plan screenshots wholesale for this
+    // day, since the journal wizard always submits the day's complete,
+    // authoritative state.
     await tx.trade.deleteMany({ where: { tradingDayId: day.id } });
     await tx.missedTrade.deleteMany({ where: { tradingDayId: day.id } });
+    await tx.tradingDayScreenshot.deleteMany({
+      where: { tradingDayId: day.id },
+    });
+
+    if (input.planScreenshotPaths.length > 0) {
+      await tx.tradingDayScreenshot.createMany({
+        data: input.planScreenshotPaths.map((filePath) => ({
+          tradingDayId: day.id,
+          filePath,
+        })),
+      });
+    }
 
     for (const trade of input.trades) {
       const instrument = instrumentBySymbol.get(trade.symbol.toUpperCase());

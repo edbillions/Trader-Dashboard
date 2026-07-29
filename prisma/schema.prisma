@@ -72,9 +72,19 @@ model TradingDay {
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 
-  trades         Trade[]
-  missedTrades   MissedTrade[]
-  ruleViolations RuleViolationChecklistItem[]
+  trades             Trade[]
+  missedTrades       MissedTrade[]
+  ruleViolations     RuleViolationChecklistItem[]
+  planScreenshots    TradingDayScreenshot[]
+}
+
+model TradingDayScreenshot {
+  id           String   @id @default(cuid())
+  tradingDayId String
+  tradingDay   TradingDay @relation(fields: [tradingDayId], references: [id], onDelete: Cascade)
+  filePath     String
+
+  createdAt DateTime @default(now())
 }
 
 model RuleViolationChecklistItem {

@@ -42,6 +42,7 @@ export async function getTradingDayInputForDate(
         include: { confluenceFactors: true, mistakes: true, screenshots: true },
       },
       missedTrades: { include: { confluenceFactors: true } },
+      planScreenshots: true,
     },
   });
 
@@ -56,6 +57,7 @@ export async function getTradingDayInputForDate(
     maxLossPlan: day.maxLossPlan,
     positionSizePlan: day.positionSizePlan ?? "",
     maxTradeCountPlan: day.maxTradeCountPlan,
+    planScreenshotPaths: day.planScreenshots.map((s) => s.filePath),
     planAdherenceGrade: day.planAdherenceGrade ?? "",
     psychologyLog: day.psychologyLog ?? "",
     freeformNotes: day.freeformNotes ?? "",
@@ -112,6 +114,7 @@ export async function getTradingDayDetail(date: string) {
         orderBy: { entryTime: "asc" },
       },
       missedTrades: { include: { confluenceFactors: true } },
+      planScreenshots: true,
     },
   });
 

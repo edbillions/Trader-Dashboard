@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useTransition } from "react";
+import { useEffect, useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
 import { clsx } from "clsx";
 import type { WizardLookups } from "@/lib/data/lookups";
@@ -9,7 +9,7 @@ import {
   emptyTrade,
   type SaveTradingDayInput,
 } from "@/lib/types/journal";
-import { saveTradingDayAction } from "@/lib/actions/journal";
+import { saveTradingDayAction, uploadScreenshotAction } from "@/lib/actions/journal";
 import { suggestRuleViolationsAction } from "@/lib/actions/ai";
 import { Field, TextInput, TextArea, Select } from "@/components/ui/field";
 import { TradeCard } from "@/components/journal/trade-card";
@@ -38,15 +38,56 @@ export function JournalWizard({
     { id: string; label: string; reason: string }[] | null
   >(null);
   const [aiUnavailable, setAiUnavailable] = useState(false);
+  const [isUploadingPlan, startPlanUpload] = useTransition();
   const router = useRouter();
 
   const step = STEPS[stepIndex];
+
+  useEffect(() => {
+    const raw = sessionStorage.getItem("unicorn-grader-handoff");
+    if (!raw) return;
+    sessionStorage.removeItem("unicorn-grader-handoff");
+    try {
+      const handoff = JSON.parse(raw) as {
+        entryModel: string;
+        setupGrade: string;
+        confluenceFactorLabels: string[];
+      };
+      const labelToId = new Map(
+        lookups.confluenceFactors.map((c) => [c.label, c.id]),
+      );
+      const trade = emptyTrade();
+      trade.entryModel = handoff.entryModel;
+      trade.setupGrade = handoff.setupGrade;
+      trade.confluenceFactorIds = handoff.confluenceFactorLabels
+        .map((label) => labelToId.get(label))
+        .filter((id): id is string => !!id);
+      setData((d) => ({ ...d, trades: [...d.trades, trade] }));
+      setStepIndex(1);
+    } catch {
+      // ignore malformed handoff data
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
 
   function set<K extends keyof SaveTradingDayInput>(
     key: K,
     val: SaveTradingDayInput[K],
   ) {
     setData((d) => ({ ...d, [key]: val }));
+  }
+
+  function handlePlanFileChange(e: React.ChangeEvent<HTMLInputElement>) {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    const formData = new FormData();
+    formData.set("file", file);
+    formData.set("folder", "plans");
+    startPlanUpload(async () => {
+      const result = await uploadScreenshotAction(formData);
+      set("planScreenshotPaths", [...data.planScreenshotPaths, result.path]);
+    });
+    e.target.value = "";
   }
 
   function handleSuggest() {
@@ -172,6 +213,31 @@ export function JournalWizard({
                 }
               />
             </Field>
+          </div>
+          <div className="flex flex-col gap-1.5">
+            <span className="text-xs font-medium text-muted">
+              Screenshots
+            </span>
+            <div className="flex flex-wrap items-center gap-3">
+              {data.planScreenshotPaths.map((p) => (
+                // eslint-disable-next-line @next/next/no-img-element
+                <img
+                  key={p}
+                  src={p}
+                  alt="Pre-market plan screenshot"
+                  className="h-16 w-16 rounded-lg border border-border object-cover"
+                />
+              ))}
+              <label className="cursor-pointer rounded-lg border border-dashed border-border px-3 py-2 text-xs text-muted hover:text-foreground">
+                {isUploadingPlan ? "Uploading..." : "+ Add screenshot"}
+                <input
+                  type="file"
+                  accept="image/*"
+                  className="hidden"
+                  onChange={handlePlanFileChange}
+                />
+              </label>
+            </div>
           </div>
         </div>
       )}

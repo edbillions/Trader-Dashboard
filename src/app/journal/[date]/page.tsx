@@ -59,6 +59,19 @@ export default async function JournalDayPage({
             value={day.maxTradeCountPlan?.toString() ?? null}
           />
         </dl>
+        {day.planScreenshots.length > 0 && (
+          <div className="mt-4 flex flex-wrap gap-2">
+            {day.planScreenshots.map((s) => (
+              // eslint-disable-next-line @next/next/no-img-element
+              <img
+                key={s.id}
+                src={s.filePath}
+                alt="Pre-market plan screenshot"
+                className="h-20 w-20 rounded-lg border border-border object-cover"
+              />
+            ))}
+          </div>
+        )}
       </section>
 
       <section className="mb-8">
