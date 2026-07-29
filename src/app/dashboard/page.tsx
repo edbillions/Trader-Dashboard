@@ -5,6 +5,7 @@ import { getDashboardData } from "@/lib/data/dashboard";
 import { getAnalyticsData } from "@/lib/data/analytics";
 import { formatCurrency, formatR } from "@/lib/pnl";
 import { CompositeRadar } from "@/components/analytics/composite-radar";
+import { quoteOfTheDay } from "@/lib/motivational-quotes";
 
 export const dynamic = "force-dynamic";
 
@@ -20,6 +21,12 @@ export default async function DashboardPage() {
         title="Dashboard"
         description="Your trading day, at a glance."
       />
+
+      <div className="mb-8 overflow-hidden rounded-xl border border-accent/30 bg-gradient-to-r from-accent/15 via-accent/5 to-transparent px-5 py-4">
+        <p className="text-sm italic text-foreground">
+          &ldquo;{quoteOfTheDay()}&rdquo;
+        </p>
+      </div>
 
       {!data.hasLoggedToday && (
         <div className="mb-8 flex items-center justify-between rounded-xl border border-accent/40 bg-accent/10 px-5 py-4">
@@ -41,7 +48,7 @@ export default async function DashboardPage() {
       )}
 
       {data.hasLoggedToday && data.todaySummary && (
-        <section className="mb-8 rounded-xl border border-border bg-surface p-5">
+        <section className="mb-8 rounded-xl border border-accent/20 bg-surface p-5 shadow-[0_0_24px_-8px_var(--accent)]">
           <div className="mb-4 flex items-start justify-between">
             <div>
               <p className="text-xs font-semibold uppercase tracking-wide text-accent">
@@ -264,7 +271,7 @@ function MiniStat({
   positive?: boolean;
 }) {
   return (
-    <div className="rounded-lg border border-border bg-surface-raised p-3">
+    <div className="rounded-lg border border-border bg-surface-raised p-3 transition-colors hover:border-accent/40">
       <p className="text-xs font-medium text-muted">{label}</p>
       <p
         className={
@@ -292,7 +299,7 @@ function Stat({
   positive?: boolean;
 }) {
   return (
-    <div className="rounded-xl border border-border bg-surface p-4">
+    <div className="rounded-xl border border-border bg-surface p-4 transition-colors hover:border-accent/40">
       <p className="text-xs font-medium text-muted">{label}</p>
       <p
         className={
