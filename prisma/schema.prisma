@@ -255,6 +255,19 @@ model TodoItem {
   updatedAt DateTime @updatedAt
 }
 
+// ---------- Chart Vault ----------
+
+model ChartImage {
+  id       String  @id @default(cuid())
+  filePath String
+  title    String?
+  symbol   String?
+  grade    String? // "A+" | "A" | "B" | "C" | "D" | "F"
+  notes    String?
+
+  createdAt DateTime @default(now())
+}
+
 // ---------- Config ----------
 
 model InstrumentConfig {
