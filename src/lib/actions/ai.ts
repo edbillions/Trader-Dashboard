@@ -3,6 +3,7 @@
 import { formatWizardDayForAI } from "@/lib/ai/format-wizard-day";
 import { suggestRuleViolations } from "@/lib/ai/rule-violations";
 import { getPatternInsights } from "@/lib/ai/insights";
+import { getMistakeCoaching } from "@/lib/ai/mistakes";
 import { getWizardLookups } from "@/lib/data/lookups";
 import type { SaveTradingDayInput } from "@/lib/types/journal";
 
@@ -31,4 +32,12 @@ export async function getPatternInsightsAction() {
     return { available: false as const, insight: null };
   }
   return { available: true as const, insight };
+}
+
+export async function getMistakeCoachingAction() {
+  const coaching = await getMistakeCoaching();
+  if (coaching == null) {
+    return { available: false as const, coaching: null };
+  }
+  return { available: true as const, coaching };
 }

@@ -25,6 +25,8 @@ const NAV_GROUPS = [
 
 const STANDALONE_ITEMS = [
   { href: "/coach", label: "Coach" },
+  { href: "/tendencies", label: "Tendencies" },
+  { href: "/mistakes", label: "Mistakes" },
   { href: "/prop-firms", label: "Prop Firms" },
   { href: "/settings", label: "Settings" },
 ];
