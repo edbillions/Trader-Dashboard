@@ -70,9 +70,9 @@ export function Sidebar() {
       <div className="flex items-center gap-2 px-5 py-6">
         <span className="text-lg font-semibold tracking-tight">
           <span className="bg-gradient-to-r from-accent to-purple-400 bg-clip-text text-transparent">
-            Unicorn
+            Trader
           </span>{" "}
-          <span className="text-foreground">Journal</span>
+          <span className="text-foreground">Hub</span>
         </span>
       </div>
       <nav className="flex flex-1 flex-col gap-4 overflow-y-auto px-3">

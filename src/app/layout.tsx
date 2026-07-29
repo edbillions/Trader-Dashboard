@@ -15,7 +15,7 @@ const geistMono = Geist_Mono({
 });
 
 export const metadata: Metadata = {
-  title: "Unicorn Journal",
+  title: "Trader Hub",
   description: "Personal ICT trading journal and dashboard",
 };
 

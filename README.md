@@ -1,4 +1,4 @@
-# Unicorn Journal — Personal ICT Trading Dashboard
+# Trader Hub — Personal ICT Trading Dashboard
 
 A personal, local-only trading journal and dashboard built around ICT (Inner Circle Trader)
 concepts and the Unicorn Model. Replaces generic tools like Tradervue/TradeZella with one that

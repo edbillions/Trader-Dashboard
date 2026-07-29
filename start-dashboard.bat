@@ -2,7 +2,7 @@
 cd /d "%~dp0"
 
 echo ============================================
-echo   Starting Unicorn Journal
+echo   Starting Trader Hub
 echo ============================================
 echo.
 
@@ -51,7 +51,7 @@ if errorlevel 1 (
 )
 
 echo Starting the server...
-start "Unicorn Journal Server - close this window to stop the app" cmd /k "npm start"
+start "Trader Hub Server - close this window to stop the app" cmd /k "npm start"
 
 timeout /t 5 /nobreak >nul
 start "" http://localhost:3000/dashboard
