@@ -3,6 +3,7 @@ import { PageHeader } from "@/components/layout/page-header";
 import { getDashboardData } from "@/lib/data/dashboard";
 import { getAnalyticsData } from "@/lib/data/analytics";
 import { formatCurrency } from "@/lib/pnl";
+import { CompositeRadar } from "@/components/analytics/composite-radar";
 
 export const dynamic = "force-dynamic";
 
@@ -49,14 +50,48 @@ export default async function DashboardPage() {
           label="Win rate"
           value={data.winRate != null ? `${data.winRate.toFixed(1)}%` : "—"}
         />
-        <Stat
-          label="Composite score"
-          value={
-            analytics.composite.overall != null
-              ? Math.round(analytics.composite.overall).toString()
-              : "—"
-          }
-        />
+      </div>
+
+      <div className="mb-8 grid grid-cols-1 gap-4 lg:grid-cols-3">
+        <div className="rounded-xl border border-border bg-surface p-4 lg:col-span-1">
+          <h3 className="mb-1 text-sm font-semibold text-foreground">
+            Composite score
+          </h3>
+          <p className="mb-2 text-3xl font-semibold text-foreground">
+            {analytics.composite.overall != null
+              ? Math.round(analytics.composite.overall)
+              : "—"}
+          </p>
+          <CompositeRadar breakdown={analytics.composite.breakdown} />
+        </div>
+
+        <div className="grid grid-cols-2 gap-4 lg:col-span-2">
+          <Stat label="Win rate" value={fmtPct(analytics.totals.winRate)} />
+          <Stat
+            label="Profit factor"
+            value={
+              analytics.totals.profitFactor != null
+                ? analytics.totals.profitFactor.toFixed(2)
+                : "—"
+            }
+          />
+          <Stat
+            label="Avg win / avg loss"
+            value={
+              formatCurrency(analytics.totals.avgWin) +
+              " / " +
+              formatCurrency(analytics.totals.avgLoss)
+            }
+          />
+          <Stat
+            label="Discipline score"
+            value={
+              analytics.totals.disciplineScore != null
+                ? Math.round(analytics.totals.disciplineScore).toString()
+                : "—"
+            }
+          />
+        </div>
       </div>
 
       <section>
@@ -99,6 +134,10 @@ export default async function DashboardPage() {
       </section>
     </div>
   );
+}
+
+function fmtPct(value: number | null) {
+  return value != null ? `${value.toFixed(1)}%` : "—";
 }
 
 function Stat({
