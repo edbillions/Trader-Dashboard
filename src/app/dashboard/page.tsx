@@ -18,6 +18,14 @@ export default async function DashboardPage() {
       <PageHeader
         title="Dashboard"
         description="Your trading day, at a glance."
+        actions={
+          <Link
+            href="/journal/new"
+            className="rounded-lg bg-accent px-4 py-2 text-sm font-medium text-white"
+          >
+            Log a day
+          </Link>
+        }
       />
 
       {!data.hasLoggedToday && (
