@@ -1,4 +1,5 @@
 import Link from "next/link";
+import { format } from "date-fns";
 import { PageHeader } from "@/components/layout/page-header";
 import { getDashboardData } from "@/lib/data/dashboard";
 import { getAnalyticsData } from "@/lib/data/analytics";
@@ -37,6 +38,92 @@ export default async function DashboardPage() {
             Log today
           </Link>
         </div>
+      )}
+
+      {data.hasLoggedToday && data.todaySummary && (
+        <section className="mb-8 rounded-xl border border-border bg-surface p-5">
+          <div className="mb-4 flex items-start justify-between">
+            <div>
+              <p className="text-xs font-semibold uppercase tracking-wide text-accent">
+                Today
+              </p>
+              <h2 className="text-xl font-semibold text-foreground">
+                {format(new Date(`${data.today}T00:00:00`), "EEEE, MMM d, yyyy")}
+              </h2>
+            </div>
+            <Link
+              href={`/journal/${data.today}`}
+              className="text-sm text-accent hover:underline"
+            >
+              View day →
+            </Link>
+          </div>
+
+          <div className="mb-4 grid grid-cols-3 gap-4">
+            <MiniStat
+              label="Trades taken"
+              value={data.todaySummary.tradeCount.toString()}
+            />
+            <MiniStat
+              label="Win rate today"
+              value={
+                data.todaySummary.winRate != null
+                  ? `${data.todaySummary.winRate.toFixed(0)}%`
+                  : "—"
+              }
+              sublabel={`${data.todaySummary.wins}W / ${data.todaySummary.losses}L`}
+            />
+            <MiniStat
+              label="Net P&L today"
+              value={formatCurrency(data.todaySummary.netPnl)}
+              positive={data.todaySummary.netPnl >= 0}
+            />
+          </div>
+
+          {data.todaySummary.takeaway && (
+            <div className="mb-4 rounded-lg border border-border bg-surface-raised p-3">
+              <p className="mb-1 text-xs font-medium text-muted">Takeaway</p>
+              <p className="text-sm text-foreground">
+                {data.todaySummary.takeaway}
+              </p>
+            </div>
+          )}
+
+          {data.todaySummary.trades.length > 0 && (
+            <div>
+              <p className="mb-2 text-xs font-medium text-muted">
+                Today&apos;s trades
+              </p>
+              <div className="flex flex-col gap-1.5">
+                {data.todaySummary.trades.map((t) => (
+                  <Link
+                    key={t.id}
+                    href={`/trades/${t.id}`}
+                    className="flex items-center justify-between rounded-lg border border-border bg-surface-raised px-3 py-2 text-sm hover:bg-surface"
+                  >
+                    <span className="font-medium text-foreground">
+                      {t.symbol}
+                      {t.setupGrade && (
+                        <span className="ml-2 rounded-full bg-accent/20 px-2 py-0.5 text-xs font-medium text-accent">
+                          {t.setupGrade}
+                        </span>
+                      )}
+                    </span>
+                    <span
+                      className={
+                        (t.netPnl ?? 0) >= 0
+                          ? "font-medium text-profit"
+                          : "font-medium text-loss"
+                      }
+                    >
+                      {formatCurrency(t.netPnl)}
+                    </span>
+                  </Link>
+                ))}
+              </div>
+            </div>
+          )}
+        </section>
       )}
 
       <div className="mb-8 grid grid-cols-2 gap-4 sm:grid-cols-3">
@@ -163,6 +250,36 @@ export default async function DashboardPage() {
 
 function fmtPct(value: number | null) {
   return value != null ? `${value.toFixed(1)}%` : "—";
+}
+
+function MiniStat({
+  label,
+  value,
+  sublabel,
+  positive,
+}: {
+  label: string;
+  value: string;
+  sublabel?: string;
+  positive?: boolean;
+}) {
+  return (
+    <div className="rounded-lg border border-border bg-surface-raised p-3">
+      <p className="text-xs font-medium text-muted">{label}</p>
+      <p
+        className={
+          positive === undefined
+            ? "mt-0.5 text-lg font-semibold text-foreground"
+            : positive
+              ? "mt-0.5 text-lg font-semibold text-profit"
+              : "mt-0.5 text-lg font-semibold text-loss"
+        }
+      >
+        {value}
+      </p>
+      {sublabel && <p className="mt-0.5 text-xs text-muted">{sublabel}</p>}
+    </div>
+  );
 }
 
 function Stat({

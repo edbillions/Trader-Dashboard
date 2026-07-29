@@ -9,7 +9,15 @@ export async function getDashboardData() {
   const todayDate = new Date(`${today}T00:00:00`);
 
   const [todayEntry, recentDays, allTrades] = await Promise.all([
-    prisma.tradingDay.findUnique({ where: { date: todayDate } }),
+    prisma.tradingDay.findUnique({
+      where: { date: todayDate },
+      include: {
+        trades: {
+          select: { id: true, symbol: true, netPnl: true, setupGrade: true },
+          orderBy: { entryTime: "asc" },
+        },
+      },
+    }),
     prisma.tradingDay.findMany({
       orderBy: { date: "desc" },
       take: 7,
@@ -28,12 +36,38 @@ export async function getDashboardData() {
   const winRate =
     wins + losses > 0 ? (wins / (wins + losses)) * 100 : null;
 
+  const todayWins =
+    todayEntry?.trades.filter((t) => (t.netPnl ?? 0) > 0).length ?? 0;
+  const todayLosses =
+    todayEntry?.trades.filter((t) => (t.netPnl ?? 0) < 0).length ?? 0;
+  const todayNetPnl =
+    todayEntry?.trades.reduce((sum, t) => sum + (t.netPnl ?? 0), 0) ?? 0;
+
   return {
     hasLoggedToday: Boolean(todayEntry),
     today,
     totalTrades: allTrades.length,
     netPnl,
     winRate,
+    todaySummary: todayEntry
+      ? {
+          tradeCount: todayEntry.trades.length,
+          wins: todayWins,
+          losses: todayLosses,
+          winRate:
+            todayWins + todayLosses > 0
+              ? (todayWins / (todayWins + todayLosses)) * 100
+              : null,
+          netPnl: todayNetPnl,
+          takeaway: todayEntry.freeformNotes,
+          trades: todayEntry.trades.map((t) => ({
+            id: t.id,
+            symbol: t.symbol,
+            netPnl: t.netPnl,
+            setupGrade: t.setupGrade,
+          })),
+        }
+      : null,
     recentDays: recentDays.map((d) => {
       const dayWins = d.trades.filter((t) => (t.netPnl ?? 0) > 0).length;
       const dayLosses = d.trades.filter((t) => (t.netPnl ?? 0) < 0).length;
