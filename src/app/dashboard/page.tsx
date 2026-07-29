@@ -22,8 +22,11 @@ export default async function DashboardPage() {
         description="Your trading day, at a glance."
       />
 
-      <div className="mb-8 overflow-hidden rounded-xl border border-accent/30 bg-gradient-to-r from-accent/15 via-accent/5 to-transparent px-5 py-4">
-        <p className="text-sm italic text-foreground">
+      <div className="relative mb-8 overflow-hidden rounded-2xl border border-accent/30 bg-gradient-to-br from-accent/20 via-surface to-surface px-8 py-12 text-center shadow-[0_0_60px_-15px_var(--accent)]">
+        <p className="text-xs font-semibold uppercase tracking-[0.2em] text-accent">
+          Today&apos;s reminder
+        </p>
+        <p className="mx-auto mt-4 max-w-2xl text-2xl font-semibold leading-snug text-foreground sm:text-3xl">
           &ldquo;{quoteOfTheDay()}&rdquo;
         </p>
       </div>
