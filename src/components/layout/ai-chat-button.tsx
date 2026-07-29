@@ -78,8 +78,9 @@ export function AiChatButton() {
           >
             {messages.length === 0 && (
               <p className="text-muted">
-                Ask about your trades, sessions, patterns, or discipline —
-                e.g. &quot;How do I do trading the NY AM session?&quot;
+                Ask about your trades, sessions, patterns, discipline, or
+                your business and personal goals — e.g. &quot;How am I
+                tracking on my goals this month?&quot;
               </p>
             )}
             <div className="flex flex-col gap-3">

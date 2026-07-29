@@ -1,10 +1,12 @@
 import { getAnalyticsData } from "@/lib/data/analytics";
 import { getDashboardData } from "@/lib/data/dashboard";
+import { listLifeGoals, goalProgress } from "@/lib/data/goals-tracker";
 
 export async function buildChatContext(): Promise<string> {
-  const [analytics, dashboard] = await Promise.all([
+  const [analytics, dashboard, lifeGoals] = await Promise.all([
     getAnalyticsData(),
     getDashboardData(),
+    listLifeGoals(),
   ]);
 
   const lines: string[] = [];
@@ -29,6 +31,25 @@ export async function buildChatContext(): Promise<string> {
   lines.push("Recent days:");
   for (const d of dashboard.recentDays.slice(0, 7)) {
     lines.push(`- ${d.date}: ${d.tradeCount} trades, net ${d.netPnl.toFixed(0)}`);
+  }
+
+  if (lifeGoals.length > 0) {
+    lines.push("");
+    lines.push("Business & personal goals:");
+    for (const g of lifeGoals) {
+      const progress = goalProgress(g);
+      const progressStr =
+        progress != null ? `${progress.toFixed(0)}% of target` : "no target set";
+      const valueStr =
+        g.targetValue != null
+          ? `${g.currentValue}${g.unit ?? ""} / ${g.targetValue}${g.unit ?? ""}`
+          : `${g.currentValue}${g.unit ?? ""}`;
+      lines.push(
+        `- [${g.category}${g.isPrimary ? ", MAIN FOCUS" : ""}] ${g.title}: ` +
+          `${valueStr} (${progressStr})${g.achieved ? " — ACHIEVED" : ""}` +
+          `${g.targetDate ? `, target date ${g.targetDate.toISOString().slice(0, 10)}` : ""}`,
+      );
+    }
   }
 
   return lines.join("\n");

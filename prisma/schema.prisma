@@ -255,6 +255,25 @@ model TodoItem {
   updatedAt DateTime @updatedAt
 }
 
+// ---------- Life Goals (Business / Personal) ----------
+
+model LifeGoal {
+  id           String    @id @default(cuid())
+  category     String // "business" | "personal"
+  title        String
+  description  String?
+  isPrimary    Boolean   @default(false)
+  targetValue  Float?
+  currentValue Float     @default(0)
+  unit         String?
+  direction    String    @default("increase") // "increase" | "limit"
+  targetDate   DateTime?
+  achieved     Boolean   @default(false)
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+}
+
 // ---------- Chart Vault ----------
 
 model ChartImage {
