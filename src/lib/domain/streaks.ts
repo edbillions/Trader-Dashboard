@@ -43,3 +43,72 @@ export function computeStreak<T>(
 
   return streak;
 }
+
+export interface TradeStreakSummary {
+  currentType: "win" | "loss" | null;
+  currentCount: number;
+  bestWinStreak: number;
+  bestLossStreak: number;
+  avgStreakLength: number;
+}
+
+// Expects trades in chronological order (oldest first). Breakeven/null
+// netPnl trades are skipped — they don't break or extend a streak.
+export function computeTradeStreaks(
+  trades: { netPnl: number | null }[],
+): TradeStreakSummary {
+  const outcomes = trades
+    .map((t) =>
+      t.netPnl == null || t.netPnl === 0
+        ? null
+        : t.netPnl > 0
+          ? ("win" as const)
+          : ("loss" as const),
+    )
+    .filter((o): o is "win" | "loss" => o !== null);
+
+  if (outcomes.length === 0) {
+    return {
+      currentType: null,
+      currentCount: 0,
+      bestWinStreak: 0,
+      bestLossStreak: 0,
+      avgStreakLength: 0,
+    };
+  }
+
+  const runs: { type: "win" | "loss"; length: number }[] = [];
+  let runType = outcomes[0];
+  let runLength = 1;
+  for (let i = 1; i < outcomes.length; i++) {
+    if (outcomes[i] === runType) {
+      runLength++;
+    } else {
+      runs.push({ type: runType, length: runLength });
+      runType = outcomes[i];
+      runLength = 1;
+    }
+  }
+  runs.push({ type: runType, length: runLength });
+
+  const bestWinStreak = Math.max(
+    0,
+    ...runs.filter((r) => r.type === "win").map((r) => r.length),
+  );
+  const bestLossStreak = Math.max(
+    0,
+    ...runs.filter((r) => r.type === "loss").map((r) => r.length),
+  );
+  const avgStreakLength =
+    runs.reduce((s, r) => s + r.length, 0) / runs.length;
+
+  const lastRun = runs[runs.length - 1];
+
+  return {
+    currentType: lastRun.type,
+    currentCount: lastRun.length,
+    bestWinStreak,
+    bestLossStreak,
+    avgStreakLength: Math.round(avgStreakLength * 10) / 10,
+  };
+}

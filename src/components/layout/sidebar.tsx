@@ -3,7 +3,6 @@
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { clsx } from "clsx";
-import { SessionClocks } from "@/components/layout/session-clocks";
 
 const NAV_GROUPS = [
   {
@@ -104,7 +103,6 @@ export function Sidebar() {
           ))}
         </div>
       </nav>
-      <SessionClocks />
     </aside>
   );
 }

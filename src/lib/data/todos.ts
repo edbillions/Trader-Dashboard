@@ -14,3 +14,10 @@ export async function getTodosForMonth(year: number, month: number) {
     orderBy: { dueDate: "asc" },
   });
 }
+
+export async function getTodoWidgetItems(limit = 5) {
+  return prisma.todoItem.findMany({
+    orderBy: [{ completed: "asc" }, { dueDate: "asc" }, { createdAt: "desc" }],
+    take: limit,
+  });
+}

@@ -41,6 +41,7 @@ export async function toggleTodoAction(formData: FormData) {
   });
 
   revalidatePath("/todo");
+  revalidatePath("/dashboard");
 }
 
 export async function deleteTodoAction(formData: FormData) {

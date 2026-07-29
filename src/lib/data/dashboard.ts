@@ -1,4 +1,5 @@
 import { prisma } from "@/lib/prisma";
+import { computeStreak, computeTradeStreaks } from "@/lib/domain/streaks";
 
 function todayKey() {
   return new Date().toISOString().slice(0, 10);
@@ -8,7 +9,7 @@ export async function getDashboardData() {
   const today = todayKey();
   const todayDate = new Date(`${today}T00:00:00`);
 
-  const [todayEntry, recentDays, allTrades] = await Promise.all([
+  const [todayEntry, recentDays, allTrades, violationDays] = await Promise.all([
     prisma.tradingDay.findUnique({
       where: { date: todayDate },
       include: {
@@ -27,14 +28,42 @@ export async function getDashboardData() {
         },
       },
     }),
-    prisma.trade.findMany({ select: { netPnl: true } }),
+    prisma.trade.findMany({
+      select: { netPnl: true, entryTime: true },
+      orderBy: { entryTime: "asc" },
+    }),
+    prisma.tradingDay.findMany({
+      select: { date: true, ruleViolations: { select: { id: true } } },
+    }),
   ]);
+
+  const violationsByDate = new Map(
+    violationDays.map((d) => [d.date.toISOString().slice(0, 10), d]),
+  );
+  const noRuleBreakStreak = computeStreak(
+    violationsByDate,
+    (d) => d.ruleViolations.length === 0,
+  );
+  const tradeStreaks = computeTradeStreaks(allTrades);
 
   const netPnl = allTrades.reduce((sum, t) => sum + (t.netPnl ?? 0), 0);
   const wins = allTrades.filter((t) => (t.netPnl ?? 0) > 0).length;
   const losses = allTrades.filter((t) => (t.netPnl ?? 0) < 0).length;
   const winRate =
     wins + losses > 0 ? (wins / (wins + losses)) * 100 : null;
+
+  const dailyPnl = new Map<string, number>();
+  for (const t of allTrades) {
+    const key = t.entryTime.toISOString().slice(0, 10);
+    dailyPnl.set(key, (dailyPnl.get(key) ?? 0) + (t.netPnl ?? 0));
+  }
+  let cumulative = 0;
+  const equityCurve = Array.from(dailyPnl.entries())
+    .sort(([a], [b]) => a.localeCompare(b))
+    .map(([date, pnl]) => {
+      cumulative += pnl;
+      return { date, equity: Math.round(cumulative * 100) / 100 };
+    });
 
   const todayWins =
     todayEntry?.trades.filter((t) => (t.netPnl ?? 0) > 0).length ?? 0;
@@ -49,6 +78,9 @@ export async function getDashboardData() {
     totalTrades: allTrades.length,
     netPnl,
     winRate,
+    equityCurve,
+    noRuleBreakStreak,
+    tradeStreaks,
     todaySummary: todayEntry
       ? {
           tradeCount: todayEntry.trades.length,

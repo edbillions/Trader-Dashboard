@@ -5,24 +5,36 @@ import { getDashboardData } from "@/lib/data/dashboard";
 import { getAnalyticsData } from "@/lib/data/analytics";
 import { formatCurrency, formatR } from "@/lib/pnl";
 import { CompositeRadar } from "@/components/analytics/composite-radar";
+import { EquityCurveChart } from "@/components/dashboard/equity-curve-chart";
+import { DashboardTodoWidget } from "@/components/dashboard/dashboard-todo-widget";
+import { StreakCard } from "@/components/dashboard/streak-card";
+import { SessionClocks } from "@/components/layout/session-clocks";
 import { quoteOfTheDay } from "@/lib/motivational-quotes";
+import { getTodoWidgetItems } from "@/lib/data/todos";
 
 export const dynamic = "force-dynamic";
 
 export default async function DashboardPage() {
-  const [data, analytics] = await Promise.all([
+  const [data, analytics, todayTodos] = await Promise.all([
     getDashboardData(),
     getAnalyticsData(),
+    getTodoWidgetItems(),
   ]);
+
+  const { tradeStreaks } = data;
+  const isLossStreak = tradeStreaks.currentType === "loss";
+  const winLossBest = isLossStreak
+    ? tradeStreaks.bestLossStreak
+    : tradeStreaks.bestWinStreak;
 
   return (
     <div>
-      <div className="mb-8 overflow-hidden rounded-2xl border border-border">
+      <div className="mb-8 h-32 overflow-hidden rounded-2xl border border-border sm:h-40 md:h-48">
         {/* eslint-disable-next-line @next/next/no-img-element */}
         <img
           src="/dashboard-banner.jpg"
           alt="Eddie Billions — Family, Train, Trade, Real Estate, Repeat."
-          className="w-full object-cover"
+          className="h-full w-full object-cover object-top"
         />
       </div>
 
@@ -145,6 +157,56 @@ export default async function DashboardPage() {
         </section>
       )}
 
+      <div className="mb-8 grid grid-cols-1 gap-4 sm:grid-cols-2">
+        <StreakCard
+          label="No rule breaks"
+          icon="🛡️"
+          count={data.noRuleBreakStreak}
+          countLabel={
+            data.noRuleBreakStreak === 1 ? "day clean" : "days clean"
+          }
+          caption="Consecutive trading days with zero rule violations."
+          tone="accent"
+        />
+        <StreakCard
+          label={isLossStreak ? "Loss streak" : "Win streak"}
+          icon={isLossStreak ? "❄️" : "🔥"}
+          count={tradeStreaks.currentCount}
+          countLabel={
+            tradeStreaks.currentType == null
+              ? "no trades yet"
+              : isLossStreak
+                ? tradeStreaks.currentCount === 1
+                  ? "loss in a row"
+                  : "losses in a row"
+                : tradeStreaks.currentCount === 1
+                  ? "win in a row"
+                  : "wins in a row"
+          }
+          caption={
+            tradeStreaks.currentType == null
+              ? "Log some trades to start tracking."
+              : isLossStreak
+                ? "Losses are part of the process — stay disciplined."
+                : "Keep it going."
+          }
+          subtitle={
+            tradeStreaks.currentType != null
+              ? `best ${winLossBest} · avg ${tradeStreaks.avgStreakLength}`
+              : undefined
+          }
+          tone={
+            tradeStreaks.currentType == null
+              ? "accent"
+              : isLossStreak
+                ? "loss"
+                : "profit"
+          }
+        />
+      </div>
+
+      <DashboardTodoWidget todos={todayTodos} />
+
       <div className="mb-8 grid grid-cols-2 gap-4 sm:grid-cols-3">
         <Stat label="Total trades" value={data.totalTrades.toString()} />
         <Stat
@@ -158,7 +220,31 @@ export default async function DashboardPage() {
         />
       </div>
 
-      <div className="mb-8 grid grid-cols-1 gap-4 lg:grid-cols-3">
+      <section className="mb-8 rounded-xl border border-border bg-surface p-4">
+        <div className="mb-3 flex items-center justify-between">
+          <h3 className="text-sm font-semibold text-foreground">
+            Equity curve
+          </h3>
+          <span
+            className={
+              data.netPnl >= 0
+                ? "text-sm font-semibold text-profit"
+                : "text-sm font-semibold text-loss"
+            }
+          >
+            {formatCurrency(data.netPnl)} all-time
+          </span>
+        </div>
+        {data.equityCurve.length > 1 ? (
+          <EquityCurveChart data={data.equityCurve} />
+        ) : (
+          <p className="py-8 text-center text-sm text-muted">
+            Log a few more days to see your equity curve.
+          </p>
+        )}
+      </section>
+
+      <div className="mb-8 grid grid-cols-1 gap-4 lg:grid-cols-5">
         <div className="rounded-xl border border-border bg-surface p-4 lg:col-span-1">
           <h3 className="mb-1 text-sm font-semibold text-foreground">
             Composite score
@@ -197,6 +283,13 @@ export default async function DashboardPage() {
                 : "—"
             }
           />
+        </div>
+
+        <div className="rounded-xl border border-border bg-surface p-4 lg:col-span-2">
+          <h3 className="mb-3 text-sm font-semibold text-foreground">
+            Session clocks
+          </h3>
+          <SessionClocks />
         </div>
       </div>
 
@@ -262,6 +355,25 @@ export default async function DashboardPage() {
             ))}
           </div>
         )}
+      </section>
+
+      <section className="mt-8 overflow-hidden rounded-2xl border border-accent/30 bg-gradient-to-b from-surface via-surface to-accent/10 p-1 shadow-[0_0_60px_-20px_var(--accent)]">
+        <div className="rounded-[14px] bg-surface/40 px-6 py-8 text-center">
+          <p className="mb-1 text-xs font-semibold uppercase tracking-[0.2em] text-accent">
+            The vision
+          </p>
+          <h2 className="mb-6 text-xl font-semibold text-foreground">
+            Why I show up every day
+          </h2>
+          <div className="mx-auto max-w-md overflow-hidden rounded-xl border border-border shadow-lg">
+            {/* eslint-disable-next-line @next/next/no-img-element */}
+            <img
+              src="/dashboard-vision-board.jpg"
+              alt="Ed's vision board — faith, family, discipline, and the $5,000,000 goal."
+              className="w-full object-cover"
+            />
+          </div>
+        </div>
       </section>
     </div>
   );
