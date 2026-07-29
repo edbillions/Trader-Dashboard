@@ -41,6 +41,8 @@ const instruments = [
   { symbol: "ES", tickValue: 12.5, tickSize: 0.25, pointValue: 50 },
   { symbol: "NQ", tickValue: 5, tickSize: 0.25, pointValue: 20 },
   { symbol: "YM", tickValue: 5, tickSize: 1, pointValue: 5 },
+  { symbol: "MES", tickValue: 1.25, tickSize: 0.25, pointValue: 5 },
+  { symbol: "MNQ", tickValue: 0.5, tickSize: 0.25, pointValue: 2 },
 ];
 
 async function main() {
