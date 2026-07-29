@@ -2,7 +2,7 @@ import Link from "next/link";
 import { PageHeader } from "@/components/layout/page-header";
 import { getDashboardData } from "@/lib/data/dashboard";
 import { getAnalyticsData } from "@/lib/data/analytics";
-import { formatCurrency } from "@/lib/pnl";
+import { formatCurrency, formatR } from "@/lib/pnl";
 import { CompositeRadar } from "@/components/analytics/composite-radar";
 
 export const dynamic = "force-dynamic";
@@ -112,21 +112,46 @@ export default async function DashboardPage() {
               <Link
                 key={day.date}
                 href={`/journal/${day.date}`}
-                className="flex items-center justify-between rounded-lg border border-border bg-surface px-4 py-3 text-sm hover:bg-surface-raised"
+                className="flex flex-col gap-2 rounded-lg border border-border bg-surface px-4 py-3 text-sm hover:bg-surface-raised"
               >
-                <span className="text-foreground">{day.date}</span>
-                <span className="text-muted">
-                  {day.tradeCount} trade{day.tradeCount === 1 ? "" : "s"}
-                </span>
-                <span
-                  className={
-                    day.netPnl >= 0
-                      ? "font-medium text-profit"
-                      : "font-medium text-loss"
-                  }
-                >
-                  {formatCurrency(day.netPnl)}
-                </span>
+                <div className="flex items-center justify-between">
+                  <span className="font-medium text-foreground">
+                    {day.date}
+                  </span>
+                  <span
+                    className={
+                      day.netPnl >= 0
+                        ? "font-semibold text-profit"
+                        : "font-semibold text-loss"
+                    }
+                  >
+                    {formatCurrency(day.netPnl)}
+                  </span>
+                </div>
+                {day.tradeCount === 0 ? (
+                  <span className="text-xs text-muted">No trades logged</span>
+                ) : (
+                  <div className="flex flex-wrap items-center gap-x-4 gap-y-1 text-xs text-muted">
+                    <span>
+                      {day.tradeCount} trade{day.tradeCount === 1 ? "" : "s"}
+                    </span>
+                    <span>
+                      {day.wins}W / {day.losses}L
+                      {day.wins + day.losses > 0
+                        ? ` (${((day.wins / (day.wins + day.losses)) * 100).toFixed(0)}%)`
+                        : ""}
+                    </span>
+                    {day.totalR != null && <span>{formatR(day.totalR)} total</span>}
+                    {day.symbols.length > 0 && (
+                      <span>{day.symbols.join(", ")}</span>
+                    )}
+                    {day.planAdherenceGrade && (
+                      <span className="rounded-full bg-surface-raised px-2 py-0.5 text-[11px] font-medium text-foreground">
+                        Plan grade {day.planAdherenceGrade}
+                      </span>
+                    )}
+                  </div>
+                )}
               </Link>
             ))}
           </div>
