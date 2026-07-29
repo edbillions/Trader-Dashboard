@@ -218,3 +218,105 @@ export async function saveTradingDayAndRedirectAction(
   const result = await saveTradingDayAction(input);
   redirect(`/journal/${result.date}`);
 }
+
+export async function deleteTradingDayAction(formData: FormData) {
+  const id = formData.get("id");
+  if (typeof id !== "string") {
+    throw new Error("Missing trading day id");
+  }
+
+  await prisma.tradingDay.delete({ where: { id } });
+
+  revalidatePath("/dashboard");
+  revalidatePath("/journal");
+  revalidatePath("/trades");
+  revalidatePath("/calendar");
+
+  redirect("/journal");
+}
+
+export async function deleteTradeAction(formData: FormData) {
+  const id = formData.get("id");
+  const date = formData.get("date");
+  if (typeof id !== "string") {
+    throw new Error("Missing trade id");
+  }
+
+  await prisma.trade.delete({ where: { id } });
+
+  revalidatePath("/dashboard");
+  revalidatePath("/trades");
+  revalidatePath("/calendar");
+  if (typeof date === "string") {
+    revalidatePath(`/journal/${date}`);
+  }
+}
+
+export async function clearPreMarketPlanAction(formData: FormData) {
+  const id = formData.get("id");
+  const date = formData.get("date");
+  if (typeof id !== "string") {
+    throw new Error("Missing trading day id");
+  }
+
+  await prisma.$transaction([
+    prisma.tradingDayScreenshot.deleteMany({ where: { tradingDayId: id } }),
+    prisma.tradingDay.update({
+      where: { id },
+      data: {
+        htfBias: null,
+        keyLevels: null,
+        sessionTiming: null,
+        news: null,
+        maxLossPlan: null,
+        positionSizePlan: null,
+        maxTradeCountPlan: null,
+        preMarketChecklist: null,
+      },
+    }),
+  ]);
+
+  revalidatePath("/dashboard");
+  if (typeof date === "string") {
+    revalidatePath(`/journal/${date}`);
+  }
+}
+
+export async function clearPostSessionReviewAction(formData: FormData) {
+  const id = formData.get("id");
+  const date = formData.get("date");
+  if (typeof id !== "string") {
+    throw new Error("Missing trading day id");
+  }
+
+  await prisma.tradingDay.update({
+    where: { id },
+    data: {
+      planAdherenceGrade: null,
+      psychologyLog: null,
+      freeformNotes: null,
+      scorecard: null,
+      ruleViolations: { set: [] },
+    },
+  });
+
+  revalidatePath("/dashboard");
+  if (typeof date === "string") {
+    revalidatePath(`/journal/${date}`);
+  }
+}
+
+export async function deleteMissedTradeAction(formData: FormData) {
+  const id = formData.get("id");
+  const date = formData.get("date");
+  if (typeof id !== "string") {
+    throw new Error("Missing missed trade id");
+  }
+
+  await prisma.missedTrade.delete({ where: { id } });
+
+  revalidatePath("/dashboard");
+  if (typeof date === "string") {
+    revalidatePath(`/journal/${date}`);
+  }
+}

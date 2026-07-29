@@ -4,6 +4,14 @@ import { PageHeader } from "@/components/layout/page-header";
 import { getTradingDayDetail } from "@/lib/data/trading-day";
 import { formatCurrency, formatR } from "@/lib/pnl";
 import {
+  deleteTradingDayAction,
+  deleteTradeAction,
+  deleteMissedTradeAction,
+  clearPreMarketPlanAction,
+  clearPostSessionReviewAction,
+} from "@/lib/actions/journal";
+import { ConfirmSubmitButton } from "@/components/ui/confirm-submit-button";
+import {
   parsePreMarketChecklist,
   MINDSET_RESET_ITEMS,
   STRUCTURE_OPTIONS,
@@ -42,12 +50,23 @@ export default async function JournalDayPage({
         title={date}
         description={`${day.trades.length} trade${day.trades.length === 1 ? "" : "s"} · Net P&L ${formatCurrency(netPnl)}`}
         actions={
-          <Link
-            href={`/journal/new?date=${date}`}
-            className="rounded-lg border border-border px-4 py-2 text-sm font-medium text-foreground hover:bg-surface-raised"
-          >
-            Edit
-          </Link>
+          <div className="flex items-center gap-2">
+            <Link
+              href={`/journal/new?date=${date}`}
+              className="rounded-lg border border-border px-4 py-2 text-sm font-medium text-foreground hover:bg-surface-raised"
+            >
+              Edit
+            </Link>
+            <form action={deleteTradingDayAction}>
+              <input type="hidden" name="id" value={day.id} />
+              <ConfirmSubmitButton
+                confirmMessage={`Delete the entire journal entry for ${date}? This removes the pre-market plan, all trades, missed trades, and post-session review for this day. This can't be undone.`}
+                className="rounded-lg border border-loss/40 px-4 py-2 text-sm font-medium text-loss hover:bg-loss-muted"
+              >
+                Delete day
+              </ConfirmSubmitButton>
+            </form>
+          </div>
         }
       />
 
@@ -61,9 +80,21 @@ export default async function JournalDayPage({
       )}
 
       <section className="mb-8 rounded-xl border border-border bg-surface p-5">
-        <h2 className="mb-3 text-sm font-semibold text-foreground">
-          Pre-market plan
-        </h2>
+        <div className="mb-3 flex items-center justify-between">
+          <h2 className="text-sm font-semibold text-foreground">
+            Pre-market plan
+          </h2>
+          <form action={clearPreMarketPlanAction}>
+            <input type="hidden" name="id" value={day.id} />
+            <input type="hidden" name="date" value={date} />
+            <ConfirmSubmitButton
+              confirmMessage="Clear the pre-market plan and checklist for this day? This can't be undone."
+              className="text-xs font-medium text-loss hover:underline"
+            >
+              Clear
+            </ConfirmSubmitButton>
+          </form>
+        </div>
         <dl className="grid grid-cols-2 gap-4 text-sm sm:grid-cols-3">
           <Info label="HTF bias" value={day.htfBias} />
           <Info label="Key levels" value={day.keyLevels} />
@@ -223,15 +254,27 @@ export default async function JournalDayPage({
                     {t.entryModel ? ` · ${t.entryModel}` : ""}
                     {t.setupGrade ? ` · Grade ${t.setupGrade}` : ""}
                   </span>
-                  <span
-                    className={
-                      (t.netPnl ?? 0) >= 0
-                        ? "font-semibold text-profit"
-                        : "font-semibold text-loss"
-                    }
-                  >
-                    {formatCurrency(t.netPnl)} ({formatR(t.rMultiple)})
-                  </span>
+                  <div className="flex items-center gap-3">
+                    <span
+                      className={
+                        (t.netPnl ?? 0) >= 0
+                          ? "font-semibold text-profit"
+                          : "font-semibold text-loss"
+                      }
+                    >
+                      {formatCurrency(t.netPnl)} ({formatR(t.rMultiple)})
+                    </span>
+                    <form action={deleteTradeAction}>
+                      <input type="hidden" name="id" value={t.id} />
+                      <input type="hidden" name="date" value={date} />
+                      <ConfirmSubmitButton
+                        confirmMessage={`Delete this ${t.symbol} trade? This can't be undone.`}
+                        className="text-xs font-medium text-loss hover:underline"
+                      >
+                        Delete
+                      </ConfirmSubmitButton>
+                    </form>
+                  </div>
                 </div>
                 {(t.confluenceFactors.length > 0 || t.mistakes.length > 0) && (
                   <div className="mt-2 flex flex-wrap gap-1.5">
@@ -288,10 +331,22 @@ export default async function JournalDayPage({
                 key={m.id}
                 className="rounded-xl border border-border bg-surface p-4"
               >
-                <span className="font-medium text-foreground">
-                  {m.symbol}
-                  {m.entryModel ? ` · ${m.entryModel}` : ""}
-                </span>
+                <div className="flex items-center justify-between gap-2">
+                  <span className="font-medium text-foreground">
+                    {m.symbol}
+                    {m.entryModel ? ` · ${m.entryModel}` : ""}
+                  </span>
+                  <form action={deleteMissedTradeAction}>
+                    <input type="hidden" name="id" value={m.id} />
+                    <input type="hidden" name="date" value={date} />
+                    <ConfirmSubmitButton
+                      confirmMessage={`Delete this missed trade (${m.symbol})? This can't be undone.`}
+                      className="text-xs font-medium text-loss hover:underline"
+                    >
+                      Delete
+                    </ConfirmSubmitButton>
+                  </form>
+                </div>
                 {m.setupDescription && (
                   <p className="mt-1 text-sm text-muted">
                     {m.setupDescription}
@@ -307,9 +362,21 @@ export default async function JournalDayPage({
       </section>
 
       <section className="rounded-xl border border-border bg-surface p-5">
-        <h2 className="mb-3 text-sm font-semibold text-foreground">
-          Post-session review
-        </h2>
+        <div className="mb-3 flex items-center justify-between">
+          <h2 className="text-sm font-semibold text-foreground">
+            Post-session review
+          </h2>
+          <form action={clearPostSessionReviewAction}>
+            <input type="hidden" name="id" value={day.id} />
+            <input type="hidden" name="date" value={date} />
+            <ConfirmSubmitButton
+              confirmMessage="Clear the post-session review and scorecard for this day? This can't be undone."
+              className="text-xs font-medium text-loss hover:underline"
+            >
+              Clear
+            </ConfirmSubmitButton>
+          </form>
+        </div>
         <dl className="grid grid-cols-2 gap-4 text-sm">
           <Info label="Plan adherence grade" value={day.planAdherenceGrade} />
           <Info label="Psychology log" value={day.psychologyLog} />
