@@ -1,4 +1,3 @@
-import { clsx } from "clsx";
 import {
   CRITERIA_WEIGHTS,
   DOL_TARGET_LABELS,
@@ -63,126 +62,83 @@ export function SetupFactorsSection({
   const confirmedCount = confirmedFlags.filter((f) => value[f]).length;
 
   return (
-    <div className="rounded-lg border border-border bg-surface p-3">
-      <div className="mb-3 flex items-center justify-between">
-        <p className="text-xs font-medium text-muted">Setup Factors — Unicorn Model checklist</p>
-        <span className="text-xs text-muted">
-          {confirmedCount}/8 confirmed · {earned}/{TOTAL_WEIGHT} pts
+    <div className="rounded-lg border border-border bg-surface p-2.5">
+      <div className="mb-2 flex items-center justify-between">
+        <p className="text-[11px] font-medium text-muted">Setup Factors</p>
+        <span className="text-[11px] text-muted">
+          {confirmedCount}/8 · {earned}/{TOTAL_WEIGHT} pts
         </span>
       </div>
 
-      <label className="mb-3 flex items-center justify-between rounded-lg border border-border bg-surface-raised px-3 py-2">
-        <span className="text-sm font-medium text-foreground">
-          ⚡ Killzone — NY AM Session (9:30 AM–12:15 PM EST)
-        </span>
-        <input
-          type="checkbox"
-          checked={value.killzoneConfirmed}
-          onChange={(e) => set("killzoneConfirmed", e.target.checked)}
-        />
-      </label>
+      <FactorRow
+        label="⚡ Killzone — NY AM (9:30–12:15 EST)"
+        weight={null}
+        checked={value.killzoneConfirmed}
+        onToggle={() => set("killzoneConfirmed", !value.killzoneConfirmed)}
+      />
 
-      <SectionLabel>Bias & DOL (HTF – 1D / 4H)</SectionLabel>
+      <SectionLabel>Bias & DOL</SectionLabel>
       <FactorRow
         label="Bias Confirmed"
-        note="Determine bias from price location in range OR IRL/ERL. Where is price delivering from?"
-        example="→ Use Daily, 4H, 15M chart"
         weight={CRITERIA_WEIGHTS.bias}
         checked={value.biasConfirmed}
         onToggle={() => set("biasConfirmed", !value.biasConfirmed)}
       />
       <FactorRow
         label="Clear DOL Identified"
-        note="Select the liquidity level you are targeting:"
-        example="→ Target 2R minimum"
         weight={CRITERIA_WEIGHTS.dol}
         checked={value.dolIdentified}
         onToggle={() => set("dolIdentified", !value.dolIdentified)}
       >
-        <SubPanelLabel>Targeting</SubPanelLabel>
-        <div className="flex flex-wrap gap-x-4 gap-y-1.5">
-          {Object.entries(DOL_TARGET_LABELS).map(([key, label]) => (
-            <label key={key} className="flex items-center gap-1.5 text-xs text-foreground">
-              <input
-                type="radio"
-                name="dol-target"
-                checked={value.dolTarget === key}
-                onChange={() => set("dolTarget", key)}
-              />
-              {label}
-            </label>
-          ))}
-        </div>
+        <RadioChips
+          name="dol-target"
+          options={DOL_TARGET_LABELS}
+          selected={value.dolTarget}
+          onSelect={(key) => set("dolTarget", key)}
+        />
       </FactorRow>
 
-      <SectionLabel>Structure & PD Arrays (1H / 15M)</SectionLabel>
+      <SectionLabel>Structure & PD Arrays</SectionLabel>
       <FactorRow
         label="Sweep of Major Liquidity"
-        note="Select which liquidity has been swept (multiple allowed):"
-        example="→ When price doesn't displace above/below liq — lightbulb moment!"
         weight={CRITERIA_WEIGHTS.liq}
         checked={value.liquiditySweepConfirmed}
         onToggle={() => set("liquiditySweepConfirmed", !value.liquiditySweepConfirmed)}
       >
-        <SubPanelLabel>Swept / Tagged</SubPanelLabel>
-        <div className="flex flex-wrap gap-x-4 gap-y-1.5">
-          {Object.entries(LIQ_SWEPT_LABELS).map(([key, label]) => (
-            <label key={key} className="flex items-center gap-1.5 text-xs text-foreground">
-              <input
-                type="checkbox"
-                checked={value.liquiditySwept.includes(key)}
-                onChange={() => toggleInArray("liquiditySwept", key)}
-              />
-              {label}
-            </label>
-          ))}
-        </div>
+        <CheckboxChips
+          options={LIQ_SWEPT_LABELS}
+          selected={value.liquiditySwept}
+          onToggle={(key) => toggleInArray("liquiditySwept", key)}
+        />
       </FactorRow>
       <FactorRow
         label="HTF Delivery From PD Array (FVG)"
-        note="Price delivering from a higher timeframe FVG (multiple levels allowed):"
-        example="→ Confirms institutional order flow into entry"
         weight={CRITERIA_WEIGHTS.htfpd}
         checked={value.htfDeliveryConfirmed}
         onToggle={() => set("htfDeliveryConfirmed", !value.htfDeliveryConfirmed)}
       >
-        <SubPanelLabel>HTF FVG Level</SubPanelLabel>
-        <div className="flex flex-wrap gap-x-4 gap-y-1.5">
-          {Object.entries(HTFPD_LEVEL_LABELS).map(([key, label]) => (
-            <label key={key} className="flex items-center gap-1.5 text-xs text-foreground">
-              <input
-                type="checkbox"
-                checked={value.htfFvgLevels.includes(key)}
-                onChange={() => toggleInArray("htfFvgLevels", key)}
-              />
-              {label}
-            </label>
-          ))}
-        </div>
+        <CheckboxChips
+          options={HTFPD_LEVEL_LABELS}
+          selected={value.htfFvgLevels}
+          onToggle={(key) => toggleInArray("htfFvgLevels", key)}
+        />
       </FactorRow>
       <FactorRow
         label="Right Side of Premium / Discount"
-        note="Determined using daily range indicator or FIB."
-        example="→ Long in discount · Sell in premium · Avoid breakout setups"
         weight={CRITERIA_WEIGHTS.pd}
         checked={value.premiumDiscountConfirmed}
         onToggle={() => set("premiumDiscountConfirmed", !value.premiumDiscountConfirmed)}
       />
 
-      <SectionLabel>Unicorn Formation (5M / 1M / 15M)</SectionLabel>
+      <SectionLabel>Unicorn Formation</SectionLabel>
       <FactorRow
         label="Breaker Block w/ Displacement (FVG)"
-        note="Valid Breaker Block (ISPs confirmed) + Displacement through it with aligned FVG."
-        example="→ Highest/lowest closed candle(s) before liq taken · Must displace through with FVG"
-        weight="KO"
-        knockout
+        weight={CRITERIA_WEIGHTS.bb}
         checked={value.breakerBlockConfirmed}
         onToggle={() => set("breakerBlockConfirmed", !value.breakerBlockConfirmed)}
       />
       <FactorRow
         label="Price NOT at 2R / 2 StdDev"
-        note="No trades if setup has already gone 2R from the breaker."
-        example="→ Confirm the move is still fresh"
         weight={CRITERIA_WEIGHTS["2r"]}
         checked={value.notAt2RConfirmed}
         onToggle={() => set("notAt2RConfirmed", !value.notAt2RConfirmed)}
@@ -191,20 +147,15 @@ export function SetupFactorsSection({
       <SectionLabel>Confluences</SectionLabel>
       <FactorRow
         label="Macro Window"
-        note="9:45–10:15 am · 10:45–11:15 am · 11:45–12:15 pm"
-        example="→ Not mandatory but adds significant confluence"
         weight={CRITERIA_WEIGHTS.macro}
         checked={value.macroWindowConfirmed}
         onToggle={() => set("macroWindowConfirmed", !value.macroWindowConfirmed)}
       />
       <FactorRow
         label="🦄 Unicorn Indicator Alerted"
-        note="Did the Unicorn indicator fire an alert on this setup?"
-        example="→ Confirmation only — do not force setups without it"
-        weight="—"
+        weight={null}
         checked={value.unicornIndicatorAlerted}
         onToggle={() => set("unicornIndicatorAlerted", !value.unicornIndicatorAlerted)}
-        last
       />
     </div>
   );
@@ -212,78 +163,95 @@ export function SetupFactorsSection({
 
 function SectionLabel({ children }: { children: React.ReactNode }) {
   return (
-    <p className="mb-1.5 mt-3 text-[10px] font-semibold uppercase tracking-wide text-accent first:mt-0">
-      ◈ {children}
+    <p className="mb-0.5 mt-2 text-[10px] font-semibold uppercase tracking-wide text-accent first:mt-0">
+      {children}
     </p>
   );
 }
 
-function SubPanelLabel({ children }: { children: React.ReactNode }) {
-  return <p className="mb-1 mt-2 text-[10px] font-medium uppercase tracking-wide text-muted">▸ {children}</p>;
+function RadioChips({
+  name,
+  options,
+  selected,
+  onSelect,
+}: {
+  name: string;
+  options: Record<string, string>;
+  selected: string | null;
+  onSelect: (key: string) => void;
+}) {
+  return (
+    <div className="mt-1 flex flex-wrap gap-x-3 gap-y-0.5">
+      {Object.entries(options).map(([key, label]) => (
+        <label key={key} className="flex items-center gap-1 text-[11px] text-muted">
+          <input
+            type="radio"
+            name={name}
+            checked={selected === key}
+            onChange={() => onSelect(key)}
+            className="h-3 w-3"
+          />
+          {label}
+        </label>
+      ))}
+    </div>
+  );
+}
+
+function CheckboxChips({
+  options,
+  selected,
+  onToggle,
+}: {
+  options: Record<string, string>;
+  selected: string[];
+  onToggle: (key: string) => void;
+}) {
+  return (
+    <div className="mt-1 flex flex-wrap gap-x-3 gap-y-0.5">
+      {Object.entries(options).map(([key, label]) => (
+        <label key={key} className="flex items-center gap-1 text-[11px] text-muted">
+          <input
+            type="checkbox"
+            checked={selected.includes(key)}
+            onChange={() => onToggle(key)}
+            className="h-3 w-3"
+          />
+          {label}
+        </label>
+      ))}
+    </div>
+  );
 }
 
 function FactorRow({
   label,
-  note,
-  example,
   weight,
   checked,
   onToggle,
-  knockout,
-  last,
   children,
 }: {
   label: string;
-  note: string;
-  example: string;
-  weight: number | string;
+  weight: number | string | null;
   checked: boolean;
   onToggle: () => void;
-  knockout?: boolean;
-  last?: boolean;
   children?: React.ReactNode;
 }) {
   return (
-    <div
-      className={clsx(
-        "rounded-lg border p-2.5",
-        !last && "mb-2",
-        knockout && !checked
-          ? "border-loss/40 bg-loss-muted"
-          : checked
-            ? "border-accent/40 bg-accent/5"
-            : "border-border bg-surface-raised",
-      )}
-    >
-      <label className="flex items-start gap-2.5">
+    <div className="border-b border-border/60 py-1 last:border-0">
+      <label className="flex items-center gap-2">
         <input
           type="checkbox"
           checked={checked}
           onChange={onToggle}
-          className="mt-0.5 shrink-0"
+          className="h-3.5 w-3.5 shrink-0"
         />
-        <div className="flex-1">
-          <div className="flex items-center justify-between gap-2">
-            <span className="text-sm font-medium text-foreground">{label}</span>
-            <span
-              className={clsx(
-                "shrink-0 text-xs font-semibold",
-                knockout ? "text-loss" : "text-muted",
-              )}
-            >
-              {weight}
-            </span>
-          </div>
-          <p className="mt-0.5 text-xs text-muted">{note}</p>
-          <p className="text-xs text-accent">{example}</p>
-          {knockout && !checked && (
-            <p className="mt-1 text-[10px] font-semibold uppercase tracking-wide text-loss">
-              ⚠ Knockout — no trade without this
-            </p>
-          )}
-        </div>
+        <span className="flex-1 text-xs text-foreground">{label}</span>
+        {weight != null && (
+          <span className="shrink-0 text-[10px] text-muted">{weight}</span>
+        )}
       </label>
-      {children && <div className="ml-6 mt-2">{children}</div>}
+      {children && <div className="ml-5">{children}</div>}
     </div>
   );
 }
