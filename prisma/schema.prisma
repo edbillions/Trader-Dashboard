@@ -327,6 +327,20 @@ model PeriodReview {
   updatedAt DateTime @updatedAt
 }
 
+// ---------- Macro briefing (AI + web search) ----------
+
+model MacroBriefing {
+  id        String   @id @default(cuid())
+  date      DateTime @unique // trading day this briefing is "as of"
+  asOf      String? // human-readable freshness label, e.g. "Wed, overnight"
+  macroTone String // AI-written paragraph(s) on overnight/macro tone
+
+  economicCalendarToday String // JSON: EconomicCalendarEvent[]
+  weekAhead             String // JSON: WeekAheadDay[]
+
+  createdAt DateTime @default(now())
+}
+
 // ---------- Chart Vault ----------
 
 model ChartImage {
