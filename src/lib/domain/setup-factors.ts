@@ -79,11 +79,45 @@ export interface SetupFactorsGrade extends GradeInfo {
   score: SetupFactorsScore;
 }
 
+// The standalone Setup Grader is a live, pre-trade go/no-go tool ("DO NOT
+// TRADE — STAY FLAT", "EXECUTE — PRIME SETUP"), so its verdict/subtext is
+// directive. This checklist is filled out in the Journal after the trade
+// already happened — it's grading what the setup actually had, not deciding
+// whether to take it — so the copy is reframed as retrospective analysis
+// while reusing the same letter/percentage thresholds and color coding.
+const POST_TRADE_COPY: Record<GradeInfo["letter"], { verdict: string; subtext: string }> = {
+  "A+": {
+    verdict: "Prime Unicorn setup",
+    subtext: "Every criterion aligned — a high-conviction, textbook setup.",
+  },
+  A: {
+    verdict: "Strong setup",
+    subtext: "Well-structured with strong confluence.",
+  },
+  B: {
+    verdict: "Acceptable setup",
+    subtext: "Met the minimum bar, but light on confluence.",
+  },
+  C: {
+    verdict: "Below standard",
+    subtext: "Missing several key confluence factors.",
+  },
+  D: {
+    verdict: "Weak setup",
+    subtext: "Most criteria went unconfirmed.",
+  },
+  F: {
+    verdict: "Did not qualify",
+    subtext: "Didn't meet the Unicorn Model criteria.",
+  },
+};
+
 // Same A+ through F scale as the standalone Setup Grader, driven by this
 // checklist's own score (base weights + confluence bonus) instead of that
 // page's separate interactive state.
 export function gradeForSetupFactors(value: SetupFactorsChecklist): SetupFactorsGrade {
   const score = computeSetupFactorsScore(value);
   const pct = score.maxPossible > 0 ? score.totalEarned / score.maxPossible : 0;
-  return { ...gradeFor(pct), score };
+  const base = gradeFor(pct);
+  return { ...base, ...POST_TRADE_COPY[base.letter], score };
 }

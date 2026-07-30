@@ -72,10 +72,10 @@ export function SetupFactorsSection({
         </span>
         <div className="min-w-0 flex-1">
           <p className="truncate text-xs font-semibold uppercase tracking-wide">
-            {hasProgress ? grade.verdict : "Awaiting criteria"}
+            {hasProgress ? grade.verdict : "Not graded yet"}
           </p>
           <p className="truncate text-[11px] opacity-80">
-            {hasProgress ? grade.subtext : "Check off criteria as your setup confirms."}
+            {hasProgress ? grade.subtext : "Check off which criteria this setup had."}
           </p>
         </div>
         {onApplyGrade && hasProgress && (
