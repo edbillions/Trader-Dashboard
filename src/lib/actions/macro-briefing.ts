@@ -22,6 +22,7 @@ export async function generateMacroBriefingAction() {
       macroTone: result.macroTone,
       economicCalendarToday: JSON.stringify(result.economicCalendarToday),
       weekAhead: JSON.stringify(result.weekAhead),
+      trumpAppearancesToday: JSON.stringify(result.trumpAppearancesToday),
     },
     create: {
       date: new Date(`${today}T00:00:00`),
@@ -29,6 +30,7 @@ export async function generateMacroBriefingAction() {
       macroTone: result.macroTone,
       economicCalendarToday: JSON.stringify(result.economicCalendarToday),
       weekAhead: JSON.stringify(result.weekAhead),
+      trumpAppearancesToday: JSON.stringify(result.trumpAppearancesToday),
     },
   });
 

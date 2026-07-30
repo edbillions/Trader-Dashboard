@@ -337,6 +337,7 @@ model MacroBriefing {
 
   economicCalendarToday String // JSON: EconomicCalendarEvent[]
   weekAhead             String // JSON: WeekAheadDay[]
+  trumpAppearancesToday String @default("[]") // JSON: TrumpAppearance[]
 
   createdAt DateTime @default(now())
 }

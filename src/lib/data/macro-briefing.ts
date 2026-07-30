@@ -2,6 +2,7 @@ import { prisma } from "@/lib/prisma";
 import {
   parseEconomicCalendar,
   parseWeekAhead,
+  parseTrumpAppearances,
 } from "@/lib/types/macro-briefing";
 
 function todayKey() {
@@ -21,6 +22,7 @@ export async function getTodayMacroBriefing() {
     macroTone: briefing.macroTone,
     economicCalendarToday: parseEconomicCalendar(briefing.economicCalendarToday),
     weekAhead: parseWeekAhead(briefing.weekAhead),
+    trumpAppearancesToday: parseTrumpAppearances(briefing.trumpAppearancesToday),
     generatedAt: briefing.createdAt.toISOString(),
   };
 }

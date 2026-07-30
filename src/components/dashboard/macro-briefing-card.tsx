@@ -6,6 +6,7 @@ import { generateMacroBriefingAction } from "@/lib/actions/macro-briefing";
 import type {
   EconomicCalendarEvent,
   WeekAheadDay,
+  TrumpAppearance,
 } from "@/lib/types/macro-briefing";
 
 const COLLAPSED_STORAGE_KEY = "macroBriefingCollapsed";
@@ -15,6 +16,7 @@ interface Briefing {
   macroTone: string;
   economicCalendarToday: EconomicCalendarEvent[];
   weekAhead: WeekAheadDay[];
+  trumpAppearancesToday: TrumpAppearance[];
   generatedAt: string;
 }
 
@@ -150,8 +152,8 @@ export function MacroBriefingCard({
 
       {!collapsed && !briefing && !unavailable && (
         <p className="text-sm text-muted">
-          Pull overnight macro tone, today&apos;s economic calendar, and the
-          week ahead via AI web search.
+          Pull overnight macro tone, today&apos;s economic calendar, scheduled
+          Trump appearances, and the week ahead via AI web search.
         </p>
       )}
 
@@ -170,6 +172,36 @@ export function MacroBriefingCard({
                 ))}
             </div>
           </div>
+
+          {briefing.trumpAppearancesToday.length > 0 && (
+            <div>
+              <p className="mb-2 text-xs font-semibold uppercase tracking-wide text-accent">
+                Trump watch — today
+              </p>
+              <div className="flex flex-col gap-2">
+                {briefing.trumpAppearancesToday.map((appearance, i) => (
+                  <div
+                    key={i}
+                    className="rounded-lg border border-accent/30 bg-accent/5 p-3"
+                  >
+                    <div className="flex items-center justify-between gap-2">
+                      <span className="text-xs font-semibold text-foreground">
+                        {appearance.time}
+                      </span>
+                    </div>
+                    <p className="mt-0.5 text-sm text-foreground">
+                      {appearance.description}
+                    </p>
+                    {appearance.marketRelevance && (
+                      <p className="mt-1 text-xs text-muted">
+                        {appearance.marketRelevance}
+                      </p>
+                    )}
+                  </div>
+                ))}
+              </div>
+            </div>
+          )}
 
           {briefing.economicCalendarToday.length > 0 && (
             <div>

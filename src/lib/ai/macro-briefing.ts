@@ -2,6 +2,7 @@ import { getAnthropicClient, AI_MODEL } from "@/lib/ai/client";
 import type {
   EconomicCalendarEvent,
   WeekAheadDay,
+  TrumpAppearance,
 } from "@/lib/types/macro-briefing";
 
 export interface MacroBriefingResult {
@@ -9,6 +10,7 @@ export interface MacroBriefingResult {
   macroTone: string;
   economicCalendarToday: EconomicCalendarEvent[];
   weekAhead: WeekAheadDay[];
+  trumpAppearancesToday: TrumpAppearance[];
 }
 
 export async function generateMacroBriefing(): Promise<MacroBriefingResult | null> {
@@ -71,12 +73,26 @@ export async function generateMacroBriefing(): Promise<MacroBriefingResult | nul
                 additionalProperties: false,
               },
             },
+            trumpAppearancesToday: {
+              type: "array",
+              items: {
+                type: "object",
+                properties: {
+                  time: { type: "string" },
+                  description: { type: "string" },
+                  marketRelevance: { type: "string" },
+                },
+                required: ["time", "description", "marketRelevance"],
+                additionalProperties: false,
+              },
+            },
           },
           required: [
             "asOf",
             "macroTone",
             "economicCalendarToday",
             "weekAhead",
+            "trumpAppearancesToday",
           ],
           additionalProperties: false,
         },
@@ -90,14 +106,25 @@ export async function generateMacroBriefing(): Promise<MacroBriefingResult | nul
       "(2) today's US economic calendar, including the event name, release " +
       "time (Eastern), prior value, and consensus estimate when available; " +
       "(3) the rest of this week's notable scheduled events (economic data, " +
-      "Fed speakers, major earnings). Mark an event's importance as 'high' " +
-      "only for major market-moving releases in the ForexFactory 'red " +
-      "folder' sense (e.g. CPI, PCE, NFP/jobs report, FOMC decisions, GDP, " +
-      "ISM manufacturing/services, retail sales, JOLTS) — everything else is " +
-      "'medium' or 'low'. Write macroTone as 1-2 tight paragraphs in a " +
-      "terse trading-desk tone, no headers or markdown. If a field truly " +
-      "isn't available, use an empty string or empty array rather than " +
-      "guessing.",
+      "Fed speakers, major earnings); (4) any scheduled public appearances " +
+      "by President Trump today specifically — speeches, press conferences, " +
+      "Oval Office remarks, rallies, TV/radio interviews, or other confirmed " +
+      "public events where he's expected to speak on camera or on record. " +
+      "He is known to move markets (tariffs, Fed commentary, geopolitics) in " +
+      "real time when he speaks, so traders want the heads-up. Only include " +
+      "an appearance you can actually confirm via search, with a real " +
+      "scheduled time if one is reported (use 'time TBD' if the event is " +
+      "confirmed but the exact time isn't) — never invent or infer one just " +
+      "because it seems plausible; if nothing is confirmed for today, return " +
+      "an empty array. Also fold any notable Trump appearances later in the " +
+      "week into the relevant weekAhead day's bullets. Mark an economic " +
+      "event's importance as 'high' only for major market-moving releases " +
+      "in the ForexFactory 'red folder' sense (e.g. CPI, PCE, NFP/jobs " +
+      "report, FOMC decisions, GDP, ISM manufacturing/services, retail " +
+      "sales, JOLTS) — everything else is 'medium' or 'low'. Write " +
+      "macroTone as 1-2 tight paragraphs in a terse trading-desk tone, no " +
+      "headers or markdown. If a field truly isn't available, use an empty " +
+      "string or empty array rather than guessing.",
     messages: [
       {
         role: "user",
@@ -117,6 +144,7 @@ export async function generateMacroBriefing(): Promise<MacroBriefingResult | nul
       macroTone: string;
       economicCalendarToday: EconomicCalendarEvent[];
       weekAhead: WeekAheadDay[];
+      trumpAppearancesToday: TrumpAppearance[];
     };
     if (!parsed.macroTone) return null;
     return {
@@ -124,6 +152,7 @@ export async function generateMacroBriefing(): Promise<MacroBriefingResult | nul
       macroTone: parsed.macroTone,
       economicCalendarToday: parsed.economicCalendarToday ?? [],
       weekAhead: parsed.weekAhead ?? [],
+      trumpAppearancesToday: parsed.trumpAppearancesToday ?? [],
     };
   } catch {
     return null;
