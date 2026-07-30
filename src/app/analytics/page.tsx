@@ -8,12 +8,14 @@ import { PatternInsights } from "@/components/analytics/pattern-insights";
 import { SetupGradeCards } from "@/components/analytics/setup-grade-cards";
 import { ConfluenceLeaderboard } from "@/components/analytics/confluence-leaderboard";
 import { ExcursionCard } from "@/components/analytics/excursion-card";
+import { TradeStatsPanel } from "@/components/analytics/trade-stats-panel";
+import { HourlyBreakdownChart } from "@/components/analytics/hourly-breakdown-chart";
 
 export const dynamic = "force-dynamic";
 
 export default async function AnalyticsPage() {
   const data = await getAnalyticsData();
-  const { totals, composite, breakdowns, excursion } = data;
+  const { totals, composite, breakdowns, excursion, stats, monthlyPnl } = data;
 
   const rankedSessions = [...breakdowns.bySession].sort(
     (a, b) => b.netPnl - a.netPnl,
@@ -62,6 +64,8 @@ export default async function AnalyticsPage() {
           />
         </div>
       </div>
+
+      <TradeStatsPanel stats={stats} monthlyPnl={monthlyPnl} />
 
       <section className="mb-8 rounded-xl border border-border bg-surface p-4">
         <div className="mb-3 flex flex-wrap items-center justify-between gap-2">
@@ -113,9 +117,14 @@ export default async function AnalyticsPage() {
         <SetupGradeCards stats={breakdowns.bySetupGrade} />
       </section>
 
-      <div className="mb-8 grid grid-cols-1 gap-4 md:grid-cols-2">
+      <div className="mb-8 grid grid-cols-1 gap-4 lg:grid-cols-2">
         <BreakdownTable title="By day of week" stats={breakdowns.byDayOfWeek} />
-        <BreakdownTable title="By hour" stats={breakdowns.byHour} />
+        <section className="rounded-xl border border-border bg-surface p-4">
+          <h3 className="mb-3 text-sm font-semibold text-foreground">
+            By hour
+          </h3>
+          <HourlyBreakdownChart stats={breakdowns.byHour} />
+        </section>
       </div>
 
       <div className="grid grid-cols-1 gap-4 md:grid-cols-2">

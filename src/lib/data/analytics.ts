@@ -1,6 +1,7 @@
 import { prisma } from "@/lib/prisma";
 import { computeDayDisciplineScore } from "@/lib/domain/discipline";
 import { computeCompositeScore } from "@/lib/domain/composite-score";
+import { computeTradeStats, computeMonthlyPnl } from "@/lib/domain/trade-stats";
 
 export interface GroupStat {
   label: string;
@@ -171,6 +172,9 @@ export async function getAnalyticsData() {
     captureRate,
   };
 
+  const stats = computeTradeStats(trades, tradingDays);
+  const monthlyPnl = computeMonthlyPnl(trades);
+
   return {
     totals: {
       tradeCount: trades.length,
@@ -194,6 +198,8 @@ export async function getAnalyticsData() {
       byConfluenceFactor,
     },
     excursion,
+    stats,
+    monthlyPnl,
   };
 }
 
