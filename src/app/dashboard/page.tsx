@@ -3,12 +3,16 @@ import { format } from "date-fns";
 import { PageHeader } from "@/components/layout/page-header";
 import { getDashboardData } from "@/lib/data/dashboard";
 import { getAnalyticsData } from "@/lib/data/analytics";
+import { getAgentInsights } from "@/lib/data/agents";
+import { getTodayMacroBriefing } from "@/lib/data/macro-briefing";
 import { formatCurrency, formatR } from "@/lib/pnl";
 import { CompositeRadar } from "@/components/analytics/composite-radar";
 import { EquityCurveChart } from "@/components/dashboard/equity-curve-chart";
 import { DashboardTodoWidget } from "@/components/dashboard/dashboard-todo-widget";
 import { StreakCard } from "@/components/dashboard/streak-card";
 import { TodayRiskWidget } from "@/components/dashboard/today-risk-widget";
+import { AgentStatusStrip } from "@/components/agents/agent-status-strip";
+import { MacroBriefingCard } from "@/components/dashboard/macro-briefing-card";
 import { SessionClocks } from "@/components/layout/session-clocks";
 import { quoteOfTheDay } from "@/lib/motivational-quotes";
 import { getTodoWidgetItems } from "@/lib/data/todos";
@@ -16,10 +20,12 @@ import { getTodoWidgetItems } from "@/lib/data/todos";
 export const dynamic = "force-dynamic";
 
 export default async function DashboardPage() {
-  const [data, analytics, todayTodos] = await Promise.all([
+  const [data, analytics, todayTodos, agents, macroBriefing] = await Promise.all([
     getDashboardData(),
     getAnalyticsData(),
     getTodoWidgetItems(),
+    getAgentInsights(),
+    getTodayMacroBriefing(),
   ]);
 
   const { tradeStreaks } = data;
@@ -44,6 +50,10 @@ export default async function DashboardPage() {
         description="Your trading day, at a glance."
       />
 
+      <AgentStatusStrip
+        insights={[agents.risk, agents.habit, agents.pattern, agents.sentiment]}
+      />
+
       <div className="relative mb-8 overflow-hidden rounded-2xl border border-accent/30 bg-gradient-to-br from-accent/20 via-surface to-surface px-8 py-12 text-center shadow-[0_0_60px_-15px_var(--accent)]">
         <p className="text-xs font-semibold uppercase tracking-[0.2em] text-accent">
           Today&apos;s reminder
@@ -52,6 +62,8 @@ export default async function DashboardPage() {
           &ldquo;{quoteOfTheDay()}&rdquo;
         </p>
       </div>
+
+      <MacroBriefingCard initial={macroBriefing} />
 
       {!data.hasLoggedToday && (
         <div className="mb-8 flex items-center justify-between rounded-xl border border-accent/40 bg-accent/10 px-5 py-4">

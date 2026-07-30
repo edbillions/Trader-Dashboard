@@ -18,6 +18,8 @@ export interface TiltSignal {
   date: string;
   type: "overtrading" | "revenge_trading" | "size_up_after_loss" | "off_plan";
   detail: string;
+  tradeId?: string;
+  netPnl?: number | null;
 }
 
 const REVENGE_WINDOW_MINUTES = 15;
@@ -53,6 +55,8 @@ export function detectTiltSignals(day: TiltDayInput): TiltSignal[] {
         date: day.date,
         type: "revenge_trading",
         detail: `Re-entered ${Math.round(gapMinutes)} min after a loss.`,
+        tradeId: curr.id,
+        netPnl: curr.netPnl,
       });
     }
 
@@ -61,6 +65,8 @@ export function detectTiltSignals(day: TiltDayInput): TiltSignal[] {
         date: day.date,
         type: "size_up_after_loss",
         detail: `Sized up from ${prev.positionSize} to ${curr.positionSize} contracts after a loss.`,
+        tradeId: curr.id,
+        netPnl: curr.netPnl,
       });
     }
   }
@@ -82,4 +88,20 @@ export function detectTiltSignals(day: TiltDayInput): TiltSignal[] {
   }
 
   return signals;
+}
+
+// Sums the net P&L of trades flagged as revenge trading or sizing up after a
+// loss — the same trade can carry both flags, so dedupe by tradeId first.
+export function computeRevengeTradeCost(signals: TiltSignal[]): number {
+  const seen = new Map<string, number>();
+  for (const signal of signals) {
+    if (
+      (signal.type === "revenge_trading" ||
+        signal.type === "size_up_after_loss") &&
+      signal.tradeId
+    ) {
+      seen.set(signal.tradeId, signal.netPnl ?? 0);
+    }
+  }
+  return Array.from(seen.values()).reduce((sum, pnl) => sum + pnl, 0);
 }

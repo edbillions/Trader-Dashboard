@@ -1,7 +1,6 @@
 import { prisma } from "@/lib/prisma";
 import { computeDayDisciplineScore } from "@/lib/domain/discipline";
 import { computeStreak } from "@/lib/domain/streaks";
-import { detectTiltSignals, type TiltDayInput } from "@/lib/domain/tilt";
 
 const GOOD_GRADES = new Set(["A+", "A"]);
 
@@ -17,7 +16,6 @@ export async function getCoachData() {
           exitTime: true,
           positionSize: true,
           netPnl: true,
-          session: true,
           setupGrade: true,
         },
       },
@@ -66,18 +64,6 @@ export async function getCoachData() {
     recentScored.length > 0
       ? recentScored.reduce((a, b) => a + b, 0) / recentScored.length
       : null;
-
-  const tiltSignals = days
-    .slice(0, 30)
-    .flatMap((d) =>
-      detectTiltSignals({
-        date: d.date.toISOString().slice(0, 10),
-        maxTradeCountPlan: d.maxTradeCountPlan,
-        sessionTiming: d.sessionTiming,
-        trades: d.trades,
-      } satisfies TiltDayInput),
-    )
-    .slice(0, 20);
 
   const [goals, processGoals] = await Promise.all([
     prisma.goal.findMany({ orderBy: { periodStart: "desc" } }),
@@ -150,7 +136,6 @@ export async function getCoachData() {
     },
     avgDisciplineScore,
     disciplineHistory,
-    tiltSignals,
     dollarGoals,
     processGoalResults,
   };

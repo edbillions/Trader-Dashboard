@@ -44,6 +44,31 @@ export function computeStreak<T>(
   return streak;
 }
 
+// Walks backward across the trailing `windowSize` weekdays (skipping
+// weekends, same as computeStreak) and counts how many have no entry at all.
+// Today is excluded so an in-progress day doesn't count as a miss.
+export function computeMissedWeekdays<T>(
+  entriesByDate: Map<string, T>,
+  windowSize: number,
+): number {
+  let cursor = subDay(new Date());
+  cursor.setHours(0, 0, 0, 0);
+
+  let missed = 0;
+  let checked = 0;
+  for (let i = 0; i < 3650 && checked < windowSize; i++) {
+    if (isWeekend(cursor)) {
+      cursor = subDay(cursor);
+      continue;
+    }
+    if (!entriesByDate.has(dateKey(cursor))) missed++;
+    checked++;
+    cursor = subDay(cursor);
+  }
+
+  return missed;
+}
+
 export interface TradeStreakSummary {
   currentType: "win" | "loss" | null;
   currentCount: number;

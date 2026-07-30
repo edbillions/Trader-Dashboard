@@ -1,7 +1,9 @@
 import { PageHeader } from "@/components/layout/page-header";
 import { Field, TextInput, Select } from "@/components/ui/field";
 import { ProgressBar } from "@/components/ui/progress-bar";
+import { AgentCard } from "@/components/agents/agent-card";
 import { getCoachData } from "@/lib/data/coach";
+import { getAgentInsights } from "@/lib/data/agents";
 import { formatCurrency } from "@/lib/pnl";
 import {
   createGoalAction,
@@ -12,15 +14,11 @@ import {
 
 export const dynamic = "force-dynamic";
 
-const TILT_LABELS: Record<string, string> = {
-  overtrading: "Overtrading",
-  revenge_trading: "Revenge trading",
-  size_up_after_loss: "Sized up after a loss",
-  off_plan: "Off plan",
-};
-
 export default async function CoachPage() {
-  const data = await getCoachData();
+  const [data, agents] = await Promise.all([
+    getCoachData(),
+    getAgentInsights(),
+  ]);
 
   return (
     <div>
@@ -77,28 +75,14 @@ export default async function CoachPage() {
 
       <section className="mb-8">
         <h2 className="mb-3 text-sm font-semibold text-foreground">
-          Tilt signals
+          Agents
         </h2>
-        {data.tiltSignals.length === 0 ? (
-          <p className="text-sm text-muted">
-            None detected in the last 30 trading days.
-          </p>
-        ) : (
-          <div className="flex flex-col gap-2">
-            {data.tiltSignals.map((signal, i) => (
-              <div
-                key={i}
-                className="flex items-center justify-between rounded-lg border border-loss/30 bg-loss-muted px-4 py-2 text-sm"
-              >
-                <span className="font-medium text-loss">
-                  {TILT_LABELS[signal.type]}
-                </span>
-                <span className="text-muted">{signal.detail}</span>
-                <span className="text-xs text-muted">{signal.date}</span>
-              </div>
-            ))}
-          </div>
-        )}
+        <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 xl:grid-cols-4">
+          <AgentCard insight={agents.risk} />
+          <AgentCard insight={agents.habit} />
+          <AgentCard insight={agents.pattern} />
+          <AgentCard insight={agents.sentiment} />
+        </div>
       </section>
 
       <div className="grid grid-cols-1 gap-8 lg:grid-cols-2">

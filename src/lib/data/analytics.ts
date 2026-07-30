@@ -15,7 +15,7 @@ interface TradeLike {
   rMultiple: number | null;
 }
 
-function groupStats<T extends TradeLike>(
+export function groupStats<T extends TradeLike>(
   trades: T[],
   keyFn: (t: T) => string | null,
 ): GroupStat[] {
