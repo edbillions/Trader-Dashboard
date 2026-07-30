@@ -38,8 +38,16 @@ export default async function AnalyticsPage() {
   const worstSession =
     rankedSessions.length > 1 ? rankedSessions[rankedSessions.length - 1] : null;
 
+  // Forces every AnimatedNumber under this page to remount (and replay its
+  // count-up) on every visit — a fresh key each time this force-dynamic page
+  // is server-rendered, whether that's a hard reload or an in-app navigation
+  // back to this route. Without it, React would reuse existing component
+  // instances and skip the animation whenever the numbers happen to be
+  // unchanged from the last visit.
+  const pageLoadKey = Date.now();
+
   return (
-    <div>
+    <div key={pageLoadKey}>
       <PageHeader
         title="Analytics"
         description={`${totals.tradeCount} trade${totals.tradeCount === 1 ? "" : "s"} analyzed.`}

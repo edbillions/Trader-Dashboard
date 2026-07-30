@@ -35,8 +35,16 @@ export default async function DashboardPage() {
     ? tradeStreaks.bestLossStreak
     : tradeStreaks.bestWinStreak;
 
+  // Forces every AnimatedNumber under this page to remount (and replay its
+  // count-up) on every visit — a fresh key each time this force-dynamic page
+  // is server-rendered, whether that's a hard reload or an in-app navigation
+  // back to this route. Without it, React would reuse existing component
+  // instances and skip the animation whenever the numbers happen to be
+  // unchanged from the last visit.
+  const pageLoadKey = Date.now();
+
   return (
-    <div>
+    <div key={pageLoadKey}>
       <div className="mb-8 h-32 overflow-hidden rounded-2xl border border-border sm:h-40 md:h-48">
         {/* eslint-disable-next-line @next/next/no-img-element */}
         <img
