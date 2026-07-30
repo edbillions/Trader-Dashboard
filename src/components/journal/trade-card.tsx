@@ -1,6 +1,6 @@
 "use client";
 
-import { useTransition } from "react";
+import { useEffect, useState, useTransition } from "react";
 import { calculateTrade, formatCurrency, formatR } from "@/lib/pnl";
 import { uploadScreenshotAction } from "@/lib/actions/journal";
 import type { TradeInput } from "@/lib/types/journal";
@@ -23,10 +23,40 @@ export function TradeCard({
   lookups: WizardLookups;
 }) {
   const [isUploading, startUpload] = useTransition();
+  const [mfePriceStr, setMfePriceStr] = useState("");
+  const [maePriceStr, setMaePriceStr] = useState("");
 
   function set<K extends keyof TradeInput>(key: K, val: TradeInput[K]) {
     onChange({ ...value, [key]: val });
   }
+
+  const riskPoints =
+    value.stopLossPlanned != null && Number.isFinite(value.entryPrice)
+      ? Math.abs(value.entryPrice - value.stopLossPlanned)
+      : null;
+
+  function excursionR(priceStr: string, kind: "mfe" | "mae"): number | null {
+    const price = Number(priceStr);
+    if (priceStr === "" || !Number.isFinite(price) || !riskPoints) return null;
+    const favorable = kind === "mfe";
+    const isLong = value.direction === "long";
+    const useAbove = (isLong && favorable) || (!isLong && !favorable);
+    const points = useAbove ? price - value.entryPrice : value.entryPrice - price;
+    return Math.max(0, points) / riskPoints;
+  }
+
+  const computedMfeR = excursionR(mfePriceStr, "mfe");
+  const computedMaeR = excursionR(maePriceStr, "mae");
+
+  useEffect(() => {
+    if (mfePriceStr !== "") set("mfeR", computedMfeR);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [computedMfeR, mfePriceStr]);
+
+  useEffect(() => {
+    if (maePriceStr !== "") set("maeR", computedMaeR);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [computedMaeR, maePriceStr]);
 
   const instrument = lookups.instruments.find(
     (i) => i.symbol.toUpperCase() === value.symbol.toUpperCase(),
@@ -293,29 +323,69 @@ export function TradeCard({
         </Field>
       </div>
 
-      <div className="mt-4 grid grid-cols-2 gap-4">
-        <Field label="Max favorable excursion (R)">
-          <TextInput
-            type="number"
-            step="any"
-            value={value.mfeR ?? ""}
-            onChange={(e) =>
-              set("mfeR", e.target.value === "" ? null : Number(e.target.value))
-            }
-            placeholder="How far it ran in your favor, e.g. 2.5"
-          />
-        </Field>
-        <Field label="Max adverse excursion (R)">
-          <TextInput
-            type="number"
-            step="any"
-            value={value.maeR ?? ""}
-            onChange={(e) =>
-              set("maeR", e.target.value === "" ? null : Number(e.target.value))
-            }
-            placeholder="How far it ran against you, e.g. 0.4"
-          />
-        </Field>
+      <div className="mt-4 rounded-lg border border-border bg-surface p-3">
+        <p className="mb-3 text-xs font-medium text-muted">
+          Excursion calculator — enter the price it reached, R is calculated
+          for you from entry price and stop loss (planned).
+        </p>
+        <div className="grid grid-cols-2 gap-4">
+          <div>
+            <Field
+              label={
+                value.direction === "short"
+                  ? "Lowest price reached (MFE)"
+                  : "Highest price reached (MFE)"
+              }
+            >
+              <TextInput
+                type="number"
+                step="any"
+                value={mfePriceStr}
+                onChange={(e) => setMfePriceStr(e.target.value)}
+                placeholder={value.direction === "short" ? "e.g. 19970" : "e.g. 20030"}
+              />
+            </Field>
+            <p className="mt-1 text-xs text-muted">
+              {riskPoints == null
+                ? "Set entry price and stop loss (planned) first."
+                : mfePriceStr === ""
+                  ? value.mfeR != null
+                    ? `Currently saved: ${value.mfeR.toFixed(2)}R`
+                    : "No MFE logged yet."
+                  : computedMfeR != null
+                    ? `→ ${computedMfeR.toFixed(2)}R MFE`
+                    : "—"}
+            </p>
+          </div>
+          <div>
+            <Field
+              label={
+                value.direction === "short"
+                  ? "Highest price reached (MAE)"
+                  : "Lowest price reached (MAE)"
+              }
+            >
+              <TextInput
+                type="number"
+                step="any"
+                value={maePriceStr}
+                onChange={(e) => setMaePriceStr(e.target.value)}
+                placeholder={value.direction === "short" ? "e.g. 20004" : "e.g. 19996"}
+              />
+            </Field>
+            <p className="mt-1 text-xs text-muted">
+              {riskPoints == null
+                ? "Set entry price and stop loss (planned) first."
+                : maePriceStr === ""
+                  ? value.maeR != null
+                    ? `Currently saved: ${value.maeR.toFixed(2)}R`
+                    : "No MAE logged yet."
+                  : computedMaeR != null
+                    ? `→ ${computedMaeR.toFixed(2)}R MAE`
+                    : "—"}
+            </p>
+          </div>
+        </div>
       </div>
 
       <div className="mt-4">
