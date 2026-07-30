@@ -2,6 +2,8 @@ import { prisma } from "@/lib/prisma";
 import { computeDayDisciplineScore } from "@/lib/domain/discipline";
 import { computeCompositeScore } from "@/lib/domain/composite-score";
 import { computeTradeStats, computeMonthlyPnl } from "@/lib/domain/trade-stats";
+import { computeManagementStats } from "@/lib/domain/trade-management";
+import { computeTrueSystemEdge } from "@/lib/domain/system-edge";
 
 export interface GroupStat {
   label: string;
@@ -65,7 +67,14 @@ export async function getAnalyticsData() {
     prisma.trade.findMany({
       include: {
         confluenceFactors: true,
-        tradingDay: { select: { date: true, news: true } },
+        mistakes: true,
+        tradingDay: {
+          select: {
+            date: true,
+            news: true,
+            ruleViolations: { select: { id: true } },
+          },
+        },
       },
     }),
     prisma.tradingDay.findMany({
@@ -175,6 +184,40 @@ export async function getAnalyticsData() {
   const stats = computeTradeStats(trades, tradingDays);
   const monthlyPnl = computeMonthlyPnl(trades);
 
+  const management = computeManagementStats(trades);
+
+  const systemEdge = computeTrueSystemEdge(
+    trades.map((t) => ({
+      netPnl: t.netPnl,
+      isClean: t.mistakes.length === 0 && t.tradingDay.ruleViolations.length === 0,
+    })),
+  );
+
+  const outlierTrades = {
+    biggestWins: [...trades]
+      .filter((t) => (t.netPnl ?? 0) > 0)
+      .sort((a, b) => (b.netPnl ?? 0) - (a.netPnl ?? 0))
+      .slice(0, 5)
+      .map((t) => ({
+        id: t.id,
+        symbol: t.symbol,
+        date: t.entryTime.toISOString().slice(0, 10),
+        netPnl: t.netPnl,
+        rMultiple: t.rMultiple,
+      })),
+    biggestLosses: [...trades]
+      .filter((t) => (t.netPnl ?? 0) < 0)
+      .sort((a, b) => (a.netPnl ?? 0) - (b.netPnl ?? 0))
+      .slice(0, 5)
+      .map((t) => ({
+        id: t.id,
+        symbol: t.symbol,
+        date: t.entryTime.toISOString().slice(0, 10),
+        netPnl: t.netPnl,
+        rMultiple: t.rMultiple,
+      })),
+  };
+
   return {
     totals: {
       tradeCount: trades.length,
@@ -200,6 +243,9 @@ export async function getAnalyticsData() {
     excursion,
     stats,
     monthlyPnl,
+    management,
+    systemEdge,
+    outlierTrades,
   };
 }
 

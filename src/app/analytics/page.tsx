@@ -10,12 +10,25 @@ import { ConfluenceLeaderboard } from "@/components/analytics/confluence-leaderb
 import { ExcursionCard } from "@/components/analytics/excursion-card";
 import { TradeStatsPanel } from "@/components/analytics/trade-stats-panel";
 import { HourlyBreakdownChart } from "@/components/analytics/hourly-breakdown-chart";
+import { ManagementSection } from "@/components/analytics/management-section";
+import { TrueSystemEdgeCard } from "@/components/analytics/true-system-edge-card";
+import { OutlierTradesList } from "@/components/analytics/outlier-trades-list";
 
 export const dynamic = "force-dynamic";
 
 export default async function AnalyticsPage() {
   const data = await getAnalyticsData();
-  const { totals, composite, breakdowns, excursion, stats, monthlyPnl } = data;
+  const {
+    totals,
+    composite,
+    breakdowns,
+    excursion,
+    stats,
+    monthlyPnl,
+    management,
+    systemEdge,
+    outlierTrades,
+  } = data;
 
   const rankedSessions = [...breakdowns.bySession].sort(
     (a, b) => b.netPnl - a.netPnl,
@@ -110,12 +123,43 @@ export default async function AnalyticsPage() {
         </section>
       </div>
 
+      <section className="mb-8 rounded-xl border border-border bg-surface p-4">
+        <h3 className="mb-3 text-sm font-semibold text-foreground">
+          Trade management quality
+        </h3>
+        <ManagementSection management={management} />
+      </section>
+
       <section className="mb-8">
         <h3 className="mb-3 text-sm font-semibold text-foreground">
           Setup grade quality
         </h3>
         <SetupGradeCards stats={breakdowns.bySetupGrade} />
       </section>
+
+      <section className="mb-8 rounded-xl border border-border bg-surface p-4">
+        <h3 className="mb-3 text-sm font-semibold text-foreground">
+          True system edge
+        </h3>
+        <TrueSystemEdgeCard edge={systemEdge} />
+      </section>
+
+      <div className="mb-8 grid grid-cols-1 gap-4 lg:grid-cols-2">
+        <section className="rounded-xl border border-border bg-surface p-4">
+          <OutlierTradesList
+            title="Biggest wins"
+            trades={outlierTrades.biggestWins}
+            tone="profit"
+          />
+        </section>
+        <section className="rounded-xl border border-border bg-surface p-4">
+          <OutlierTradesList
+            title="Biggest losses"
+            trades={outlierTrades.biggestLosses}
+            tone="loss"
+          />
+        </section>
+      </div>
 
       <div className="mb-8 grid grid-cols-1 gap-4 lg:grid-cols-2">
         <BreakdownTable title="By day of week" stats={breakdowns.byDayOfWeek} />

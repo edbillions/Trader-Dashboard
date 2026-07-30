@@ -51,6 +51,38 @@ export async function getMistakesData() {
     0,
   );
 
+  function summarize(group: typeof trades) {
+    const wins = group.filter((t) => (t.netPnl ?? 0) > 0).length;
+    const losses = group.filter((t) => (t.netPnl ?? 0) < 0).length;
+    const rValues = group
+      .map((t) => t.rMultiple)
+      .filter((r): r is number => r != null);
+    return {
+      count: group.length,
+      winRate: wins + losses > 0 ? (wins / (wins + losses)) * 100 : null,
+      netPnl: group.reduce((s, t) => s + (t.netPnl ?? 0), 0),
+      avgR:
+        rValues.length > 0
+          ? rValues.reduce((a, b) => a + b, 0) / rValues.length
+          : null,
+    };
+  }
+
+  const cleanTradeRecords = trades.filter((t) => t.mistakes.length === 0);
+  const mistakeTradeRecords = trades.filter((t) => t.mistakes.length > 0);
+
+  const cleanVsMistake = {
+    clean: summarize(cleanTradeRecords),
+    withMistake: summarize(mistakeTradeRecords),
+  };
+
+  const goodWinners = summarize(
+    cleanTradeRecords.filter((t) => (t.netPnl ?? 0) > 0),
+  );
+  const goodLosses = summarize(
+    cleanTradeRecords.filter((t) => (t.netPnl ?? 0) < 0),
+  );
+
   return {
     totalTrades: trades.length,
     tradesWithMistakes,
@@ -58,6 +90,9 @@ export async function getMistakesData() {
     mistakeCostTotal,
     byMistake,
     trend,
+    cleanVsMistake,
+    goodWinners,
+    goodLosses,
   };
 }
 
