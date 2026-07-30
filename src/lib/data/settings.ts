@@ -10,6 +10,7 @@ export async function getSettingsData() {
     ruleViolations,
     instruments,
     tagCategories,
+    tradingViewLayouts,
   ] = await Promise.all([
     prisma.appSettings.findUnique({ where: { id: 1 } }),
     prisma.entryModel.findMany({ orderBy: { label: "asc" } }),
@@ -22,6 +23,9 @@ export async function getSettingsData() {
       orderBy: { order: "asc" },
       include: { tags: { orderBy: { label: "asc" } } },
     }),
+    prisma.tradingViewLayout.findMany({
+      orderBy: [{ instrument: "asc" }, { timeframe: "asc" }],
+    }),
   ]);
 
   return {
@@ -33,5 +37,6 @@ export async function getSettingsData() {
     ruleViolations,
     instruments,
     tagCategories,
+    tradingViewLayouts,
   };
 }

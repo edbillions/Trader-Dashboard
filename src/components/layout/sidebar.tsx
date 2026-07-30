@@ -9,6 +9,7 @@ const NAV_GROUPS = [
     label: "Daily",
     items: [
       { href: "/dashboard", label: "Dashboard" },
+      { href: "/premarket", label: "Pre-Market Analyst" },
       { href: "/setup-grader", label: "Setup Grader" },
       { href: "/playbook", label: "Playbook" },
       { href: "/journal", label: "Journal" },

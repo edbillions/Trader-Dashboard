@@ -2,6 +2,7 @@ import { PageHeader } from "@/components/layout/page-header";
 import { Field, TextInput } from "@/components/ui/field";
 import { LookupSection } from "@/components/settings/lookup-section";
 import { TagCategoryManager } from "@/components/settings/tag-category-manager";
+import { TradingViewLayoutsSection } from "@/components/settings/tradingview-layouts-section";
 import { getSettingsData } from "@/lib/data/settings";
 import {
   clearApiKeyAction,
@@ -156,6 +157,8 @@ export default async function SettingsPage() {
       </div>
 
       <TagCategoryManager categories={data.tagCategories} />
+
+      <TradingViewLayoutsSection layouts={data.tradingViewLayouts} />
     </div>
   );
 }

@@ -178,3 +178,23 @@ export async function toggleTagOptionActiveAction(formData: FormData) {
   await prisma.tagOption.update({ where: { id }, data: { active } });
   revalidatePath("/settings");
 }
+
+export async function saveTradingViewLayoutAction(formData: FormData) {
+  const instrument = requiredString(formData, "instrument").toUpperCase();
+  const timeframe = requiredString(formData, "timeframe");
+  const url = requiredString(formData, "url");
+
+  await prisma.tradingViewLayout.upsert({
+    where: { instrument_timeframe: { instrument, timeframe } },
+    update: { url },
+    create: { instrument, timeframe, url },
+  });
+
+  revalidatePath("/settings");
+}
+
+export async function deleteTradingViewLayoutAction(formData: FormData) {
+  const id = idFrom(formData);
+  await prisma.tradingViewLayout.delete({ where: { id } });
+  revalidatePath("/settings");
+}

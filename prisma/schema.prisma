@@ -341,6 +341,98 @@ model MacroBriefing {
   createdAt DateTime @default(now())
 }
 
+// ---------- AI Pre-Market Analyst (ICT Unicorn Model) ----------
+
+model PreMarketAnalysis {
+  id         String   @id @default(cuid())
+  date       DateTime
+  instrument String // "NQ" | "ES"
+
+  // Call 1 — raw ICT read (vision)
+  htfBiasAnalysis   String // JSON: structure, swings, prem/disc, opens, PDH/PDL, DOL, HTF FVGs, order flow
+  htfBiasConfidence Float
+  liquidityAnalysis String // JSON: buy/sell-side, equal H/L, internal/external, sweeps, stop hunts, ERL/IRL narrative
+  fvgAnalysis       String // JSON: { oneHour: FvgEntry[]; fifteenMinute: FvgEntry[] }, each ranked + alignsWithHtfBias
+
+  premiumDiscountZone  String // "premium" | "discount" | "equilibrium"
+  premiumDiscountNotes String
+
+  // Call 2 — Daily Bias Engine + Trade Plan synthesis (text-only)
+  bullishPct Float
+  bearishPct Float
+  rangePct   Float // normalized in app code to sum to exactly 100
+
+  overallBias       String // "bullish" | "bearish" | "range"
+  biasConfidence    Float
+  biasReasoning     String
+  expectedNarrative String
+  invalidationLevel String // free text — vision-read approximation, not tick-precise
+  primaryTarget     String
+  secondaryTarget   String
+
+  tradeable     Boolean
+  noTradeReason String?
+
+  tradeScenarios String // JSON: exactly 3 scenarios (A/Bullish, B/Bearish, C/Range)
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  screenshots PreMarketScreenshot[]
+  review      PreMarketReview?
+
+  @@unique([date, instrument])
+}
+
+model PreMarketScreenshot {
+  id         String            @id @default(cuid())
+  analysisId String
+  analysis   PreMarketAnalysis @relation(fields: [analysisId], references: [id], onDelete: Cascade)
+
+  instrument String
+  timeframe  String // "1h" | "15m" | "1m"
+  phase      String // "morning" | "eod"
+  filePath   String
+
+  createdAt DateTime @default(now())
+}
+
+model PreMarketReview {
+  id         String            @id @default(cuid())
+  analysisId String            @unique
+  analysis   PreMarketAnalysis @relation(fields: [analysisId], references: [id], onDelete: Cascade)
+
+  actualPriceActionSummary String
+
+  // Learning System — five rolling accuracy dimensions
+  biasCorrect           Boolean
+  biasAccuracyScore      Float // 0-100
+  biasNotes               String
+  liquidityAccuracyScore Float
+  liquidityNotes          String
+  fvgAccuracyScore       Float
+  fvgNotes                String
+  targetAccuracyScore    Float
+  targetNotes              String
+  narrativeAccuracyScore Float
+  narrativeNotes           String
+
+  overallAccuracyScore Float
+  overallSummary       String
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+}
+
+model TradingViewLayout {
+  id         String @id @default(cuid())
+  instrument String // "NQ" | "ES"
+  timeframe  String // "1h" | "15m" | "1m"
+  url        String
+
+  @@unique([instrument, timeframe])
+}
+
 // ---------- Chart Vault ----------
 
 model ChartImage {
