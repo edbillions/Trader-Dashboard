@@ -64,8 +64,6 @@ export default async function DashboardPage() {
         </p>
       </div>
 
-      <MacroBriefingCard initial={macroBriefing} />
-
       {!data.hasLoggedToday && (
         <div className="mb-8 flex items-center justify-between rounded-xl border border-accent/40 bg-accent/10 px-5 py-4">
           <div>
@@ -299,6 +297,8 @@ export default async function DashboardPage() {
           }
         />
       </div>
+
+      <MacroBriefingCard initial={macroBriefing} />
 
       <section>
         <h2 className="mb-3 text-sm font-semibold text-foreground">
