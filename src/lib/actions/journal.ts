@@ -149,6 +149,7 @@ export async function saveTradingDayAction(
           dailyBias: trade.dailyBias || null,
           htfPoi: trade.htfPoi || null,
           htfDol: trade.htfDol || null,
+          setupFactorsChecklist: JSON.stringify(trade.setupFactors),
           mfeR: trade.mfeR,
           maeR: trade.maeR,
           writeup: trade.writeup || null,

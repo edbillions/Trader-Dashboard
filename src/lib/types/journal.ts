@@ -2,6 +2,8 @@ import type { PreMarketChecklist } from "@/lib/types/premarket-checklist";
 import { emptyPreMarketChecklist } from "@/lib/types/premarket-checklist";
 import type { ScorecardScores } from "@/lib/types/scorecard";
 import { emptyScorecard } from "@/lib/types/scorecard";
+import type { SetupFactorsChecklist } from "@/lib/types/setup-factors-checklist";
+import { emptySetupFactorsChecklist } from "@/lib/types/setup-factors-checklist";
 
 export interface TradeInput {
   id?: string;
@@ -28,6 +30,7 @@ export interface TradeInput {
   dailyBias: string;
   htfPoi: string;
   htfDol: string;
+  setupFactors: SetupFactorsChecklist;
   mfeR: number | null;
   maeR: number | null;
   writeup: string;
@@ -94,6 +97,7 @@ export function emptyTrade(): TradeInput {
     dailyBias: "",
     htfPoi: "",
     htfDol: "",
+    setupFactors: emptySetupFactorsChecklist(),
     mfeR: null,
     maeR: null,
     writeup: "",

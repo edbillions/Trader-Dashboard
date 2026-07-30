@@ -143,6 +143,8 @@ model Trade {
   htfPoi    String?
   htfDol    String?
 
+  setupFactorsChecklist String? // JSON: SetupFactorsChecklist — the Unicorn Model criteria checklist
+
   mfeR Float? // max favorable excursion reached before exit, in R-multiples
   maeR Float? // max adverse excursion reached before exit, in R-multiples
 

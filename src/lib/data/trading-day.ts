@@ -2,6 +2,7 @@ import { prisma } from "@/lib/prisma";
 import type { SaveTradingDayInput } from "@/lib/types/journal";
 import { parsePreMarketChecklist } from "@/lib/types/premarket-checklist";
 import { parseScorecard } from "@/lib/types/scorecard";
+import { parseSetupFactorsChecklist } from "@/lib/types/setup-factors-checklist";
 
 function toDateKey(d: Date) {
   return d.toISOString().slice(0, 10);
@@ -96,6 +97,7 @@ export async function getTradingDayInputForDate(
       dailyBias: t.dailyBias ?? "",
       htfPoi: t.htfPoi ?? "",
       htfDol: t.htfDol ?? "",
+      setupFactors: parseSetupFactorsChecklist(t.setupFactorsChecklist),
       mfeR: t.mfeR,
       maeR: t.maeR,
       writeup: t.writeup ?? "",

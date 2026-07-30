@@ -9,6 +9,7 @@ import { Field, TextInput, TextArea, Select } from "@/components/ui/field";
 import { DatalistInput } from "@/components/ui/datalist-input";
 import { ChipMultiSelect } from "@/components/ui/chip-multiselect";
 import { TagCategoryPicker } from "@/components/ui/tag-category-picker";
+import { SetupFactorsSection } from "@/components/journal/setup-factors-checklist";
 
 export function TradeCard({
   index,
@@ -402,6 +403,13 @@ export function TradeCard({
             </p>
           </div>
         </div>
+      </div>
+
+      <div className="mt-4">
+        <SetupFactorsSection
+          value={value.setupFactors}
+          onChange={(next) => set("setupFactors", next)}
+        />
       </div>
 
       <div className="mt-4">
