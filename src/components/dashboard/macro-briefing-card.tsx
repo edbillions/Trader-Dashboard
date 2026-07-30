@@ -1,12 +1,14 @@
 "use client";
 
-import { useState, useTransition } from "react";
+import { useEffect, useState, useTransition } from "react";
 import { clsx } from "clsx";
 import { generateMacroBriefingAction } from "@/lib/actions/macro-briefing";
 import type {
   EconomicCalendarEvent,
   WeekAheadDay,
 } from "@/lib/types/macro-briefing";
+
+const COLLAPSED_STORAGE_KEY = "macroBriefingCollapsed";
 
 interface Briefing {
   asOf: string | null;
@@ -36,6 +38,21 @@ export function MacroBriefingCard({
   const [briefing, setBriefing] = useState(initial);
   const [isGenerating, startGenerate] = useTransition();
   const [unavailable, setUnavailable] = useState(false);
+  const [collapsed, setCollapsed] = useState(false);
+
+  // Read the saved preference after mount so server and first client render
+  // match (avoids a hydration mismatch) — collapsing then persists across visits.
+  useEffect(() => {
+    setCollapsed(localStorage.getItem(COLLAPSED_STORAGE_KEY) === "true");
+  }, []);
+
+  function toggleCollapsed() {
+    setCollapsed((prev) => {
+      const next = !prev;
+      localStorage.setItem(COLLAPSED_STORAGE_KEY, String(next));
+      return next;
+    });
+  }
 
   function handleGenerate() {
     setUnavailable(false);
@@ -80,24 +97,48 @@ export function MacroBriefingCard({
                 ? "Refresh"
                 : "Generate today's briefing"}
           </button>
+          <button
+            type="button"
+            onClick={toggleCollapsed}
+            aria-expanded={!collapsed}
+            aria-label={collapsed ? "Expand macro briefing" : "Collapse macro briefing"}
+            className="rounded-lg border border-border p-1.5 text-muted hover:bg-surface-raised hover:text-foreground"
+          >
+            <svg
+              viewBox="0 0 20 20"
+              fill="none"
+              className={clsx(
+                "h-4 w-4 transition-transform",
+                collapsed ? "-rotate-90" : "rotate-0",
+              )}
+            >
+              <path
+                d="M5 7.5L10 12.5L15 7.5"
+                stroke="currentColor"
+                strokeWidth="1.5"
+                strokeLinecap="round"
+                strokeLinejoin="round"
+              />
+            </svg>
+          </button>
         </div>
       </div>
 
-      {unavailable && (
+      {!collapsed && unavailable && (
         <p className="text-xs text-muted">
           AI features aren&apos;t available — add your Claude API key in
           Settings.
         </p>
       )}
 
-      {!briefing && !unavailable && (
+      {!collapsed && !briefing && !unavailable && (
         <p className="text-sm text-muted">
           Pull overnight macro tone, today&apos;s economic calendar, and the
           week ahead via AI web search.
         </p>
       )}
 
-      {briefing && (
+      {!collapsed && briefing && (
         <div className="flex flex-col gap-5">
           <div>
             <p className="mb-2 text-xs font-semibold uppercase tracking-wide text-accent">
