@@ -16,14 +16,6 @@ function todayKey() {
   return new Date().toISOString().slice(0, 10);
 }
 
-function requiredString(formData: FormData, key: string): string {
-  const value = formData.get(key);
-  if (typeof value !== "string" || value.trim() === "") {
-    throw new Error(`${key} is required`);
-  }
-  return value.trim();
-}
-
 export async function runPreMarketAnalysisAction() {
   const today = new Date(`${todayKey()}T00:00:00`);
 
@@ -222,9 +214,12 @@ export async function runDailyReviewAction() {
 // fields of preMarketChecklist, leaving trades, screenshots, and the
 // drawOnLiquidity checklist (the user's own manual verification ritual)
 // completely untouched. Idempotent, re-clickable.
-export async function pullIntoJournalPlanAction(formData: FormData) {
-  const analysisId = requiredString(formData, "analysisId");
-
+//
+// Called directly from a client button (not a <form action>) so it can
+// return a confirmation the UI actually shows — its effect lands on
+// /journal/[date], a different page than the button lives on, so without
+// this the button silently succeeds with nothing visibly changing.
+export async function pullIntoJournalPlanAction(analysisId: string) {
   const analysis = await prisma.preMarketAnalysis.findUnique({
     where: { id: analysisId },
   });
@@ -278,4 +273,6 @@ export async function pullIntoJournalPlanAction(formData: FormData) {
   revalidatePath(`/journal/${dateKey}`);
   revalidatePath("/journal/new");
   revalidatePath("/journal");
+
+  return { dateKey };
 }

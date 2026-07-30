@@ -1,7 +1,7 @@
 import { DoNotTradeBanner } from "@/components/premarket/do-not-trade-banner";
 import { BiasSplitBar } from "@/components/premarket/bias-split-bar";
 import { TradeScenarioCard } from "@/components/premarket/trade-scenario-card";
-import { pullIntoJournalPlanAction } from "@/lib/actions/premarket";
+import { PullIntoJournalButton } from "@/components/premarket/pull-into-journal-button";
 import type {
   IctRead,
   TradeScenario,
@@ -235,15 +235,7 @@ export function InstrumentAnalysisCard({
 
       {showActions && (
         <div className="mt-5 flex items-center gap-3 border-t border-border pt-4">
-          <form action={pullIntoJournalPlanAction}>
-            <input type="hidden" name="analysisId" value={analysis.id} />
-            <button
-              type="submit"
-              className="rounded-lg border border-border px-3 py-2 text-xs font-medium text-foreground hover:bg-surface-raised"
-            >
-              Pull into today&apos;s Pre-Market Plan
-            </button>
-          </form>
+          <PullIntoJournalButton analysisId={analysis.id} />
         </div>
       )}
     </div>
