@@ -1,18 +1,30 @@
+import { clsx } from "clsx";
 import {
   CRITERIA_WEIGHTS,
   DOL_TARGET_LABELS,
   HTFPD_LEVEL_LABELS,
   LIQ_SWEPT_LABELS,
 } from "@/app/setup-grader/grading";
-import { computeSetupFactorsScore } from "@/lib/domain/setup-factors";
+import { gradeForSetupFactors } from "@/lib/domain/setup-factors";
 import type { SetupFactorsChecklist } from "@/lib/types/setup-factors-checklist";
+
+const GRADE_STYLES: Record<string, string> = {
+  "A+": "border-profit/60 bg-profit-muted text-profit shadow-[0_0_20px_-6px_var(--profit)]",
+  A: "border-profit/50 bg-profit-muted text-profit shadow-[0_0_16px_-8px_var(--profit)]",
+  B: "border-accent/50 bg-accent/10 text-accent shadow-[0_0_16px_-8px_var(--accent)]",
+  C: "border-border bg-surface-raised text-muted",
+  D: "border-loss/40 bg-loss-muted text-loss",
+  F: "border-loss/50 bg-loss-muted text-loss shadow-[0_0_16px_-8px_var(--loss)]",
+};
 
 export function SetupFactorsSection({
   value,
   onChange,
+  onApplyGrade,
 }: {
   value: SetupFactorsChecklist;
   onChange: (next: SetupFactorsChecklist) => void;
+  onApplyGrade?: (letter: string) => void;
 }) {
   function set<K extends keyof SetupFactorsChecklist>(
     key: K,
@@ -31,7 +43,9 @@ export function SetupFactorsSection({
     );
   }
 
-  const score = computeSetupFactorsScore(value);
+  const grade = gradeForSetupFactors(value);
+  const { score } = grade;
+  const hasProgress = score.totalEarned > 0;
 
   return (
     <div className="rounded-lg border border-border bg-surface p-2.5">
@@ -45,6 +59,34 @@ export function SetupFactorsSection({
             </span>
           )}
         </span>
+      </div>
+
+      <div
+        className={clsx(
+          "mb-2.5 flex items-center gap-3 rounded-xl border-2 px-3 py-2 transition-colors",
+          hasProgress ? GRADE_STYLES[grade.letter] : "border-border bg-surface-raised text-muted",
+        )}
+      >
+        <span className="text-2xl font-black leading-none">
+          {hasProgress ? grade.letter : "—"}
+        </span>
+        <div className="min-w-0 flex-1">
+          <p className="truncate text-xs font-semibold uppercase tracking-wide">
+            {hasProgress ? grade.verdict : "Awaiting criteria"}
+          </p>
+          <p className="truncate text-[11px] opacity-80">
+            {hasProgress ? grade.subtext : "Check off criteria as your setup confirms."}
+          </p>
+        </div>
+        {onApplyGrade && hasProgress && (
+          <button
+            type="button"
+            onClick={() => onApplyGrade(grade.letter)}
+            className="shrink-0 rounded-lg border border-current px-2.5 py-1 text-[11px] font-semibold hover:bg-white/10"
+          >
+            Use {grade.letter} →
+          </button>
+        )}
       </div>
 
       <FactorRow

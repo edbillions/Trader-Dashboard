@@ -1,4 +1,4 @@
-import { CRITERIA_WEIGHTS } from "@/app/setup-grader/grading";
+import { CRITERIA_WEIGHTS, gradeFor, type GradeInfo } from "@/app/setup-grader/grading";
 import type { SetupFactorsChecklist } from "@/lib/types/setup-factors-checklist";
 
 const CONFIRMED_FLAGS: (keyof SetupFactorsChecklist)[] = [
@@ -73,4 +73,17 @@ export function computeSetupFactorsScore(
     totalEarned: baseEarned + liquidityBonus + htfFvgBonus,
     maxPossible: MAX_POSSIBLE_SCORE,
   };
+}
+
+export interface SetupFactorsGrade extends GradeInfo {
+  score: SetupFactorsScore;
+}
+
+// Same A+ through F scale as the standalone Setup Grader, driven by this
+// checklist's own score (base weights + confluence bonus) instead of that
+// page's separate interactive state.
+export function gradeForSetupFactors(value: SetupFactorsChecklist): SetupFactorsGrade {
+  const score = computeSetupFactorsScore(value);
+  const pct = score.maxPossible > 0 ? score.totalEarned / score.maxPossible : 0;
+  return { ...gradeFor(pct), score };
 }
