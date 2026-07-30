@@ -742,17 +742,18 @@ export function JournalWizard({
         >
           Back
         </button>
-        {stepIndex < STEPS.length - 1 ? (
-          <button
-            type="button"
-            onClick={() =>
-              setStepIndex((i) => Math.min(STEPS.length - 1, i + 1))
-            }
-            className="rounded-lg bg-accent px-4 py-2 text-sm font-medium text-white"
-          >
-            Next
-          </button>
-        ) : (
+        <div className="flex items-center gap-3">
+          {stepIndex < STEPS.length - 1 && (
+            <button
+              type="button"
+              onClick={() =>
+                setStepIndex((i) => Math.min(STEPS.length - 1, i + 1))
+              }
+              className="rounded-lg border border-accent/40 px-4 py-2 text-sm font-medium text-accent hover:bg-accent/10"
+            >
+              Next
+            </button>
+          )}
           <button
             type="button"
             disabled={isSaving}
@@ -761,7 +762,7 @@ export function JournalWizard({
           >
             {isSaving ? "Saving..." : "Save day"}
           </button>
-        )}
+        </div>
       </div>
     </div>
   );
