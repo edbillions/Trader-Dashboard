@@ -1,4 +1,5 @@
 import Link from "next/link";
+import { clsx } from "clsx";
 import { notFound } from "next/navigation";
 import { PageHeader } from "@/components/layout/page-header";
 import { getTradeDetail } from "@/lib/data/trades";
@@ -41,9 +42,21 @@ export default async function TradeDetailPage({
       />
 
       <div className="mb-6 grid grid-cols-2 gap-4 sm:grid-cols-4">
-        <Stat label="Net P&L" value={formatCurrency(trade.netPnl)} accent />
-        <Stat label="Gross P&L" value={formatCurrency(trade.grossPnl)} />
-        <Stat label="R-multiple" value={formatR(trade.rMultiple)} />
+        <Stat
+          label="Net P&L"
+          value={formatCurrency(trade.netPnl)}
+          positive={trade.netPnl != null ? trade.netPnl >= 0 : undefined}
+        />
+        <Stat
+          label="Gross P&L"
+          value={formatCurrency(trade.grossPnl)}
+          positive={trade.grossPnl != null ? trade.grossPnl >= 0 : undefined}
+        />
+        <Stat
+          label="R-multiple"
+          value={formatR(trade.rMultiple)}
+          positive={trade.rMultiple != null ? trade.rMultiple >= 0 : undefined}
+        />
         <Stat
           label="Duration"
           value={durationMinutes != null ? `${durationMinutes} min` : "—"}
@@ -80,23 +93,41 @@ export default async function TradeDetailPage({
       </section>
 
       {(trade.confluenceFactors.length > 0 || trade.mistakes.length > 0) && (
-        <section className="mb-6 flex flex-wrap gap-1.5">
-          {trade.confluenceFactors.map((c) => (
-            <span
-              key={c.id}
-              className="rounded-full bg-surface-raised px-2 py-1 text-xs text-muted"
-            >
-              {c.label}
-            </span>
-          ))}
-          {trade.mistakes.map((m) => (
-            <span
-              key={m.id}
-              className="rounded-full bg-loss-muted px-2 py-1 text-xs text-loss"
-            >
-              {m.label}
-            </span>
-          ))}
+        <section className="mb-6 flex flex-col gap-4">
+          {trade.confluenceFactors.length > 0 && (
+            <div>
+              <h2 className="mb-2 text-sm font-semibold text-foreground">
+                Confluence factors
+              </h2>
+              <div className="flex flex-wrap gap-1.5">
+                {trade.confluenceFactors.map((c) => (
+                  <span
+                    key={c.id}
+                    className="rounded-full border border-accent/30 bg-accent/10 px-2.5 py-1 text-xs font-medium text-accent"
+                  >
+                    {c.label}
+                  </span>
+                ))}
+              </div>
+            </div>
+          )}
+          {trade.mistakes.length > 0 && (
+            <div>
+              <h2 className="mb-2 text-sm font-semibold text-foreground">
+                Mistakes
+              </h2>
+              <div className="flex flex-wrap gap-1.5">
+                {trade.mistakes.map((m) => (
+                  <span
+                    key={m.id}
+                    className="rounded-full border border-loss/30 bg-loss-muted px-2.5 py-1 text-xs font-medium text-loss"
+                  >
+                    {m.label}
+                  </span>
+                ))}
+              </div>
+            </div>
+          )}
         </section>
       )}
 
@@ -110,16 +141,28 @@ export default async function TradeDetailPage({
       )}
 
       {trade.screenshots.length > 0 && (
-        <section className="flex flex-wrap gap-3">
-          {trade.screenshots.map((s) => (
-            // eslint-disable-next-line @next/next/no-img-element
-            <img
-              key={s.id}
-              src={s.filePath}
-              alt="Trade screenshot"
-              className="h-40 w-40 rounded-lg border border-border object-cover"
-            />
-          ))}
+        <section>
+          <h2 className="mb-3 text-sm font-semibold text-foreground">
+            Screenshots
+          </h2>
+          <div className="flex flex-wrap gap-4">
+            {trade.screenshots.map((s) => (
+              <a
+                key={s.id}
+                href={s.filePath}
+                target="_blank"
+                rel="noreferrer"
+                className="block overflow-hidden rounded-xl border border-border bg-surface-raised transition-colors hover:border-accent/40"
+              >
+                {/* eslint-disable-next-line @next/next/no-img-element */}
+                <img
+                  src={s.filePath}
+                  alt="Trade screenshot"
+                  className="h-auto max-h-[600px] w-full max-w-3xl object-contain"
+                />
+              </a>
+            ))}
+          </div>
         </section>
       )}
     </div>
@@ -129,21 +172,33 @@ export default async function TradeDetailPage({
 function Stat({
   label,
   value,
-  accent,
+  positive,
 }: {
   label: string;
   value: string;
-  accent?: boolean;
+  positive?: boolean;
 }) {
   return (
-    <div className="rounded-xl border border-border bg-surface p-4">
+    <div
+      className={clsx(
+        "rounded-xl border-2 p-4 transition-colors",
+        positive === undefined
+          ? "border-accent/30 bg-accent/5"
+          : positive
+            ? "border-profit/40 bg-profit-muted"
+            : "border-loss/40 bg-loss-muted",
+      )}
+    >
       <p className="text-xs font-medium text-muted">{label}</p>
       <p
-        className={
-          accent
-            ? "mt-1 text-lg font-semibold text-foreground"
-            : "mt-1 text-lg font-semibold text-foreground"
-        }
+        className={clsx(
+          "mt-1 text-2xl font-bold tracking-tight",
+          positive === undefined
+            ? "text-accent"
+            : positive
+              ? "text-profit"
+              : "text-loss",
+        )}
       >
         {value}
       </p>
