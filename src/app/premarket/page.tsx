@@ -19,7 +19,7 @@ export default async function PreMarketPage() {
     <div>
       <PageHeader
         title="Pre-Market Analyst"
-        description="ICT Unicorn Model checklist for NQ and ES, run on demand each morning."
+        description="ICT Unicorn Model checklist for NQ, run on demand each morning."
         actions={
           <Link href="/premarket/learning" className="text-sm text-accent hover:underline">
             Learning System →
@@ -35,11 +35,10 @@ export default async function PreMarketPage() {
       {today.analyses.length === 0 ? (
         <div className="mb-8 rounded-xl border border-dashed border-border p-8 text-center text-sm text-muted">
           No analysis run yet today. Click &quot;Run Pre-Market Analysis&quot; above to
-          capture your TradingView charts and get today&apos;s bias and trade plan for NQ
-          and ES.
+          capture your TradingView charts and get today&apos;s bias and trade plan for NQ.
         </div>
       ) : (
-        <div className="mb-8 grid grid-cols-1 gap-4 xl:grid-cols-2">
+        <div className="mb-8 grid grid-cols-1 gap-4">
           {today.analyses.map((analysis) => (
             <InstrumentAnalysisCard key={analysis.id} analysis={analysis} showActions />
           ))}
@@ -59,13 +58,11 @@ export default async function PreMarketPage() {
                 <tr>
                   <th className="px-4 py-3">Date</th>
                   <th className="px-4 py-3">NQ</th>
-                  <th className="px-4 py-3">ES</th>
                 </tr>
               </thead>
               <tbody>
                 {history.map((day) => {
                   const nq = day.instruments.find((i) => i.instrument === "NQ");
-                  const es = day.instruments.find((i) => i.instrument === "ES");
                   return (
                     <tr key={day.date} className="border-t border-border hover:bg-surface">
                       <td className="px-4 py-3">
@@ -78,9 +75,6 @@ export default async function PreMarketPage() {
                       </td>
                       <td className="px-4 py-3 text-muted">
                         <InstrumentSummaryCell row={nq} />
-                      </td>
-                      <td className="px-4 py-3 text-muted">
-                        <InstrumentSummaryCell row={es} />
                       </td>
                     </tr>
                   );

@@ -9,7 +9,10 @@ import { gradeDailyReview } from "@/lib/premarket/run-review";
 import { parsePreMarketChecklist } from "@/lib/types/premarket-checklist";
 import type { Instrument } from "@/lib/ai/premarket-analysis";
 
-const INSTRUMENTS: Instrument[] = ["NQ", "ES"];
+// ES support stays in the codebase (Instrument type, schema, Settings layouts)
+// so it can be turned back on later by simply adding it back here — for now
+// the user only wants NQ analyzed.
+const INSTRUMENTS: Instrument[] = ["NQ"];
 
 function todayKey() {
   return new Date().toISOString().slice(0, 10);
