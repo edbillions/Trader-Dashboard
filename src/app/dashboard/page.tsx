@@ -115,20 +115,16 @@ export default async function DashboardPage() {
           <div className="mb-4 grid grid-cols-3 gap-4">
             <MiniStat
               label="Trades taken"
-              value={data.todaySummary.tradeCount.toString()}
+              value={<AnimatedNumber value={data.todaySummary.tradeCount} format="integer" />}
             />
             <MiniStat
               label="Win rate today"
-              value={
-                data.todaySummary.winRate != null
-                  ? `${data.todaySummary.winRate.toFixed(0)}%`
-                  : "—"
-              }
+              value={<AnimatedNumber value={data.todaySummary.winRate} format="percent1" />}
               sublabel={`${data.todaySummary.wins}W / ${data.todaySummary.losses}L`}
             />
             <MiniStat
               label="Net P&L today"
-              value={formatCurrency(data.todaySummary.netPnl)}
+              value={<AnimatedNumber value={data.todaySummary.netPnl} format="currency" />}
               positive={data.todaySummary.netPnl >= 0}
             />
           </div>
@@ -401,7 +397,7 @@ function MiniStat({
   positive,
 }: {
   label: string;
-  value: string;
+  value: React.ReactNode;
   sublabel?: string;
   positive?: boolean;
 }) {
