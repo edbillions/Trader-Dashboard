@@ -47,7 +47,7 @@ export default async function DashboardPage() {
       </div>
 
       <PageHeader
-        title="Dashboard"
+        title="Welcome Ed Billions!"
         description="Your trading day, at a glance."
       />
 
