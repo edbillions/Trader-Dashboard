@@ -22,6 +22,7 @@ const NAV_GROUPS = [
       { href: "/missed-trades", label: "Missed Trades" },
       { href: "/calendar", label: "Calendar" },
       { href: "/analytics", label: "Analytics" },
+      { href: "/reviews", label: "Reviews" },
       { href: "/chart-vault", label: "Chart Vault" },
     ],
   },
