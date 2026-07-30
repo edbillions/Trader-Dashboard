@@ -4,12 +4,8 @@ import {
   HTFPD_LEVEL_LABELS,
   LIQ_SWEPT_LABELS,
 } from "@/app/setup-grader/grading";
+import { computeSetupFactorsScore } from "@/lib/domain/setup-factors";
 import type { SetupFactorsChecklist } from "@/lib/types/setup-factors-checklist";
-
-const TOTAL_WEIGHT = (Object.values(CRITERIA_WEIGHTS) as number[]).reduce(
-  (a, b) => a + b,
-  0,
-);
 
 export function SetupFactorsSection({
   value,
@@ -35,38 +31,19 @@ export function SetupFactorsSection({
     );
   }
 
-  const confirmedFlags: (keyof SetupFactorsChecklist)[] = [
-    "biasConfirmed",
-    "dolIdentified",
-    "liquiditySweepConfirmed",
-    "htfDeliveryConfirmed",
-    "premiumDiscountConfirmed",
-    "breakerBlockConfirmed",
-    "notAt2RConfirmed",
-    "macroWindowConfirmed",
-  ];
-  const weightKeys: (keyof typeof CRITERIA_WEIGHTS)[] = [
-    "bias",
-    "dol",
-    "liq",
-    "htfpd",
-    "pd",
-    "bb",
-    "2r",
-    "macro",
-  ];
-  const earned = confirmedFlags.reduce(
-    (sum, flag, i) => (value[flag] ? sum + CRITERIA_WEIGHTS[weightKeys[i]] : sum),
-    0,
-  );
-  const confirmedCount = confirmedFlags.filter((f) => value[f]).length;
+  const score = computeSetupFactorsScore(value);
 
   return (
     <div className="rounded-lg border border-border bg-surface p-2.5">
       <div className="mb-2 flex items-center justify-between">
         <p className="text-[11px] font-medium text-muted">Setup Factors</p>
         <span className="text-[11px] text-muted">
-          {confirmedCount}/8 · {earned}/{TOTAL_WEIGHT} pts
+          {score.confirmedCount}/8 · {score.totalEarned}/{score.maxPossible} pts
+          {(score.liquidityBonus > 0 || score.htfFvgBonus > 0) && (
+            <span className="ml-1 text-accent">
+              (+{score.liquidityBonus + score.htfFvgBonus} confluence)
+            </span>
+          )}
         </span>
       </div>
 
@@ -102,6 +79,7 @@ export function SetupFactorsSection({
       <FactorRow
         label="Sweep of Major Liquidity"
         weight={CRITERIA_WEIGHTS.liq}
+        bonus={score.liquidityBonus}
         checked={value.liquiditySweepConfirmed}
         onToggle={() => set("liquiditySweepConfirmed", !value.liquiditySweepConfirmed)}
       >
@@ -114,6 +92,7 @@ export function SetupFactorsSection({
       <FactorRow
         label="HTF Delivery From PD Array (FVG)"
         weight={CRITERIA_WEIGHTS.htfpd}
+        bonus={score.htfFvgBonus}
         checked={value.htfDeliveryConfirmed}
         onToggle={() => set("htfDeliveryConfirmed", !value.htfDeliveryConfirmed)}
       >
@@ -227,12 +206,14 @@ function CheckboxChips({
 function FactorRow({
   label,
   weight,
+  bonus,
   checked,
   onToggle,
   children,
 }: {
   label: string;
   weight: number | string | null;
+  bonus?: number;
   checked: boolean;
   onToggle: () => void;
   children?: React.ReactNode;
@@ -247,6 +228,7 @@ function FactorRow({
           className="h-3.5 w-3.5 shrink-0"
         />
         <span className="flex-1 text-xs text-foreground">{label}</span>
+        {!!bonus && <span className="shrink-0 text-[10px] text-accent">+{bonus}</span>}
         {weight != null && (
           <span className="shrink-0 text-[10px] text-muted">{weight}</span>
         )}
