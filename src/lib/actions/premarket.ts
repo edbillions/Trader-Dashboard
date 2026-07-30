@@ -2,8 +2,10 @@
 
 import { revalidatePath } from "next/cache";
 import { prisma } from "@/lib/prisma";
-import { runPreMarketAnalysisForInstrument } from "@/lib/premarket/run-analysis";
-import { runDailyReviewForInstrument } from "@/lib/premarket/run-review";
+import { getTradingViewContext } from "@/lib/browser/tradingview-context";
+import { captureChartScreenshots, type CapturedChart } from "@/lib/browser/capture-charts";
+import { analyzePreMarketScreenshots } from "@/lib/premarket/run-analysis";
+import { gradeDailyReview } from "@/lib/premarket/run-review";
 import { parsePreMarketChecklist } from "@/lib/types/premarket-checklist";
 import type { Instrument } from "@/lib/ai/premarket-analysis";
 
@@ -24,10 +26,30 @@ function requiredString(formData: FormData, key: string): string {
 export async function runPreMarketAnalysisAction() {
   const today = new Date(`${todayKey()}T00:00:00`);
 
+  // Chromium's persistent-profile lock means only one browser context can use
+  // .tradingview-profile at a time — capture every instrument's charts
+  // sequentially through a single shared context first (this is what was
+  // silently logging one instrument out when both ran concurrently), then
+  // run the AI analysis stage — which never touches the browser — in parallel.
+  const context = await getTradingViewContext({ headless: true });
+  const captures: { instrument: Instrument; screenshots: CapturedChart[] | null }[] = [];
+  try {
+    for (const instrument of INSTRUMENTS) {
+      try {
+        const screenshots = await captureChartScreenshots(instrument, "morning", context);
+        captures.push({ instrument, screenshots });
+      } catch {
+        captures.push({ instrument, screenshots: null });
+      }
+    }
+  } finally {
+    await context.close();
+  }
+
   const outcomes = await Promise.all(
-    INSTRUMENTS.map(async (instrument) => ({
+    captures.map(async ({ instrument, screenshots }) => ({
       instrument,
-      result: await runPreMarketAnalysisForInstrument(instrument),
+      result: screenshots ? await analyzePreMarketScreenshots(instrument, screenshots) : null,
     })),
   );
 
@@ -116,23 +138,48 @@ export async function runDailyReviewAction() {
     where: { date: today },
     include: { review: true },
   });
+  const pending = analyses.filter((a) => !a.review);
+
+  const context = await getTradingViewContext({ headless: true });
+  const captures: { analysis: (typeof pending)[number]; screenshots: CapturedChart[] | null }[] =
+    [];
+  try {
+    for (const analysis of pending) {
+      try {
+        const screenshots = await captureChartScreenshots(
+          analysis.instrument as Instrument,
+          "eod",
+          context,
+        );
+        captures.push({ analysis, screenshots });
+      } catch {
+        captures.push({ analysis, screenshots: null });
+      }
+    }
+  } finally {
+    await context.close();
+  }
 
   const outcomes = await Promise.all(
-    analyses
-      .filter((a) => !a.review)
-      .map(async (a) => {
-        const result = await runDailyReviewForInstrument(a.instrument as Instrument, {
-          overallBias: a.overallBias,
-          biasReasoning: a.biasReasoning,
-          expectedNarrative: a.expectedNarrative,
-          invalidationLevel: a.invalidationLevel,
-          primaryTarget: a.primaryTarget,
-          secondaryTarget: a.secondaryTarget,
-          tradeable: a.tradeable,
-          noTradeReason: a.noTradeReason,
-        });
-        return { analysis: a, result };
-      }),
+    captures.map(async ({ analysis: a, screenshots }) => {
+      const result = screenshots
+        ? await gradeDailyReview(
+            a.instrument as Instrument,
+            {
+              overallBias: a.overallBias,
+              biasReasoning: a.biasReasoning,
+              expectedNarrative: a.expectedNarrative,
+              invalidationLevel: a.invalidationLevel,
+              primaryTarget: a.primaryTarget,
+              secondaryTarget: a.secondaryTarget,
+              tradeable: a.tradeable,
+              noTradeReason: a.noTradeReason,
+            },
+            screenshots,
+          )
+        : null;
+      return { analysis: a, result };
+    }),
   );
 
   for (const { analysis, result } of outcomes) {

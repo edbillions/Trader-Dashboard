@@ -36,12 +36,14 @@ export interface DailyReviewResult {
   grading: DailyReviewGrading;
 }
 
-export async function runDailyReviewForInstrument(
+// Split from capture for the same reason as analyzePreMarketScreenshots —
+// lets the Server Action capture all instruments sequentially through one
+// shared browser context before grading them (which doesn't touch the browser).
+export async function gradeDailyReview(
   instrument: Instrument,
   morningAnalysis: MorningAnalysisSummaryInput,
+  screenshots: CapturedChart[],
 ): Promise<DailyReviewResult | null> {
-  const screenshots = await captureChartScreenshots(instrument, "eod");
-
   const grading = await runDailyReviewGrading(
     instrument,
     formatMorningAnalysisSummary(morningAnalysis),
@@ -50,4 +52,12 @@ export async function runDailyReviewForInstrument(
   if (!grading) return null;
 
   return { screenshots, grading };
+}
+
+export async function runDailyReviewForInstrument(
+  instrument: Instrument,
+  morningAnalysis: MorningAnalysisSummaryInput,
+): Promise<DailyReviewResult | null> {
+  const screenshots = await captureChartScreenshots(instrument, "eod");
+  return gradeDailyReview(instrument, morningAnalysis, screenshots);
 }
