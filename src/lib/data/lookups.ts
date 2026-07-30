@@ -9,6 +9,7 @@ export async function getWizardLookups() {
     ruleViolations,
     instruments,
     accounts,
+    tagCategories,
   ] = await Promise.all([
     prisma.entryModel.findMany({
       where: { active: true },
@@ -35,6 +36,13 @@ export async function getWizardLookups() {
       where: { status: "active" },
       orderBy: { firmName: "asc" },
     }),
+    prisma.tagCategory.findMany({
+      where: { active: true },
+      orderBy: { order: "asc" },
+      include: {
+        tags: { where: { active: true }, orderBy: { label: "asc" } },
+      },
+    }),
   ]);
 
   return {
@@ -45,6 +53,7 @@ export async function getWizardLookups() {
     ruleViolations,
     instruments,
     accounts,
+    tagCategories,
   };
 }
 

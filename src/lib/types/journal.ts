@@ -32,6 +32,7 @@ export interface TradeInput {
   writeup: string;
   confluenceFactorIds: string[];
   mistakeIds: string[];
+  tagIds: string[]; // at most one TagOption id per TagCategory, enforced on save
   screenshotPaths: string[];
 }
 
@@ -42,7 +43,9 @@ export interface MissedTradeInput {
   reasonMissed: string;
   entryModel: string;
   session: string;
+  estimatedRMultiple: number | null;
   confluenceFactorIds: string[];
+  tagIds: string[];
 }
 
 export interface SaveTradingDayInput {
@@ -94,6 +97,7 @@ export function emptyTrade(): TradeInput {
     writeup: "",
     confluenceFactorIds: [],
     mistakeIds: [],
+    tagIds: [],
     screenshotPaths: [],
   };
 }
@@ -105,7 +109,9 @@ export function emptyMissedTrade(): MissedTradeInput {
     reasonMissed: "",
     entryModel: "",
     session: "",
+    estimatedRMultiple: null,
     confluenceFactorIds: [],
+    tagIds: [],
   };
 }
 

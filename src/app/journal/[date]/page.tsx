@@ -335,6 +335,11 @@ export default async function JournalDayPage({
                   <span className="font-medium text-foreground">
                     {m.symbol}
                     {m.entryModel ? ` · ${m.entryModel}` : ""}
+                    {m.estimatedRMultiple != null && (
+                      <span className="ml-2 text-xs font-normal text-muted">
+                        est. {m.estimatedRMultiple.toFixed(2)}R
+                      </span>
+                    )}
                   </span>
                   <form action={deleteMissedTradeAction}>
                     <input type="hidden" name="id" value={m.id} />

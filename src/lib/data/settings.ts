@@ -9,6 +9,7 @@ export async function getSettingsData() {
     mistakeTypes,
     ruleViolations,
     instruments,
+    tagCategories,
   ] = await Promise.all([
     prisma.appSettings.findUnique({ where: { id: 1 } }),
     prisma.entryModel.findMany({ orderBy: { label: "asc" } }),
@@ -17,6 +18,10 @@ export async function getSettingsData() {
     prisma.mistakeType.findMany({ orderBy: { label: "asc" } }),
     prisma.ruleViolationChecklistItem.findMany({ orderBy: { label: "asc" } }),
     prisma.instrumentConfig.findMany({ orderBy: { symbol: "asc" } }),
+    prisma.tagCategory.findMany({
+      orderBy: { order: "asc" },
+      include: { tags: { orderBy: { label: "asc" } } },
+    }),
   ]);
 
   return {
@@ -27,5 +32,6 @@ export async function getSettingsData() {
     mistakeTypes,
     ruleViolations,
     instruments,
+    tagCategories,
   };
 }

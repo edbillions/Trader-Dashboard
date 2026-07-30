@@ -5,6 +5,7 @@ import type { WizardLookups } from "@/lib/data/lookups";
 import { Field, TextInput, TextArea } from "@/components/ui/field";
 import { DatalistInput } from "@/components/ui/datalist-input";
 import { ChipMultiSelect } from "@/components/ui/chip-multiselect";
+import { TagCategoryPicker } from "@/components/ui/tag-category-picker";
 
 export function MissedTradeCard({
   index,
@@ -86,6 +87,23 @@ export function MissedTradeCard({
         </Field>
       </div>
 
+      <div className="mt-4 max-w-xs">
+        <Field label="Estimated outcome if taken (R)">
+          <TextInput
+            type="number"
+            step="any"
+            value={value.estimatedRMultiple ?? ""}
+            onChange={(e) =>
+              set(
+                "estimatedRMultiple",
+                e.target.value === "" ? null : Number(e.target.value),
+              )
+            }
+            placeholder="e.g. 2.5"
+          />
+        </Field>
+      </div>
+
       <div className="mt-4">
         <ChipMultiSelect
           label="Confluence factors"
@@ -95,6 +113,16 @@ export function MissedTradeCard({
           }))}
           selectedIds={value.confluenceFactorIds}
           onChange={(ids) => set("confluenceFactorIds", ids)}
+        />
+      </div>
+
+      <div className="mt-4">
+        <TagCategoryPicker
+          categories={lookups.tagCategories.filter(
+            (c) => c.name === "Missed Trade Reason",
+          )}
+          selectedIds={value.tagIds}
+          onChange={(ids) => set("tagIds", ids)}
         />
       </div>
     </div>

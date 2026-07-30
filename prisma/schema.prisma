@@ -153,6 +153,7 @@ model Trade {
   confluenceFactors ConfluenceFactor[] @relation("TradeConfluenceFactors")
   mistakes          MistakeType[]      @relation("TradeMistakes")
   screenshots       Screenshot[]
+  tags              TagOption[]        @relation("TradeTags")
 }
 
 model MissedTrade {
@@ -165,10 +166,12 @@ model MissedTrade {
   reasonMissed     String?
   entryModel       String?
   session          String?
+  estimatedRMultiple Float? // user's estimate of the outcome had the trade been taken, in R
 
   createdAt DateTime @default(now())
 
   confluenceFactors ConfluenceFactor[] @relation("MissedTradeConfluenceFactors")
+  tags              TagOption[]        @relation("MissedTradeTags")
 }
 
 model Screenshot {
@@ -209,6 +212,33 @@ model MistakeType {
   active Boolean @default(true)
 
   trades Trade[] @relation("TradeMistakes")
+}
+
+// ---------- Trade tagging engine (Entry/Exit/Management/psychology tags) ----------
+// User-extensible categories, each holding a small set of sentiment-tagged options.
+// "One tag per category per trade" is enforced in the save action, not the DB.
+
+model TagCategory {
+  id     String  @id @default(cuid())
+  name   String  @unique
+  order  Int     @default(0)
+  active Boolean @default(true)
+
+  tags TagOption[]
+}
+
+model TagOption {
+  id         String      @id @default(cuid())
+  categoryId String
+  category   TagCategory @relation(fields: [categoryId], references: [id], onDelete: Cascade)
+  label      String
+  sentiment  String // "positive" | "neutral" | "negative"
+  active     Boolean     @default(true)
+
+  trades       Trade[]       @relation("TradeTags")
+  missedTrades MissedTrade[] @relation("MissedTradeTags")
+
+  @@unique([categoryId, label])
 }
 
 // ---------- Goals ----------
@@ -276,6 +306,22 @@ model LifeGoal {
   direction    String    @default("increase") // "increase" | "limit"
   targetDate   DateTime?
   achieved     Boolean   @default(false)
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+}
+
+// ---------- Periodic Reviews ----------
+
+model PeriodReview {
+  id          String   @id @default(cuid())
+  title       String
+  rating      Int? // 1-5
+  periodStart DateTime
+  periodEnd   DateTime
+  category    String? // free text w/ suggestions ("Discipline", "Performance", "Psychology", ...)
+  notes       String?
+  isDraft     Boolean  @default(false)
 
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt

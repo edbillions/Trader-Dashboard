@@ -157,6 +157,9 @@ export async function saveTradingDayAction(
           mistakes: {
             connect: trade.mistakeIds.map((id) => ({ id })),
           },
+          tags: {
+            connect: trade.tagIds.map((id) => ({ id })),
+          },
         },
       });
 
@@ -180,8 +183,12 @@ export async function saveTradingDayAction(
           reasonMissed: missed.reasonMissed || null,
           entryModel: missed.entryModel || null,
           session: missed.session || null,
+          estimatedRMultiple: missed.estimatedRMultiple,
           confluenceFactors: {
             connect: missed.confluenceFactorIds.map((id) => ({ id })),
+          },
+          tags: {
+            connect: missed.tagIds.map((id) => ({ id })),
           },
         },
       });

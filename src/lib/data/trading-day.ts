@@ -41,9 +41,14 @@ export async function getTradingDayInputForDate(
     include: {
       ruleViolations: true,
       trades: {
-        include: { confluenceFactors: true, mistakes: true, screenshots: true },
+        include: {
+          confluenceFactors: true,
+          mistakes: true,
+          screenshots: true,
+          tags: true,
+        },
       },
-      missedTrades: { include: { confluenceFactors: true } },
+      missedTrades: { include: { confluenceFactors: true, tags: true } },
       planScreenshots: true,
     },
   });
@@ -95,6 +100,7 @@ export async function getTradingDayInputForDate(
       writeup: t.writeup ?? "",
       confluenceFactorIds: t.confluenceFactors.map((c) => c.id),
       mistakeIds: t.mistakes.map((m) => m.id),
+      tagIds: t.tags.map((tag) => tag.id),
       screenshotPaths: t.screenshots.map((s) => s.filePath),
     })),
     missedTrades: day.missedTrades.map((m) => ({
@@ -104,7 +110,9 @@ export async function getTradingDayInputForDate(
       reasonMissed: m.reasonMissed ?? "",
       entryModel: m.entryModel ?? "",
       session: m.session ?? "",
+      estimatedRMultiple: m.estimatedRMultiple,
       confluenceFactorIds: m.confluenceFactors.map((c) => c.id),
+      tagIds: m.tags.map((tag) => tag.id),
     })),
   };
 }

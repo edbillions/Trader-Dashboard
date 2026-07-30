@@ -8,6 +8,7 @@ import type { WizardLookups } from "@/lib/data/lookups";
 import { Field, TextInput, TextArea, Select } from "@/components/ui/field";
 import { DatalistInput } from "@/components/ui/datalist-input";
 import { ChipMultiSelect } from "@/components/ui/chip-multiselect";
+import { TagCategoryPicker } from "@/components/ui/tag-category-picker";
 
 export function TradeCard({
   index,
@@ -409,6 +410,19 @@ export function TradeCard({
           }))}
           selectedIds={value.mistakeIds}
           onChange={(ids) => set("mistakeIds", ids)}
+        />
+      </div>
+
+      <div className="mt-4 rounded-lg border border-border bg-surface p-3">
+        <p className="mb-3 text-xs font-medium text-muted">
+          Tags — one per category, tracked in Analytics.
+        </p>
+        <TagCategoryPicker
+          categories={lookups.tagCategories.filter(
+            (c) => c.name !== "Missed Trade Reason",
+          )}
+          selectedIds={value.tagIds}
+          onChange={(ids) => set("tagIds", ids)}
         />
       </div>
 

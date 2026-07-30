@@ -149,3 +149,32 @@ export async function deleteInstrumentAction(formData: FormData) {
   await prisma.instrumentConfig.delete({ where: { id } });
   revalidatePath("/settings");
 }
+
+export async function createTagCategoryAction(formData: FormData) {
+  const name = requiredString(formData, "name");
+  const count = await prisma.tagCategory.count();
+  await prisma.tagCategory.create({ data: { name, order: count } });
+  revalidatePath("/settings");
+}
+
+export async function toggleTagCategoryActiveAction(formData: FormData) {
+  const id = idFrom(formData);
+  const active = activeFrom(formData);
+  await prisma.tagCategory.update({ where: { id }, data: { active } });
+  revalidatePath("/settings");
+}
+
+export async function createTagOptionAction(formData: FormData) {
+  const categoryId = requiredString(formData, "categoryId");
+  const label = requiredString(formData, "label");
+  const sentiment = requiredString(formData, "sentiment");
+  await prisma.tagOption.create({ data: { categoryId, label, sentiment } });
+  revalidatePath("/settings");
+}
+
+export async function toggleTagOptionActiveAction(formData: FormData) {
+  const id = idFrom(formData);
+  const active = activeFrom(formData);
+  await prisma.tagOption.update({ where: { id }, data: { active } });
+  revalidatePath("/settings");
+}

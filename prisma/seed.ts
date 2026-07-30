@@ -45,6 +45,91 @@ const instruments = [
   { symbol: "MNQ", tickValue: 0.5, tickSize: 0.25, pointValue: 2 },
 ];
 
+const tagCategories: {
+  name: string;
+  order: number;
+  tags: { label: string; sentiment: "positive" | "neutral" | "negative" }[];
+}[] = [
+  {
+    name: "Entry Comment",
+    order: 1,
+    tags: [
+      { label: "Perfect entry", sentiment: "positive" },
+      { label: "Too early", sentiment: "negative" },
+      { label: "Too late", sentiment: "negative" },
+      { label: "Impulsive", sentiment: "negative" },
+      { label: "Revenge trading", sentiment: "negative" },
+      { label: "Unsure", sentiment: "neutral" },
+    ],
+  },
+  {
+    name: "Exit Comment",
+    order: 2,
+    tags: [
+      { label: "All rules", sentiment: "positive" },
+      { label: "Scaled out", sentiment: "neutral" },
+      { label: "End of day", sentiment: "neutral" },
+      { label: "Scared - early", sentiment: "negative" },
+      { label: "Greedy - too late", sentiment: "negative" },
+      { label: "Mistake", sentiment: "negative" },
+    ],
+  },
+  {
+    name: "Trade Management",
+    order: 3,
+    tags: [
+      { label: "Managed well", sentiment: "positive" },
+      { label: "No management", sentiment: "neutral" },
+      { label: "SL too close", sentiment: "negative" },
+      { label: "Mistake", sentiment: "negative" },
+    ],
+  },
+  {
+    name: "Emotional State",
+    order: 4,
+    tags: [
+      { label: "Calm & focused", sentiment: "positive" },
+      { label: "Anxious/rushed", sentiment: "negative" },
+      { label: "Frustrated after a loss", sentiment: "negative" },
+      { label: "Overconfident after a win", sentiment: "negative" },
+      { label: "Fatigued", sentiment: "negative" },
+      { label: "FOMO", sentiment: "negative" },
+    ],
+  },
+  {
+    name: "Decision Confidence",
+    order: 5,
+    tags: [
+      { label: "High conviction (obvious A+)", sentiment: "positive" },
+      { label: "Hesitant entry", sentiment: "negative" },
+      { label: "Forced/uncertain setup", sentiment: "negative" },
+      { label: "Chased without full confirmation", sentiment: "negative" },
+    ],
+  },
+  {
+    name: "Behavioral Consistency",
+    order: 6,
+    tags: [
+      { label: "Followed plan exactly", sentiment: "positive" },
+      { label: "Walked away after rule breach", sentiment: "positive" },
+      { label: "Deviated from plan", sentiment: "negative" },
+      { label: "Revenge re-entry", sentiment: "negative" },
+      { label: "Sized up impulsively", sentiment: "negative" },
+    ],
+  },
+  {
+    name: "Missed Trade Reason",
+    order: 7,
+    tags: [
+      { label: "Hesitated on valid setup", sentiment: "negative" },
+      { label: "Was in another trade/copier lag", sentiment: "neutral" },
+      { label: "Away from desk", sentiment: "neutral" },
+      { label: "Second-guessed signal", sentiment: "negative" },
+      { label: "Didn't meet full checklist", sentiment: "neutral" },
+    ],
+  },
+];
+
 async function main() {
   for (const label of entryModels) {
     await prisma.entryModel.upsert({
@@ -92,6 +177,28 @@ async function main() {
       update: {},
       create: instrument,
     });
+  }
+
+  for (const category of tagCategories) {
+    const created = await prisma.tagCategory.upsert({
+      where: { name: category.name },
+      update: { order: category.order },
+      create: { name: category.name, order: category.order },
+    });
+
+    for (const tag of category.tags) {
+      await prisma.tagOption.upsert({
+        where: {
+          categoryId_label: { categoryId: created.id, label: tag.label },
+        },
+        update: { sentiment: tag.sentiment },
+        create: {
+          categoryId: created.id,
+          label: tag.label,
+          sentiment: tag.sentiment,
+        },
+      });
+    }
   }
 
   await prisma.appSettings.upsert({
