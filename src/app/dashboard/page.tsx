@@ -6,6 +6,7 @@ import { getAnalyticsData } from "@/lib/data/analytics";
 import { getAgentInsights } from "@/lib/data/agents";
 import { getTodayMacroBriefing } from "@/lib/data/macro-briefing";
 import { formatCurrency, formatR } from "@/lib/pnl";
+import { AnimatedNumber } from "@/components/ui/animated-number";
 import { CompositeRadar } from "@/components/analytics/composite-radar";
 import { EquityCurveChart } from "@/components/dashboard/equity-curve-chart";
 import { DashboardTodoWidget } from "@/components/dashboard/dashboard-todo-widget";
@@ -179,10 +180,13 @@ export default async function DashboardPage() {
       <DashboardTodoWidget todos={todayTodos} />
 
       <div className="mb-8 grid grid-cols-2 gap-4">
-        <Stat label="Total trades" value={data.totalTrades.toString()} />
+        <Stat
+          label="Total trades"
+          value={<AnimatedNumber value={data.totalTrades} format="integer" />}
+        />
         <Stat
           label="Net P&L (all-time)"
-          value={formatCurrency(data.netPnl)}
+          value={<AnimatedNumber value={data.netPnl} format="currency" />}
           positive={data.netPnl >= 0}
         />
       </div>
@@ -217,38 +221,33 @@ export default async function DashboardPage() {
             Composite score
           </h3>
           <p className="mb-2 text-3xl font-semibold text-foreground">
-            {analytics.composite.overall != null
-              ? Math.round(analytics.composite.overall)
-              : "—"}
+            <AnimatedNumber value={analytics.composite.overall} format="integer" />
           </p>
           <CompositeRadar breakdown={analytics.composite.breakdown} />
         </div>
 
         <div className="grid grid-cols-2 gap-4 lg:col-span-2">
-          <Stat label="Win rate" value={fmtPct(analytics.totals.winRate)} />
+          <Stat
+            label="Win rate"
+            value={<AnimatedNumber value={analytics.totals.winRate} format="percent1" />}
+          />
           <Stat
             label="Profit factor"
-            value={
-              analytics.totals.profitFactor != null
-                ? analytics.totals.profitFactor.toFixed(2)
-                : "—"
-            }
+            value={<AnimatedNumber value={analytics.totals.profitFactor} format="fixed2" />}
           />
           <Stat
             label="Avg win / avg loss"
             value={
-              formatCurrency(analytics.totals.avgWin) +
-              " / " +
-              formatCurrency(analytics.totals.avgLoss)
+              <>
+                <AnimatedNumber value={analytics.totals.avgWin} format="currency" />
+                {" / "}
+                <AnimatedNumber value={analytics.totals.avgLoss} format="currency" />
+              </>
             }
           />
           <Stat
             label="Discipline score"
-            value={
-              analytics.totals.disciplineScore != null
-                ? Math.round(analytics.totals.disciplineScore).toString()
-                : "—"
-            }
+            value={<AnimatedNumber value={analytics.totals.disciplineScore} format="integer" />}
           />
         </div>
       </div>
@@ -387,10 +386,6 @@ export default async function DashboardPage() {
   );
 }
 
-function fmtPct(value: number | null) {
-  return value != null ? `${value.toFixed(1)}%` : "—";
-}
-
 function MiniStat({
   label,
   value,
@@ -427,7 +422,7 @@ function Stat({
   positive,
 }: {
   label: string;
-  value: string;
+  value: React.ReactNode;
   positive?: boolean;
 }) {
   return (

@@ -1,4 +1,5 @@
 import { clsx } from "clsx";
+import { AnimatedNumber } from "@/components/ui/animated-number";
 
 export function StreakCard({
   label,
@@ -35,7 +36,7 @@ export function StreakCard({
       <div className="flex flex-col items-center py-2 text-center">
         <span className="text-2xl">{icon}</span>
         <span className={clsx("mt-1 text-3xl font-bold", toneClass)}>
-          {count}
+          <AnimatedNumber value={count} format="integer" />
         </span>
         <span className={clsx("text-xs font-medium", toneClass)}>
           {countLabel}

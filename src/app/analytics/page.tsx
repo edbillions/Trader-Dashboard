@@ -1,6 +1,7 @@
 import { PageHeader } from "@/components/layout/page-header";
 import { getAnalyticsData } from "@/lib/data/analytics";
 import { formatCurrency } from "@/lib/pnl";
+import { AnimatedNumber } from "@/components/ui/animated-number";
 import { CompositeRadar } from "@/components/analytics/composite-radar";
 import { NetPnlBarChart } from "@/components/analytics/net-pnl-bar-chart";
 import { BreakdownTable } from "@/components/analytics/breakdown-table";
@@ -52,20 +53,29 @@ export default async function AnalyticsPage() {
             Composite score
           </h3>
           <p className="mb-2 text-3xl font-semibold text-foreground">
-            {composite.overall != null ? Math.round(composite.overall) : "—"}
+            <AnimatedNumber value={composite.overall} format="integer" />
           </p>
           <CompositeRadar breakdown={composite.breakdown} />
         </div>
 
         <div className="grid grid-cols-2 gap-4 lg:col-span-2">
-          <Stat label="Win rate" value={fmtPct(totals.winRate)} />
+          <Stat
+            label="Win rate"
+            value={<AnimatedNumber value={totals.winRate} format="percent1" />}
+          />
           <Stat
             label="Profit factor"
-            value={totals.profitFactor != null ? totals.profitFactor.toFixed(2) : "—"}
+            value={<AnimatedNumber value={totals.profitFactor} format="fixed2" />}
           />
           <Stat
             label="Avg win / avg loss"
-            value={formatCurrency(totals.avgWin) + " / " + formatCurrency(totals.avgLoss)}
+            value={
+              <>
+                <AnimatedNumber value={totals.avgWin} format="currency" />
+                {" / "}
+                <AnimatedNumber value={totals.avgLoss} format="currency" />
+              </>
+            }
           />
           <Stat
             label="Discipline score"
@@ -181,11 +191,7 @@ export default async function AnalyticsPage() {
   );
 }
 
-function fmtPct(value: number | null) {
-  return value != null ? `${value.toFixed(1)}%` : "—";
-}
-
-function Stat({ label, value }: { label: string; value: string }) {
+function Stat({ label, value }: { label: string; value: React.ReactNode }) {
   return (
     <div className="rounded-xl border border-border bg-surface p-4">
       <p className="text-xs font-medium text-muted">{label}</p>
