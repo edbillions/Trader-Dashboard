@@ -30,6 +30,21 @@ const IMPORTANCE_LABEL: Record<EconomicCalendarEvent["importance"], string> = {
   low: "Low",
 };
 
+// The AI returns `asOf` as free text (usually an ISO timestamp, but not
+// guaranteed) — parse it into a readable date when possible, and fall back
+// to showing it as-is rather than hiding unusual output.
+function formatAsOf(asOf: string | null): string {
+  if (!asOf) return "As of unknown";
+  const parsed = new Date(asOf);
+  if (Number.isNaN(parsed.getTime())) return asOf;
+  return `As of ${parsed.toLocaleString([], {
+    month: "short",
+    day: "numeric",
+    hour: "numeric",
+    minute: "2-digit",
+  })}`;
+}
+
 export function MacroBriefingCard({
   initial,
 }: {
@@ -78,7 +93,9 @@ export function MacroBriefingCard({
         <div className="flex items-center gap-3">
           {briefing && (
             <span className="text-xs text-muted">
-              {briefing.asOf ?? "Generated"}{" "}
+              {formatAsOf(briefing.asOf)}
+              <span className="mx-1.5 text-border">·</span>
+              saved{" "}
               {new Date(briefing.generatedAt).toLocaleTimeString([], {
                 hour: "numeric",
                 minute: "2-digit",
