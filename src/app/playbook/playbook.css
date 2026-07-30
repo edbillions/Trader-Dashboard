@@ -80,6 +80,54 @@
   line-height: 1.65;
 }
 
+/* DIAGRAM FEATURE */
+.unicorn-playbook .diagram-feature {
+  position: relative;
+  overflow: hidden;
+  text-align: center;
+  border: 1px solid color-mix(in srgb, var(--accent) 35%, transparent);
+  border-radius: 16px;
+  background: linear-gradient(
+    160deg,
+    color-mix(in srgb, var(--accent) 14%, var(--surface)),
+    var(--surface) 60%
+  );
+  box-shadow: 0 0 60px -20px var(--accent);
+  padding: 22px 20px 24px;
+  margin-bottom: 20px;
+}
+.unicorn-playbook .diagram-feature-eyebrow {
+  font-size: 11px;
+  font-weight: 600;
+  color: var(--accent);
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+  margin-bottom: 8px;
+}
+.unicorn-playbook .diagram-feature-title {
+  font-size: 19px;
+  font-weight: 700;
+  color: var(--foreground);
+  margin-bottom: 16px;
+}
+.unicorn-playbook .diagram-feature-img {
+  border-radius: 12px;
+  overflow: hidden;
+  border: 1px solid var(--border);
+  box-shadow: 0 20px 50px -25px rgba(0, 0, 0, 0.6);
+}
+.unicorn-playbook .diagram-feature-img img {
+  display: block;
+  width: 100%;
+  background: #f2f1ed;
+}
+.unicorn-playbook .diagram-feature-cap {
+  margin-top: 14px;
+  font-size: 13px;
+  color: var(--muted);
+  line-height: 1.5;
+}
+
 /* TOC */
 .unicorn-playbook .toc {
   background: var(--surface);

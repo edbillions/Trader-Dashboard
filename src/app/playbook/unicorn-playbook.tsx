@@ -8,6 +8,15 @@ const BODY_HTML = `
   <div class="hero-p">This is the written strategy behind your live trade grader. Where the checklist scores a setup in real time, this playbook explains <em>why</em> each criterion exists and how it fits together. Read it once end to end, then keep the grader as your in-session tool.</div>
 </div>
 
+<div class="diagram-feature">
+  <div class="diagram-feature-eyebrow">◈ Visual Reference</div>
+  <h3 class="diagram-feature-title">Unicorn Model — Bearish vs. Bullish</h3>
+  <div class="diagram-feature-img">
+    <img src="/playbook/unicorn-model-bearish-bullish.jpg" alt="Unicorn Model diagram comparing a bearish and a bullish setup, marking the Unicorn zone, entry, stop loss below/above the Unicorn, and 2R take profit." />
+  </div>
+  <p class="diagram-feature-cap">The Unicorn zone (breaker + FVG overlap) on each side — entry inside the zone, stop beyond it, target at minimum 2R.</p>
+</div>
+
 <div class="toc">
   <div class="toc-hdr">◈ Contents</div>
   <div class="toc-grid">
