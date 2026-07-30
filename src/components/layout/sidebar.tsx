@@ -19,6 +19,7 @@ const NAV_GROUPS = [
     label: "History",
     items: [
       { href: "/trades", label: "Trades" },
+      { href: "/missed-trades", label: "Missed Trades" },
       { href: "/calendar", label: "Calendar" },
       { href: "/analytics", label: "Analytics" },
       { href: "/chart-vault", label: "Chart Vault" },
