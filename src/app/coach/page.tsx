@@ -2,6 +2,8 @@ import { PageHeader } from "@/components/layout/page-header";
 import { Field, TextInput, Select } from "@/components/ui/field";
 import { ProgressBar } from "@/components/ui/progress-bar";
 import { AgentCard } from "@/components/agents/agent-card";
+import { CoachScorecard } from "@/components/coach/coach-scorecard";
+import { PerformanceSimulator } from "@/components/coach/performance-simulator";
 import { getCoachData } from "@/lib/data/coach";
 import { getAgentInsights } from "@/lib/data/agents";
 import { formatCurrency } from "@/lib/pnl";
@@ -83,6 +85,15 @@ export default async function CoachPage() {
           <AgentCard insight={agents.pattern} />
           <AgentCard insight={agents.sentiment} />
         </div>
+      </section>
+
+      <CoachScorecard />
+
+      <section className="mb-8 rounded-xl border border-border bg-surface p-4">
+        <h2 className="mb-3 text-sm font-semibold text-foreground">
+          Performance simulator
+        </h2>
+        <PerformanceSimulator historicalRMultiples={data.historicalRMultiples} />
       </section>
 
       <div className="grid grid-cols-1 gap-8 lg:grid-cols-2">

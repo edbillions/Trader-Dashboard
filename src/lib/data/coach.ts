@@ -65,10 +65,15 @@ export async function getCoachData() {
       ? recentScored.reduce((a, b) => a + b, 0) / recentScored.length
       : null;
 
-  const [goals, processGoals] = await Promise.all([
+  const [goals, processGoals, rMultipleTrades] = await Promise.all([
     prisma.goal.findMany({ orderBy: { periodStart: "desc" } }),
     prisma.processGoal.findMany({ orderBy: { periodStart: "desc" } }),
+    prisma.trade.findMany({
+      where: { rMultiple: { not: null } },
+      select: { rMultiple: true },
+    }),
   ]);
+  const historicalRMultiples = rMultipleTrades.map((t) => t.rMultiple as number);
 
   const dollarGoals = await Promise.all(
     goals.map(async (goal) => {
@@ -138,5 +143,6 @@ export async function getCoachData() {
     disciplineHistory,
     dollarGoals,
     processGoalResults,
+    historicalRMultiples,
   };
 }
