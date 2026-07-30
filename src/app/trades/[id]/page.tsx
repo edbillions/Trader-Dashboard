@@ -64,9 +64,10 @@ export default async function TradeDetailPage({
           <Info label="Target (actual)" value={trade.targetActual?.toString() ?? null} />
           <Info label="Commission" value={trade.commission != null ? formatCurrency(trade.commission) : null} />
           <Info label="Account" value={trade.account ? `${trade.account.firmName} · ${trade.account.accountName}` : null} />
-          <Info label="HTF timeframe" value={trade.htfTimeframe} />
-          <Info label="Intermediate timeframe" value={trade.intermediateTimeframe} />
           <Info label="Entry timeframe" value={trade.entryTimeframe} />
+          <LinkInfo label="HTF chart" href={trade.htfChartLink} />
+          <LinkInfo label="Intermediate chart" href={trade.intermediateChartLink} />
+          <LinkInfo label="Entry chart" href={trade.entryChartLink} />
           <Info label="Entry model" value={trade.entryModel} />
           <Info label="Session" value={trade.session} />
           <Info label="Setup grade" value={trade.setupGrade} />
@@ -155,6 +156,28 @@ function Info({ label, value }: { label: string; value: string | null }) {
     <div>
       <dt className="text-xs font-medium text-muted">{label}</dt>
       <dd className="mt-0.5 text-foreground">{value || "—"}</dd>
+    </div>
+  );
+}
+
+function LinkInfo({ label, href }: { label: string; href: string | null }) {
+  return (
+    <div>
+      <dt className="text-xs font-medium text-muted">{label}</dt>
+      <dd className="mt-0.5 text-foreground">
+        {href ? (
+          <a
+            href={href}
+            target="_blank"
+            rel="noreferrer"
+            className="text-accent hover:underline"
+          >
+            View chart →
+          </a>
+        ) : (
+          "—"
+        )}
+      </dd>
     </div>
   );
 }

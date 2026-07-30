@@ -274,28 +274,43 @@ export function TradeCard({
             onChange={(e) => set("entryModel", e.target.value)}
           />
         </Field>
+        <Field label="Entry timeframe">
+          <Select
+            value={value.entryTimeframe}
+            onChange={(e) => set("entryTimeframe", e.target.value)}
+          >
+            <option value="">—</option>
+            <option value="1m">1m</option>
+            <option value="3m">3m</option>
+            <option value="5m">5m</option>
+            <option value="15m">15m</option>
+          </Select>
+        </Field>
       </div>
 
       <div className="mt-4 grid grid-cols-3 gap-4">
-        <Field label="HTF timeframe">
+        <Field label="HTF chart link">
           <TextInput
-            value={value.htfTimeframe}
-            onChange={(e) => set("htfTimeframe", e.target.value)}
-            placeholder="4H"
+            type="url"
+            value={value.htfChartLink}
+            onChange={(e) => set("htfChartLink", e.target.value)}
+            placeholder="https://www.tradingview.com/x/..."
           />
         </Field>
-        <Field label="Intermediate timeframe">
+        <Field label="Intermediate chart link">
           <TextInput
-            value={value.intermediateTimeframe}
-            onChange={(e) => set("intermediateTimeframe", e.target.value)}
-            placeholder="15m"
+            type="url"
+            value={value.intermediateChartLink}
+            onChange={(e) => set("intermediateChartLink", e.target.value)}
+            placeholder="https://www.tradingview.com/x/..."
           />
         </Field>
-        <Field label="Entry timeframe">
+        <Field label="Entry chart link">
           <TextInput
-            value={value.entryTimeframe}
-            onChange={(e) => set("entryTimeframe", e.target.value)}
-            placeholder="1m"
+            type="url"
+            value={value.entryChartLink}
+            onChange={(e) => set("entryChartLink", e.target.value)}
+            placeholder="https://www.tradingview.com/x/..."
           />
         </Field>
       </div>

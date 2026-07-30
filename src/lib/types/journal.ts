@@ -18,8 +18,9 @@ export interface TradeInput {
   targetActual: number | null;
   positionSize: number;
   commission: number | null;
-  htfTimeframe: string;
-  intermediateTimeframe: string;
+  htfChartLink: string;
+  intermediateChartLink: string;
+  entryChartLink: string;
   entryTimeframe: string;
   entryModel: string;
   session: string;
@@ -83,8 +84,9 @@ export function emptyTrade(): TradeInput {
     targetActual: null,
     positionSize: 1,
     commission: null,
-    htfTimeframe: "",
-    intermediateTimeframe: "",
+    htfChartLink: "",
+    intermediateChartLink: "",
+    entryChartLink: "",
     entryTimeframe: "",
     entryModel: "",
     session: "",

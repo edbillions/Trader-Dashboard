@@ -130,9 +130,10 @@ model Trade {
   netPnl   Float?
   rMultiple Float?
 
-  htfTimeframe          String?
-  intermediateTimeframe String?
-  entryTimeframe        String?
+  htfChartLink          String? // TradingView chart link for the HTF read
+  intermediateChartLink String? // TradingView chart link for the intermediate/context timeframe
+  entryChartLink        String? // TradingView chart link for the entry/execution timeframe
+  entryTimeframe        String? // e.g. "1m" | "5m" | "15m" — drives the Analytics "by entry timeframe" breakdown
 
   entryModel String?
   session    String?
