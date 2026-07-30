@@ -7,12 +7,10 @@ import { captureChartScreenshots, type CapturedChart } from "@/lib/browser/captu
 import { analyzePreMarketScreenshots } from "@/lib/premarket/run-analysis";
 import { gradeDailyReview } from "@/lib/premarket/run-review";
 import { parsePreMarketChecklist } from "@/lib/types/premarket-checklist";
+import { ACTIVE_INSTRUMENTS } from "@/lib/premarket/instruments";
 import type { Instrument } from "@/lib/ai/premarket-analysis";
 
-// ES support stays in the codebase (Instrument type, schema, Settings layouts)
-// so it can be turned back on later by simply adding it back here — for now
-// the user only wants NQ analyzed.
-const INSTRUMENTS: Instrument[] = ["NQ"];
+const INSTRUMENTS = ACTIVE_INSTRUMENTS;
 
 function todayKey() {
   return new Date().toISOString().slice(0, 10);

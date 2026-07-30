@@ -1,5 +1,6 @@
 import { prisma } from "@/lib/prisma";
 import { computeLearningSystemStats } from "@/lib/domain/premarket";
+import { ACTIVE_INSTRUMENTS } from "@/lib/premarket/instruments";
 
 function todayKey() {
   return new Date().toISOString().slice(0, 10);
@@ -9,9 +10,9 @@ function dateKeyOf(d: Date) {
   return d.toISOString().slice(0, 10);
 }
 
-async function getAnalysesForDate(date: Date) {
+async function getAnalysesForDate(date: Date, instrumentFilter?: string[]) {
   return prisma.preMarketAnalysis.findMany({
-    where: { date },
+    where: instrumentFilter ? { date, instrument: { in: instrumentFilter } } : { date },
     include: {
       screenshots: { orderBy: [{ phase: "asc" }, { timeframe: "asc" }] },
       review: true,
@@ -20,9 +21,13 @@ async function getAnalysesForDate(date: Date) {
   });
 }
 
+// Today's live view only shows currently-active instruments (see
+// ACTIVE_INSTRUMENTS) — e.g. a leftover ES row from before ES was disabled
+// won't reappear here. History/detail pages stay unfiltered since they're a
+// read-only record of whatever actually ran that day.
 export async function getTodayPreMarketState() {
   const today = new Date(`${todayKey()}T00:00:00`);
-  const analyses = await getAnalysesForDate(today);
+  const analyses = await getAnalysesForDate(today, ACTIVE_INSTRUMENTS);
   return { date: todayKey(), analyses };
 }
 
