@@ -1,8 +1,10 @@
 import Link from "next/link";
+import { clsx } from "clsx";
 import { notFound } from "next/navigation";
 import { PageHeader } from "@/components/layout/page-header";
 import { getTradingDayDetail } from "@/lib/data/trading-day";
 import { formatCurrency, formatR } from "@/lib/pnl";
+import { quoteOfTheDay } from "@/lib/motivational-quotes";
 import {
   deleteTradingDayAction,
   deleteTradeAction,
@@ -43,12 +45,29 @@ export default async function JournalDayPage({
   const scorecard = parseScorecard(day.scorecard);
   const scorecardTotalValue = scorecardTotal(scorecard);
   const scorecardBandValue = scorecardBand(scorecardTotalValue);
+  const dailyQuote = quoteOfTheDay(new Date(`${date}T00:00:00`));
 
   return (
     <div>
       <PageHeader
         title={date}
-        description={`${day.trades.length} trade${day.trades.length === 1 ? "" : "s"} · Net P&L ${formatCurrency(netPnl)}`}
+        description={
+          <span>
+            <span className="font-semibold text-accent">
+              {day.trades.length} trade{day.trades.length === 1 ? "" : "s"}
+            </span>
+            {" · Net P&L "}
+            <span
+              className={
+                netPnl >= 0
+                  ? "font-semibold text-profit"
+                  : "font-semibold text-loss"
+              }
+            >
+              {formatCurrency(netPnl)}
+            </span>
+          </span>
+        }
         actions={
           <div className="flex items-center gap-2">
             <Link
@@ -69,6 +88,27 @@ export default async function JournalDayPage({
           </div>
         }
       />
+
+      <div
+        className={clsx(
+          "mb-6 flex items-center gap-3 rounded-xl border-2 px-4 py-3",
+          day.planAdherenceGrade
+            ? GRADE_BADGE_STYLES[day.planAdherenceGrade] ?? "border-border bg-surface-raised text-muted"
+            : "border-border bg-surface-raised text-muted",
+        )}
+      >
+        <span className="text-3xl font-black leading-none">
+          {day.planAdherenceGrade || "—"}
+        </span>
+        <div className="min-w-0 flex-1">
+          <p className="text-xs font-semibold uppercase tracking-wide">
+            {day.planAdherenceGrade ? "Plan adherence grade" : "Not graded yet"}
+          </p>
+          <p className="truncate text-[11px] italic opacity-80">
+            &ldquo;{dailyQuote}&rdquo;
+          </p>
+        </div>
+      </div>
 
       {day.aiSummary && (
         <div className="mb-6 rounded-xl border border-accent/40 bg-accent/10 p-4">
@@ -435,6 +475,13 @@ export default async function JournalDayPage({
     </div>
   );
 }
+
+const GRADE_BADGE_STYLES: Record<string, string> = {
+  "A+": "border-profit/60 bg-profit-muted text-profit shadow-[0_0_20px_-6px_var(--profit)]",
+  A: "border-profit/50 bg-profit-muted text-profit shadow-[0_0_16px_-8px_var(--profit)]",
+  B: "border-accent/50 bg-accent/10 text-accent shadow-[0_0_16px_-8px_var(--accent)]",
+  C: "border-loss/40 bg-loss-muted text-loss",
+};
 
 function Info({ label, value }: { label: string; value: string | null }) {
   return (

@@ -19,6 +19,7 @@ export const MOTIVATIONAL_QUOTES = [
   "Journaling today is tomorrow's edge.",
   "Every rule you break costs more than the trade you were trying to save.",
   "Slow is smooth. Smooth is profitable.",
+  "Keep getting 1% better.",
 ];
 
 export function quoteOfTheDay(date: Date = new Date()): string {
