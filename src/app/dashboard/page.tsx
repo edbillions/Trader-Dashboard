@@ -325,8 +325,15 @@ export default async function DashboardPage() {
                 className="flex flex-col gap-2 rounded-lg border border-border bg-surface px-4 py-3 text-sm hover:bg-surface-raised"
               >
                 <div className="flex items-center justify-between">
-                  <span className="font-medium text-foreground">
-                    {day.date}
+                  <span className="flex items-center gap-2">
+                    <span className="font-medium text-foreground">
+                      {day.date}
+                    </span>
+                    {day.symbols.length > 0 && (
+                      <span className="text-base font-bold text-foreground">
+                        {day.symbols.join(", ")}
+                      </span>
+                    )}
                   </span>
                   <span
                     className={
@@ -352,9 +359,6 @@ export default async function DashboardPage() {
                         : ""}
                     </span>
                     {day.totalR != null && <span>{formatR(day.totalR)} total</span>}
-                    {day.symbols.length > 0 && (
-                      <span>{day.symbols.join(", ")}</span>
-                    )}
                     {day.planAdherenceGrade && (
                       <span className="rounded-full bg-surface-raised px-2 py-0.5 text-[11px] font-medium text-foreground">
                         Plan grade {day.planAdherenceGrade}
