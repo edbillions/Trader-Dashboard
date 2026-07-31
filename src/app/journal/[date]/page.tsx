@@ -5,6 +5,7 @@ import { PageHeader } from "@/components/layout/page-header";
 import { getTradingDayDetail } from "@/lib/data/trading-day";
 import { formatCurrency, formatR } from "@/lib/pnl";
 import { quoteOfTheDay } from "@/lib/motivational-quotes";
+import { DayPerformanceCard } from "@/components/journal/day-performance-card";
 import {
   deleteTradingDayAction,
   deleteTradeAction,
@@ -109,6 +110,8 @@ export default async function JournalDayPage({
           </p>
         </div>
       </div>
+
+      <DayPerformanceCard trades={day.trades} />
 
       {day.aiSummary && (
         <div className="mb-6 rounded-xl border border-accent/40 bg-accent/10 p-4">
