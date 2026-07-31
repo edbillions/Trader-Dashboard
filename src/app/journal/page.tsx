@@ -50,14 +50,16 @@ export default async function JournalPage() {
                   className="border-t border-border hover:bg-surface"
                 >
                   <td className="min-w-[240px] px-4 py-3">
-                    <div className="flex items-center justify-between">
+                    <div className="flex items-center">
                       <Link
                         href={`/journal/${day.date}`}
                         className="font-medium text-foreground hover:text-accent"
                       >
                         {day.date}
                       </Link>
-                      <DaySparkline series={day.series} />
+                      <div className="flex flex-1 justify-center">
+                        <DaySparkline series={day.series} />
+                      </div>
                     </div>
                   </td>
                   <td className="px-4 py-3 text-muted">{day.tradeCount}</td>
