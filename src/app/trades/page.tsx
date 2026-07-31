@@ -1,10 +1,11 @@
 import Link from "next/link";
 import { PageHeader } from "@/components/layout/page-header";
-import { listTrades } from "@/lib/data/trades";
+import { listTrades, listAccountsForFilter } from "@/lib/data/trades";
 import { formatCurrency, formatR } from "@/lib/pnl";
 import { EquityCurveChart } from "@/components/dashboard/equity-curve-chart";
 import { DailyPnlChart } from "@/components/trades/daily-pnl-chart";
 import { WinRatioBar } from "@/components/trades/win-ratio-bar";
+import { TradesFilterBar } from "@/components/trades/trades-filter-bar";
 
 export const dynamic = "force-dynamic";
 
@@ -12,8 +13,16 @@ function dateKey(d: Date) {
   return d.toISOString().slice(0, 10);
 }
 
-export default async function TradesPage() {
-  const trades = await listTrades();
+export default async function TradesPage({
+  searchParams,
+}: {
+  searchParams: Promise<{ accountId?: string; start?: string; end?: string }>;
+}) {
+  const { accountId, start, end } = await searchParams;
+  const [trades, accounts] = await Promise.all([
+    listTrades({ accountId, start, end }),
+    listAccountsForFilter(),
+  ]);
 
   const netPnl = trades.reduce((sum, t) => sum + (t.netPnl ?? 0), 0);
   const wins = trades.filter((t) => (t.netPnl ?? 0) > 0).length;
@@ -59,6 +68,8 @@ export default async function TradesPage() {
         }
       />
 
+      <TradesFilterBar accounts={accounts} />
+
       {trades.length > 0 && (
         <div className="mb-6 grid grid-cols-1 gap-4 lg:grid-cols-3">
           <div className="rounded-xl border border-border bg-surface p-4">
@@ -102,7 +113,9 @@ export default async function TradesPage() {
 
       {trades.length === 0 ? (
         <div className="rounded-xl border border-dashed border-border p-8 text-center text-sm text-muted">
-          No trades logged yet.
+          {accountId || start || end
+            ? "No trades match the current filters."
+            : "No trades logged yet."}
         </div>
       ) : (
         <div className="overflow-x-auto rounded-xl border border-border">
