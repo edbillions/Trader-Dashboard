@@ -17,6 +17,16 @@ import {
   gradeFor,
   type CriterionKey,
 } from "./grading";
+import {
+  MAX_LIQUIDITY_BONUS,
+  MAX_HTF_FVG_BONUS,
+  extraSelectionBonus,
+} from "@/lib/domain/setup-factors";
+
+// Multiple confirmed liquidity sweeps or HTF FVG levels signal stronger
+// confluence — see src/lib/domain/setup-factors.ts for the same bonus logic
+// used by the Journal's Setup Factors checklist.
+const MAX_POSSIBLE_POINTS = TOTAL_POINTS + MAX_LIQUIDITY_BONUS + MAX_HTF_FVG_BONUS;
 
 type CheckedState = Record<CriterionKey, boolean>;
 
@@ -35,7 +45,7 @@ export function UnicornGrader() {
   const [alertChecked, setAlertChecked] = useState(false);
   const [killzoneOn, setKillzoneOn] = useState(false);
   const [dolTarget, setDolTarget] = useState<string | null>(null);
-  const [htfpdLevel, setHtfpdLevel] = useState<string | null>(null);
+  const [htfpdLevels, setHtfpdLevels] = useState<Set<string>>(new Set());
   const [liqSwept, setLiqSwept] = useState<Set<string>>(new Set());
   const [account, setAccount] = useState(50000);
   const [accountInput, setAccountInput] = useState("50,000");
@@ -53,6 +63,22 @@ export function UnicornGrader() {
     });
   }
 
+  function toggleHtfpd(key: string) {
+    setHtfpdLevels((s) => {
+      const next = new Set(s);
+      if (next.has(key)) next.delete(key);
+      else next.add(key);
+      return next;
+    });
+  }
+
+  const liquidityBonus = checked.liq
+    ? extraSelectionBonus(liqSwept.size, MAX_LIQUIDITY_BONUS)
+    : 0;
+  const htfFvgBonus = checked.htfpd
+    ? extraSelectionBonus(htfpdLevels.size, MAX_HTF_FVG_BONUS)
+    : 0;
+
   const { earned, checkedCount, koBlocked, grade, pct } = useMemo(() => {
     let e = 0;
     let n = 0;
@@ -62,12 +88,13 @@ export function UnicornGrader() {
         if (CRITERIA_WEIGHTS[k] > 0) e += CRITERIA_WEIGHTS[k];
       }
     }
+    e += liquidityBonus + htfFvgBonus;
     if (alertChecked) n++;
     const bbOk = checked.bb;
     const blocked = !bbOk && n > 0;
-    const p = e / TOTAL_POINTS;
+    const p = e / MAX_POSSIBLE_POINTS;
     return { earned: e, checkedCount: n, koBlocked: blocked, grade: gradeFor(p), pct: p };
-  }, [checked, alertChecked]);
+  }, [checked, alertChecked, liquidityBonus, htfFvgBonus]);
 
   const hasAnyChecked = checkedCount > 0;
   const canTrade = !koBlocked && hasAnyChecked && RISK_PCT[grade.letter] !== undefined;
@@ -79,7 +106,7 @@ export function UnicornGrader() {
     setAlertChecked(false);
     setKillzoneOn(false);
     setDolTarget(null);
-    setHtfpdLevel(null);
+    setHtfpdLevels(new Set());
     setLiqSwept(new Set());
   }
 
@@ -138,7 +165,7 @@ export function UnicornGrader() {
             {earned > 0 ? grade.letter : "—"}
           </div>
           <div className="gpts">
-            {earned} / {TOTAL_POINTS} pts
+            {earned} / {MAX_POSSIBLE_POINTS} pts
           </div>
         </div>
         <div className="vwrap">
@@ -198,7 +225,7 @@ export function UnicornGrader() {
           </button>
           <div className="tot-sm">
             SCORE: <span style={{ color: "var(--accent)" }}>{earned}</span>/
-            {TOTAL_POINTS}
+            {MAX_POSSIBLE_POINTS}
           </div>
         </div>
       </div>
@@ -316,7 +343,11 @@ export function UnicornGrader() {
                     </div>
                   </div>
                 </td>
-                <td className="crw w5">5</td>
+                <td className="crw w5">
+                  5{liquidityBonus > 0 && (
+                    <span style={{ color: "var(--accent)" }}> +{liquidityBonus}</span>
+                  )}
+                </td>
               </tr>
 
               <tr className={`cr${checked.htfpd ? " chk" : ""}`}>
@@ -335,26 +366,32 @@ export function UnicornGrader() {
                     <div className="sub-panel-lbl">▸ HTF FVG Level</div>
                     <div className="sub-grid">
                       {Object.entries(HTFPD_LEVEL_LABELS).map(([key, label]) => (
-                        <label key={key} className="sub-dol-item">
+                        <label key={key} className="sub-item">
                           <input
-                            type="radio"
-                            name="htfpd-level"
-                            checked={htfpdLevel === key}
-                            onChange={() => setHtfpdLevel(key)}
+                            type="checkbox"
+                            checked={htfpdLevels.has(key)}
+                            onChange={() => toggleHtfpd(key)}
                           />
-                          <span className="sub-rbv" />
+                          <span className="sub-cbv" />
                           <span className="sub-item-lbl">{label}</span>
                         </label>
                       ))}
                     </div>
-                    {htfpdLevel && (
+                    {htfpdLevels.size > 0 && (
                       <div className="sub-dol-selected">
-                        ▸ LEVEL: {HTFPD_LEVEL_LABELS[htfpdLevel]}
+                        ▸ LEVELS:{" "}
+                        {[...htfpdLevels]
+                          .map((key) => HTFPD_LEVEL_LABELS[key])
+                          .join(", ")}
                       </div>
                     )}
                   </div>
                 </td>
-                <td className="crw w4">4</td>
+                <td className="crw w4">
+                  4{htfFvgBonus > 0 && (
+                    <span style={{ color: "var(--accent)" }}> +{htfFvgBonus}</span>
+                  )}
+                </td>
               </tr>
 
               <Criterion

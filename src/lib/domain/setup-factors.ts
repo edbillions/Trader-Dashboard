@@ -37,6 +37,13 @@ export const MAX_HTF_FVG_BONUS = 2; // +1 per extra HTF FVG level beyond the fir
 export const MAX_POSSIBLE_SCORE =
   BASE_TOTAL_WEIGHT + MAX_LIQUIDITY_BONUS + MAX_HTF_FVG_BONUS;
 
+// Shared by both the Journal's Setup Factors checklist and the standalone
+// Setup Grader page, so "extra sweep/level bonus" means exactly one thing
+// everywhere it's used.
+export function extraSelectionBonus(selectedCount: number, max: number): number {
+  return Math.min(Math.max(selectedCount - 1, 0), max);
+}
+
 export interface SetupFactorsScore {
   confirmedCount: number;
   baseEarned: number;
@@ -59,10 +66,10 @@ export function computeSetupFactorsScore(
   }
 
   const liquidityBonus = value.liquiditySweepConfirmed
-    ? Math.min(Math.max(value.liquiditySwept.length - 1, 0), MAX_LIQUIDITY_BONUS)
+    ? extraSelectionBonus(value.liquiditySwept.length, MAX_LIQUIDITY_BONUS)
     : 0;
   const htfFvgBonus = value.htfDeliveryConfirmed
-    ? Math.min(Math.max(value.htfFvgLevels.length - 1, 0), MAX_HTF_FVG_BONUS)
+    ? extraSelectionBonus(value.htfFvgLevels.length, MAX_HTF_FVG_BONUS)
     : 0;
 
   return {
