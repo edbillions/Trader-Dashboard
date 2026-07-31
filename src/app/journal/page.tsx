@@ -49,8 +49,8 @@ export default async function JournalPage() {
                   key={day.id}
                   className="border-t border-border hover:bg-surface"
                 >
-                  <td className="px-4 py-3">
-                    <div className="flex items-center gap-3">
+                  <td className="min-w-[240px] px-4 py-3">
+                    <div className="flex items-center justify-between">
                       <Link
                         href={`/journal/${day.date}`}
                         className="font-medium text-foreground hover:text-accent"
