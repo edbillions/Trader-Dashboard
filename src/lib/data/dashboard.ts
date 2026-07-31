@@ -25,6 +25,7 @@ export async function getDashboardData() {
       include: {
         trades: {
           select: { symbol: true, netPnl: true, rMultiple: true, setupGrade: true },
+          orderBy: { entryTime: "asc" },
         },
       },
     }),
@@ -116,6 +117,16 @@ export async function getDashboardData() {
       const rValues = d.trades
         .map((t) => t.rMultiple)
         .filter((r): r is number => r != null);
+      // Anchored at 0 — see DaySparkline: every day starts at $0 P&L before
+      // the first trade, so even a single trade draws a real two-point line.
+      let dayCumulative = 0;
+      const series = [
+        0,
+        ...d.trades.map((t) => {
+          dayCumulative += t.netPnl ?? 0;
+          return Math.round(dayCumulative * 100) / 100;
+        }),
+      ];
       return {
         date: d.date.toISOString().slice(0, 10),
         tradeCount: d.trades.length,
@@ -128,6 +139,7 @@ export async function getDashboardData() {
             : null,
         symbols: Array.from(new Set(d.trades.map((t) => t.symbol))),
         planAdherenceGrade: d.planAdherenceGrade,
+        series,
       };
     }),
   };

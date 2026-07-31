@@ -17,6 +17,7 @@ import { MacroBriefingCard } from "@/components/dashboard/macro-briefing-card";
 import { SessionClocks } from "@/components/layout/session-clocks";
 import { quoteOfTheDay } from "@/lib/motivational-quotes";
 import { getTodoWidgetItems } from "@/lib/data/todos";
+import { DaySparkline } from "@/components/journal/day-sparkline";
 
 export const dynamic = "force-dynamic";
 
@@ -335,6 +336,9 @@ export default async function DashboardPage() {
                       </span>
                     )}
                   </span>
+                  <div className="flex flex-1 justify-center">
+                    <DaySparkline series={day.series} />
+                  </div>
                   <span
                     className={
                       day.netPnl >= 0
