@@ -4,10 +4,10 @@ import { useId } from "react";
 import { Area, AreaChart, ResponsiveContainer } from "recharts";
 
 // Compact, axis-free version of EquityCurveChart for inline use in table
-// rows — one point per trade that day, in chronological order. A single-
-// trade day only has one data point (we don't have intraday tick data to
-// show more granular movement), which renders as a flat/minimal shape —
-// an honest reflection of what we actually know, not a fabricated curve.
+// rows. Series is anchored with a leading 0 (every day genuinely starts at
+// $0 P&L before the first trade), so a single trade still draws a real
+// two-point line rather than a single dot. A day with zero trades is just
+// that lone anchor (length 1) — nothing meaningful to draw, so it's skipped.
 export function DaySparkline({
   series,
   width = 90,
@@ -19,7 +19,7 @@ export function DaySparkline({
 }) {
   const gradientId = useId();
 
-  if (series.length === 0) return null;
+  if (series.length < 2) return null;
 
   const data = series.map((equity, i) => ({ i, equity }));
   const last = series[series.length - 1];

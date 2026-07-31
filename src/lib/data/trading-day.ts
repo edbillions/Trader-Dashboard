@@ -25,11 +25,17 @@ export async function listTradingDays(limit = 30) {
   });
 
   return days.map((day) => {
+    // Anchored at 0 — every day genuinely starts at $0 P&L before the first
+    // trade, so even a single-trade day gets a real two-point line (0 ->
+    // final P&L) instead of a single dot with nothing to draw.
     let cumulative = 0;
-    const series = day.trades.map((t) => {
-      cumulative += t.netPnl ?? 0;
-      return Math.round(cumulative * 100) / 100;
-    });
+    const series = [
+      0,
+      ...day.trades.map((t) => {
+        cumulative += t.netPnl ?? 0;
+        return Math.round(cumulative * 100) / 100;
+      }),
+    ];
 
     return {
       id: day.id,
