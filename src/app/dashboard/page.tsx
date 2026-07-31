@@ -325,7 +325,7 @@ export default async function DashboardPage() {
                 href={`/journal/${day.date}`}
                 className="flex flex-col gap-2 rounded-lg border border-border bg-surface px-4 py-3 text-sm hover:bg-surface-raised"
               >
-                <div className="flex items-center justify-between">
+                <div className="grid grid-cols-4 items-center gap-4">
                   <span className="flex items-center gap-2">
                     <span className="font-medium text-foreground">
                       {day.date}
@@ -336,14 +336,15 @@ export default async function DashboardPage() {
                       </span>
                     )}
                   </span>
-                  <div className="flex flex-1 justify-center">
+                  <div className="flex justify-center">
                     <DaySparkline series={day.series} />
                   </div>
+                  <span />
                   <span
                     className={
                       day.netPnl >= 0
-                        ? "font-semibold text-profit"
-                        : "font-semibold text-loss"
+                        ? "text-right font-semibold text-profit"
+                        : "text-right font-semibold text-loss"
                     }
                   >
                     {formatCurrency(day.netPnl)}
@@ -352,22 +353,26 @@ export default async function DashboardPage() {
                 {day.tradeCount === 0 ? (
                   <span className="text-xs text-muted">No trades logged</span>
                 ) : (
-                  <div className="flex flex-wrap items-center justify-between gap-x-4 gap-y-1 text-xs text-muted">
+                  <div className="grid grid-cols-4 items-center gap-4 text-xs text-muted">
                     <span>
                       {day.tradeCount} trade{day.tradeCount === 1 ? "" : "s"}
                     </span>
-                    <span>
+                    <span className="text-center">
                       {day.wins}W / {day.losses}L
                       {day.wins + day.losses > 0
                         ? ` (${((day.wins / (day.wins + day.losses)) * 100).toFixed(0)}%)`
                         : ""}
                     </span>
-                    {day.totalR != null && <span>{formatR(day.totalR)} total</span>}
-                    {day.planAdherenceGrade && (
-                      <span className="rounded-full bg-surface-raised px-2 py-0.5 text-[11px] font-medium text-foreground">
-                        Plan grade {day.planAdherenceGrade}
-                      </span>
-                    )}
+                    <span>
+                      {day.totalR != null ? `${formatR(day.totalR)} total` : ""}
+                    </span>
+                    <span className="text-right">
+                      {day.planAdherenceGrade && (
+                        <span className="rounded-full bg-surface-raised px-2 py-0.5 text-[11px] font-medium text-foreground">
+                          Plan grade {day.planAdherenceGrade}
+                        </span>
+                      )}
+                    </span>
                   </div>
                 )}
               </Link>
