@@ -345,13 +345,20 @@ export default async function JournalDayPage({
                 {t.screenshots.length > 0 && (
                   <div className="mt-2 flex gap-2">
                     {t.screenshots.map((s) => (
-                      // eslint-disable-next-line @next/next/no-img-element
-                      <img
+                      <a
                         key={s.id}
-                        src={s.filePath}
-                        alt="Trade screenshot"
-                        className="h-20 w-20 rounded-lg border border-border object-cover"
-                      />
+                        href={s.filePath}
+                        target="_blank"
+                        rel="noreferrer"
+                        className="block overflow-hidden rounded-lg border border-border transition-colors hover:border-accent/40"
+                      >
+                        {/* eslint-disable-next-line @next/next/no-img-element */}
+                        <img
+                          src={s.filePath}
+                          alt="Trade screenshot"
+                          className="h-20 w-20 object-cover"
+                        />
+                      </a>
                     ))}
                   </div>
                 )}
