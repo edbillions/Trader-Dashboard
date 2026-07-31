@@ -1,9 +1,10 @@
 "use client";
 
 import {
-  Area,
-  AreaChart,
+  Bar,
+  BarChart,
   CartesianGrid,
+  Cell,
   ResponsiveContainer,
   Tooltip,
   XAxis,
@@ -11,25 +12,16 @@ import {
 } from "recharts";
 import { formatCurrency } from "@/lib/pnl";
 
-export function EquityCurveChart({
+export function DailyPnlChart({
   data,
   height = 260,
 }: {
-  data: { date: string; equity: number }[];
+  data: { date: string; netPnl: number }[];
   height?: number;
 }) {
-  const last = data[data.length - 1]?.equity ?? 0;
-  const color = last >= 0 ? "var(--profit)" : "var(--loss)";
-
   return (
     <ResponsiveContainer width="100%" height={height}>
-      <AreaChart data={data} margin={{ top: 8, right: 8, left: 8, bottom: 8 }}>
-        <defs>
-          <linearGradient id="equityFill" x1="0" y1="0" x2="0" y2="1">
-            <stop offset="0%" stopColor={color} stopOpacity={0.35} />
-            <stop offset="100%" stopColor={color} stopOpacity={0} />
-          </linearGradient>
-        </defs>
+      <BarChart data={data} margin={{ top: 8, right: 8, left: 8, bottom: 8 }}>
         <CartesianGrid strokeDasharray="3 3" stroke="var(--border)" vertical={false} />
         <XAxis
           dataKey="date"
@@ -46,7 +38,7 @@ export function EquityCurveChart({
           tickFormatter={(v) => formatCurrency(Number(v))}
         />
         <Tooltip
-          cursor={{ stroke: "var(--border)" }}
+          cursor={{ fill: "var(--surface-raised)" }}
           contentStyle={{
             background: "var(--surface-raised)",
             border: "1px solid var(--border)",
@@ -56,15 +48,12 @@ export function EquityCurveChart({
           }}
           formatter={(value) => formatCurrency(Number(value))}
         />
-        <Area
-          type="monotone"
-          dataKey="equity"
-          stroke={color}
-          strokeWidth={2}
-          fill="url(#equityFill)"
-          dot={false}
-        />
-      </AreaChart>
+        <Bar dataKey="netPnl" radius={[3, 3, 0, 0]}>
+          {data.map((d, i) => (
+            <Cell key={i} fill={d.netPnl >= 0 ? "var(--profit)" : "var(--loss)"} />
+          ))}
+        </Bar>
+      </BarChart>
     </ResponsiveContainer>
   );
 }
