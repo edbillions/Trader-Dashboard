@@ -2,6 +2,7 @@ import Link from "next/link";
 import { PageHeader } from "@/components/layout/page-header";
 import { listTradingDays } from "@/lib/data/trading-day";
 import { formatCurrency } from "@/lib/pnl";
+import { DaySparkline } from "@/components/journal/day-sparkline";
 
 export const dynamic = "force-dynamic";
 
@@ -49,12 +50,15 @@ export default async function JournalPage() {
                   className="border-t border-border hover:bg-surface"
                 >
                   <td className="px-4 py-3">
-                    <Link
-                      href={`/journal/${day.date}`}
-                      className="font-medium text-foreground hover:text-accent"
-                    >
-                      {day.date}
-                    </Link>
+                    <div className="flex items-center gap-3">
+                      <Link
+                        href={`/journal/${day.date}`}
+                        className="font-medium text-foreground hover:text-accent"
+                      >
+                        {day.date}
+                      </Link>
+                      <DaySparkline series={day.series} />
+                    </div>
                   </td>
                   <td className="px-4 py-3 text-muted">{day.tradeCount}</td>
                   <td

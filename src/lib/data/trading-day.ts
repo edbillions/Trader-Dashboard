@@ -20,17 +20,26 @@ export async function listTradingDays(limit = 30) {
     orderBy: { date: "desc" },
     take: limit,
     include: {
-      trades: { select: { netPnl: true } },
+      trades: { select: { netPnl: true }, orderBy: { entryTime: "asc" } },
     },
   });
 
-  return days.map((day) => ({
-    id: day.id,
-    date: toDateKey(day.date),
-    tradeCount: day.trades.length,
-    netPnl: day.trades.reduce((sum, t) => sum + (t.netPnl ?? 0), 0),
-    planAdherenceGrade: day.planAdherenceGrade,
-  }));
+  return days.map((day) => {
+    let cumulative = 0;
+    const series = day.trades.map((t) => {
+      cumulative += t.netPnl ?? 0;
+      return Math.round(cumulative * 100) / 100;
+    });
+
+    return {
+      id: day.id,
+      date: toDateKey(day.date),
+      tradeCount: day.trades.length,
+      netPnl: cumulative,
+      planAdherenceGrade: day.planAdherenceGrade,
+      series,
+    };
+  });
 }
 
 export async function getTradingDayInputForDate(
