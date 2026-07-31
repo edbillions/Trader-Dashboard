@@ -6,12 +6,12 @@ export default function NewAccountPage() {
   return (
     <div>
       <PageHeader
-        title="New prop firm account"
-        description="Add an evaluation or funded account to track."
+        title="New account"
+        description="Add an evaluation, funded, or live account to track."
       />
       <form action={createAccountAction} className="flex max-w-md flex-col gap-4">
         <Field label="Firm name">
-          <TextInput name="firmName" required placeholder="Topstep" />
+          <TextInput name="firmName" required placeholder="Topstep (or 'Personal' for a live account)" />
         </Field>
         <Field label="Account name / label">
           <TextInput
@@ -24,6 +24,7 @@ export default function NewAccountPage() {
           <Select name="accountType" required defaultValue="eval">
             <option value="eval">Evaluation</option>
             <option value="funded">Funded</option>
+            <option value="live">Live</option>
           </Select>
         </Field>
 

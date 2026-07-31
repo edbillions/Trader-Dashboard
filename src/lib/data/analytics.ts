@@ -62,9 +62,18 @@ const WEEKDAY_LABELS = [
   "Saturday",
 ];
 
-export async function getAnalyticsData() {
+export interface AnalyticsFilter {
+  accountType?: string; // "eval" | "funded" | "live"
+}
+
+export async function getAnalyticsData(filter: AnalyticsFilter = {}) {
+  const accountWhere = filter.accountType
+    ? { account: { accountType: filter.accountType } }
+    : {};
+
   const [trades, tradingDays] = await Promise.all([
     prisma.trade.findMany({
+      where: accountWhere,
       include: {
         confluenceFactors: true,
         mistakes: true,
@@ -80,7 +89,7 @@ export async function getAnalyticsData() {
     prisma.tradingDay.findMany({
       include: {
         ruleViolations: { select: { id: true } },
-        trades: { select: { netPnl: true, setupGrade: true } },
+        trades: { where: accountWhere, select: { netPnl: true, setupGrade: true } },
       },
     }),
   ]);

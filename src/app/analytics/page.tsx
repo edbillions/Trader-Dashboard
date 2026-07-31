@@ -14,11 +14,17 @@ import { HourlyBreakdownChart } from "@/components/analytics/hourly-breakdown-ch
 import { ManagementSection } from "@/components/analytics/management-section";
 import { TrueSystemEdgeCard } from "@/components/analytics/true-system-edge-card";
 import { OutlierTradesList } from "@/components/analytics/outlier-trades-list";
+import { AnalyticsFilterBar } from "@/components/analytics/analytics-filter-bar";
 
 export const dynamic = "force-dynamic";
 
-export default async function AnalyticsPage() {
-  const data = await getAnalyticsData();
+export default async function AnalyticsPage({
+  searchParams,
+}: {
+  searchParams: Promise<{ accountType?: string }>;
+}) {
+  const { accountType } = await searchParams;
+  const data = await getAnalyticsData({ accountType });
   const {
     totals,
     composite,
@@ -52,6 +58,8 @@ export default async function AnalyticsPage() {
         title="Analytics"
         description={`${totals.tradeCount} trade${totals.tradeCount === 1 ? "" : "s"} analyzed.`}
       />
+
+      <AnalyticsFilterBar />
 
       <PatternInsights />
 

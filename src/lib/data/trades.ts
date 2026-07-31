@@ -2,6 +2,7 @@ import { prisma } from "@/lib/prisma";
 
 export interface TradesFilter {
   accountId?: string;
+  accountType?: string; // "eval" | "funded" | "live"
   start?: string; // yyyy-mm-dd
   end?: string; // yyyy-mm-dd
 }
@@ -10,6 +11,7 @@ export async function listTrades(filter: TradesFilter = {}) {
   return prisma.trade.findMany({
     where: {
       accountId: filter.accountId || undefined,
+      account: filter.accountType ? { accountType: filter.accountType } : undefined,
       entryTime: {
         gte: filter.start ? new Date(`${filter.start}T00:00:00`) : undefined,
         lte: filter.end ? new Date(`${filter.end}T23:59:59.999`) : undefined,
@@ -18,7 +20,7 @@ export async function listTrades(filter: TradesFilter = {}) {
     orderBy: { entryTime: "desc" },
     include: {
       tradingDay: { select: { date: true } },
-      account: { select: { firmName: true, accountName: true } },
+      account: { select: { firmName: true, accountName: true, accountType: true } },
     },
   });
 }

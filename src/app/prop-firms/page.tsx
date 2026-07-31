@@ -5,6 +5,7 @@ import { deleteAccountAction } from "@/lib/actions/prop-firms";
 import { formatCurrency } from "@/lib/pnl";
 import { ConfirmSubmitButton } from "@/components/ui/confirm-submit-button";
 import { AccountComparisonChart } from "@/components/prop-firms/account-comparison-chart";
+import { ACCOUNT_TYPE_LABELS } from "@/lib/domain/account-type";
 
 export const dynamic = "force-dynamic";
 
@@ -85,8 +86,8 @@ export default async function PropFirmsPage() {
                   {account.firmName} · {account.accountName}
                 </p>
                 <p className="text-xs text-muted">
-                  {account.accountType} · {account.status} ·{" "}
-                  {account.tradeCount} trades
+                  {ACCOUNT_TYPE_LABELS[account.accountType] ?? account.accountType} ·{" "}
+                  {account.status} · {account.tradeCount} trades
                 </p>
               </Link>
               <div className="flex items-center gap-4">

@@ -1,6 +1,7 @@
 "use client";
 
 import { usePathname, useRouter, useSearchParams } from "next/navigation";
+import { ACCOUNT_TYPES, ACCOUNT_TYPE_LABELS } from "@/lib/domain/account-type";
 
 export function TradesFilterBar({
   accounts,
@@ -19,12 +20,27 @@ export function TradesFilterBar({
   }
 
   const accountId = searchParams.get("accountId") ?? "";
+  const accountType = searchParams.get("accountType") ?? "";
   const start = searchParams.get("start") ?? "";
   const end = searchParams.get("end") ?? "";
-  const hasFilters = accountId !== "" || start !== "" || end !== "";
+  const hasFilters =
+    accountId !== "" || accountType !== "" || start !== "" || end !== "";
 
   return (
     <div className="mb-6 flex flex-wrap items-center gap-3">
+      <select
+        value={accountType}
+        onChange={(e) => updateParam("accountType", e.target.value)}
+        className="rounded-lg border border-border bg-surface px-3 py-2 text-sm text-foreground"
+      >
+        <option value="">All account types</option>
+        {ACCOUNT_TYPES.map((t) => (
+          <option key={t} value={t}>
+            {ACCOUNT_TYPE_LABELS[t]}
+          </option>
+        ))}
+      </select>
+
       <select
         value={accountId}
         onChange={(e) => updateParam("accountId", e.target.value)}

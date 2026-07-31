@@ -7,6 +7,7 @@ import { formatCurrency, formatR } from "@/lib/pnl";
 import { bulkDeleteTradesAction, bulkTagTradesAction } from "@/lib/actions/journal";
 import { RMultipleBar } from "@/components/trades/r-multiple-bar";
 import { TagCategoryPicker } from "@/components/ui/tag-category-picker";
+import { ACCOUNT_TYPE_LABELS } from "@/lib/domain/account-type";
 import type { TradeListItem } from "@/lib/data/trades";
 import type { listTagCategoriesForPicker } from "@/lib/data/trades";
 
@@ -295,7 +296,16 @@ export function TradesTable({
                   </div>
                 </td>
                 <td className="px-2 py-2 text-muted">
-                  {t.account ? t.account.firmName : "—"}
+                  {t.account ? (
+                    <span>
+                      {t.account.firmName}{" "}
+                      <span className="text-[10px] text-muted/70">
+                        ({ACCOUNT_TYPE_LABELS[t.account.accountType] ?? t.account.accountType})
+                      </span>
+                    </span>
+                  ) : (
+                    "—"
+                  )}
                 </td>
               </tr>
             ))}

@@ -10,6 +10,7 @@ import { DatalistInput } from "@/components/ui/datalist-input";
 import { ChipMultiSelect } from "@/components/ui/chip-multiselect";
 import { TagCategoryPicker } from "@/components/ui/tag-category-picker";
 import { SetupFactorsSection } from "@/components/journal/setup-factors-checklist";
+import { ACCOUNT_TYPE_LABELS } from "@/lib/domain/account-type";
 
 export function TradeCard({
   index,
@@ -133,7 +134,7 @@ export function TradeCard({
             <option value="">— none —</option>
             {lookups.accounts.map((a) => (
               <option key={a.id} value={a.id}>
-                {a.firmName} · {a.accountName}
+                {a.firmName} · {a.accountName} ({ACCOUNT_TYPE_LABELS[a.accountType] ?? a.accountType})
               </option>
             ))}
           </Select>

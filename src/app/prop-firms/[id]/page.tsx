@@ -15,6 +15,7 @@ import {
 } from "@/lib/actions/prop-firms";
 import { ConfirmSubmitButton } from "@/components/ui/confirm-submit-button";
 import { DrawdownCard } from "@/components/prop-firms/drawdown-card";
+import { ACCOUNT_TYPE_LABELS } from "@/lib/domain/account-type";
 
 export const dynamic = "force-dynamic";
 
@@ -46,7 +47,7 @@ export default async function AccountDetailPage({
     <div>
       <PageHeader
         title={`${account.firmName} · ${account.accountName}`}
-        description={`${account.accountType} account`}
+        description={`${ACCOUNT_TYPE_LABELS[account.accountType] ?? account.accountType} account`}
         actions={
           <div className="flex items-center gap-2">
             <form action={updateAccountStatusAction} className="flex gap-2">

@@ -17,11 +17,16 @@ export const dynamic = "force-dynamic";
 export default async function TradesPage({
   searchParams,
 }: {
-  searchParams: Promise<{ accountId?: string; start?: string; end?: string }>;
+  searchParams: Promise<{
+    accountId?: string;
+    accountType?: string;
+    start?: string;
+    end?: string;
+  }>;
 }) {
-  const { accountId, start, end } = await searchParams;
+  const { accountId, accountType, start, end } = await searchParams;
   const [trades, accounts, tagCategories] = await Promise.all([
-    listTrades({ accountId, start, end }),
+    listTrades({ accountId, accountType, start, end }),
     listAccountsForFilter(),
     listTagCategoriesForPicker(),
   ]);
@@ -115,7 +120,7 @@ export default async function TradesPage({
 
       {trades.length === 0 ? (
         <div className="rounded-xl border border-dashed border-border p-8 text-center text-sm text-muted">
-          {accountId || start || end
+          {accountId || accountType || start || end
             ? "No trades match the current filters."
             : "No trades logged yet."}
         </div>
