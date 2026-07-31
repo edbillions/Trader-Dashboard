@@ -21,7 +21,7 @@ export default async function PreMarketDayPage({
         description="Read-only history — the ICT Unicorn Model checklist and trade plan as run that morning."
       />
 
-      <div className="grid grid-cols-1 gap-4 xl:grid-cols-2">
+      <div className="grid grid-cols-1 gap-4">
         {day.analyses.map((analysis) => (
           <InstrumentAnalysisCard key={analysis.id} analysis={analysis} showActions={false} />
         ))}
