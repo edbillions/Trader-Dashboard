@@ -136,7 +136,7 @@ const BODY_HTML = `
     </ul>
     <p>A breaker without displacement is a shape on a chart. A breaker with displacement is evidence of institutional aggression behind the move — which is why displacement is inseparable from the breaker itself.</p>
     <div class="sec-img">
-      <img src="/playbook/breaker-block-bullish-bearish.jpg" alt="Breaker Block diagram comparing a bullish +BB setup (left, acting as support) and a bearish -BB setup (right, acting as resistance) on candlestick charts." />
+      <img src="/playbook/publicplaybookbreaker-block-bullish-bearish.jpg" alt="Breaker Block diagram comparing a bullish +BB setup (left, acting as support) and a bearish -BB setup (right, acting as resistance) on candlestick charts." />
     </div>
     <p class="sec-cap"><strong>A bullish breaker</strong> (left) is the last down-close candle or series of down-close candles before a bearish move that breaks a low and then reverses bullish — that candle becomes support when price returns. <strong>A bearish breaker</strong> (right) is the last up-close candle or series of up-close candles before a bullish move that breaks a high and then reverses bearish — that candle becomes resistance when price returns.</p>
   </div>
