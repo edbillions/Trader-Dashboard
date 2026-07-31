@@ -263,6 +263,31 @@ export async function deleteTradeAction(formData: FormData) {
   }
 }
 
+export async function bulkDeleteTradesAction(
+  ids: string[],
+): Promise<{ deletedCount: number }> {
+  if (ids.length === 0) return { deletedCount: 0 };
+
+  const trades = await prisma.trade.findMany({
+    where: { id: { in: ids } },
+    select: { tradingDay: { select: { date: true } } },
+  });
+  const dateKeys = new Set(
+    trades.map((t) => t.tradingDay.date.toISOString().slice(0, 10)),
+  );
+
+  const result = await prisma.trade.deleteMany({ where: { id: { in: ids } } });
+
+  revalidatePath("/dashboard");
+  revalidatePath("/trades");
+  revalidatePath("/calendar");
+  for (const dateKey of dateKeys) {
+    revalidatePath(`/journal/${dateKey}`);
+  }
+
+  return { deletedCount: result.count };
+}
+
 export async function clearPreMarketPlanAction(formData: FormData) {
   const id = formData.get("id");
   const date = formData.get("date");

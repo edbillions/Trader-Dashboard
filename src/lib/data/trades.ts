@@ -23,6 +23,8 @@ export async function listTrades(filter: TradesFilter = {}) {
   });
 }
 
+export type TradeListItem = Awaited<ReturnType<typeof listTrades>>[number];
+
 // Every account regardless of status — a since-closed account can still have
 // historical trades worth filtering by, unlike the Journal wizard's account
 // picker which intentionally only offers active ones for new trades.
