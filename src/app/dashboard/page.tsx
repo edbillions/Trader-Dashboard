@@ -328,7 +328,7 @@ export default async function DashboardPage() {
                 <div className="grid grid-cols-4 items-center gap-4">
                   <span className="flex items-center gap-2">
                     <span className="font-medium text-foreground">
-                      {day.date}
+                      {format(new Date(`${day.date}T00:00:00`), "EEEE, MMM d, yyyy")}
                     </span>
                     {day.symbols.length > 0 && (
                       <span className="text-base font-bold text-foreground">

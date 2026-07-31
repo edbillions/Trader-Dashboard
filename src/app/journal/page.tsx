@@ -1,4 +1,5 @@
 import Link from "next/link";
+import { format } from "date-fns";
 import { PageHeader } from "@/components/layout/page-header";
 import { listTradingDays } from "@/lib/data/trading-day";
 import { formatCurrency } from "@/lib/pnl";
@@ -55,7 +56,7 @@ export default async function JournalPage() {
                         href={`/journal/${day.date}`}
                         className="font-medium text-foreground hover:text-accent"
                       >
-                        {day.date}
+                        {format(new Date(`${day.date}T00:00:00`), "EEEE, MMM d, yyyy")}
                       </Link>
                       <div className="flex flex-1 justify-center">
                         <DaySparkline series={day.series} />
