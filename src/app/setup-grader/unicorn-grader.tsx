@@ -1,6 +1,6 @@
 "use client";
 
-import { useId, useMemo, useState } from "react";
+import { useEffect, useId, useMemo, useState } from "react";
 import { useRouter } from "next/navigation";
 import "./grader.css";
 import {
@@ -30,6 +30,13 @@ import {
 // used by the Journal's Setup Factors checklist.
 const MAX_POSSIBLE_POINTS = TOTAL_POINTS + MAX_LIQUIDITY_BONUS + MAX_HTF_FVG_BONUS;
 
+// Persists all grader inputs across page navigation — client components
+// unmount on route change in the App Router, so without this, clicking to
+// another page and back wiped the in-progress grade. Session-scoped (not
+// localStorage) since this is scratch data for the current sitting, not
+// something meant to survive closing the browser.
+const STORAGE_KEY = "unicorn-grader-state";
+
 type CheckedState = Record<CriterionKey, boolean>;
 
 const EMPTY_CHECKED: CheckedState = CRITERION_KEYS.reduce((acc, k) => {
@@ -51,6 +58,52 @@ export function UnicornGrader() {
   const [liqSwept, setLiqSwept] = useState<Set<string>>(new Set());
   const [account, setAccount] = useState(50000);
   const [accountInput, setAccountInput] = useState("50,000");
+
+  // Rehydrate from sessionStorage after mount (not via a lazy useState
+  // initializer) to avoid an SSR/client hydration mismatch — the first
+  // client render must match the server's empty-state HTML.
+  useEffect(() => {
+    const raw = sessionStorage.getItem(STORAGE_KEY);
+    if (!raw) return;
+    try {
+      const saved = JSON.parse(raw) as {
+        checked?: CheckedState;
+        alertChecked?: boolean;
+        killzoneOn?: boolean;
+        dolTarget?: string | null;
+        htfpdLevels?: string[];
+        liqSwept?: string[];
+        account?: number;
+        accountInput?: string;
+      };
+      if (saved.checked) setChecked(saved.checked);
+      if (saved.alertChecked != null) setAlertChecked(saved.alertChecked);
+      if (saved.killzoneOn != null) setKillzoneOn(saved.killzoneOn);
+      if (saved.dolTarget !== undefined) setDolTarget(saved.dolTarget);
+      if (saved.htfpdLevels) setHtfpdLevels(new Set(saved.htfpdLevels));
+      if (saved.liqSwept) setLiqSwept(new Set(saved.liqSwept));
+      if (saved.account != null) setAccount(saved.account);
+      if (saved.accountInput != null) setAccountInput(saved.accountInput);
+    } catch {
+      // malformed storage — ignore, start fresh
+    }
+  }, []);
+
+  useEffect(() => {
+    sessionStorage.setItem(
+      STORAGE_KEY,
+      JSON.stringify({
+        checked,
+        alertChecked,
+        killzoneOn,
+        dolTarget,
+        htfpdLevels: Array.from(htfpdLevels),
+        liqSwept: Array.from(liqSwept),
+        account,
+        accountInput,
+      }),
+    );
+  }, [checked, alertChecked, killzoneOn, dolTarget, htfpdLevels, liqSwept, account, accountInput]);
 
   function toggle(key: CriterionKey) {
     setChecked((c) => ({ ...c, [key]: !c[key] }));
@@ -110,6 +163,7 @@ export function UnicornGrader() {
     setDolTarget(null);
     setHtfpdLevels(new Set());
     setLiqSwept(new Set());
+    sessionStorage.removeItem(STORAGE_KEY);
   }
 
   function sendToJournal() {
