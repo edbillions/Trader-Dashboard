@@ -20,6 +20,8 @@ import {
 import {
   MAX_LIQUIDITY_BONUS,
   MAX_HTF_FVG_BONUS,
+  LIQUIDITY_POINTS_PER_EXTRA,
+  HTF_FVG_POINTS_PER_EXTRA,
   extraSelectionBonus,
 } from "@/lib/domain/setup-factors";
 
@@ -73,10 +75,10 @@ export function UnicornGrader() {
   }
 
   const liquidityBonus = checked.liq
-    ? extraSelectionBonus(liqSwept.size, MAX_LIQUIDITY_BONUS)
+    ? extraSelectionBonus(liqSwept.size, MAX_LIQUIDITY_BONUS, LIQUIDITY_POINTS_PER_EXTRA)
     : 0;
   const htfFvgBonus = checked.htfpd
-    ? extraSelectionBonus(htfpdLevels.size, MAX_HTF_FVG_BONUS)
+    ? extraSelectionBonus(htfpdLevels.size, MAX_HTF_FVG_BONUS, HTF_FVG_POINTS_PER_EXTRA)
     : 0;
 
   const { earned, checkedCount, koBlocked, grade, pct } = useMemo(() => {

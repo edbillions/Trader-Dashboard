@@ -29,10 +29,19 @@ const BASE_TOTAL_WEIGHT = (Object.values(CRITERIA_WEIGHTS) as number[]).reduce(
 
 // Multiple confirmed sweeps/FVG levels on the same criterion signal stronger
 // confluence (a higher-probability setup), so each additional one beyond the
-// first earns a small bonus point — capped so a setup can't inflate its score
-// just by checking every box in the sub-panel.
-export const MAX_LIQUIDITY_BONUS = 3; // +1 per extra sweep beyond the first
-export const MAX_HTF_FVG_BONUS = 2; // +1 per extra HTF FVG level beyond the first (3 levels exist)
+// first earns bonus points — capped so a setup can't inflate its score just
+// by checking every box in the sub-panel. The caps themselves also define
+// each dimension's contribution to the shared points denominator
+// (MAX_POSSIBLE_SCORE below), so raising a cap to reward high-confluence
+// setups more only works if the rate-per-extra grows too — a cap-only raise
+// would inflate the denominator right along with the numerator and net
+// nothing. Liquidity sweeps are worth +2 per extra sweep beyond the first
+// (reaches the +3 cap at 3 total sweeps); HTF FVG levels are +1 per extra
+// level beyond the first (reaches the +2 cap when all 3 levels are flagged).
+export const MAX_LIQUIDITY_BONUS = 3;
+export const MAX_HTF_FVG_BONUS = 2;
+export const LIQUIDITY_POINTS_PER_EXTRA = 2;
+export const HTF_FVG_POINTS_PER_EXTRA = 1;
 
 export const MAX_POSSIBLE_SCORE =
   BASE_TOTAL_WEIGHT + MAX_LIQUIDITY_BONUS + MAX_HTF_FVG_BONUS;
@@ -40,8 +49,12 @@ export const MAX_POSSIBLE_SCORE =
 // Shared by both the Journal's Setup Factors checklist and the standalone
 // Setup Grader page, so "extra sweep/level bonus" means exactly one thing
 // everywhere it's used.
-export function extraSelectionBonus(selectedCount: number, max: number): number {
-  return Math.min(Math.max(selectedCount - 1, 0), max);
+export function extraSelectionBonus(
+  selectedCount: number,
+  max: number,
+  pointsPerExtra = 1,
+): number {
+  return Math.min(Math.max(selectedCount - 1, 0) * pointsPerExtra, max);
 }
 
 export interface SetupFactorsScore {
@@ -66,10 +79,18 @@ export function computeSetupFactorsScore(
   }
 
   const liquidityBonus = value.liquiditySweepConfirmed
-    ? extraSelectionBonus(value.liquiditySwept.length, MAX_LIQUIDITY_BONUS)
+    ? extraSelectionBonus(
+        value.liquiditySwept.length,
+        MAX_LIQUIDITY_BONUS,
+        LIQUIDITY_POINTS_PER_EXTRA,
+      )
     : 0;
   const htfFvgBonus = value.htfDeliveryConfirmed
-    ? extraSelectionBonus(value.htfFvgLevels.length, MAX_HTF_FVG_BONUS)
+    ? extraSelectionBonus(
+        value.htfFvgLevels.length,
+        MAX_HTF_FVG_BONUS,
+        HTF_FVG_POINTS_PER_EXTRA,
+      )
     : 0;
 
   return {
