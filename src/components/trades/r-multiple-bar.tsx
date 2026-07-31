@@ -5,12 +5,19 @@
 export function RMultipleBar({
   rMultiple,
   maxAbs = 3,
+  width = 96,
 }: {
   rMultiple: number | null;
   maxAbs?: number;
+  width?: number;
 }) {
   if (rMultiple == null) {
-    return <div className="h-2 w-24 rounded-full bg-surface-raised" />;
+    return (
+      <div
+        className="h-2 shrink-0 rounded-full bg-surface-raised"
+        style={{ width }}
+      />
+    );
   }
 
   const clamped = Math.max(-maxAbs, Math.min(maxAbs, rMultiple));
@@ -18,7 +25,10 @@ export function RMultipleBar({
   const isPositive = clamped >= 0;
 
   return (
-    <div className="relative h-2 w-24 overflow-hidden rounded-full bg-surface-raised">
+    <div
+      className="relative h-2 shrink-0 overflow-hidden rounded-full bg-surface-raised"
+      style={{ width }}
+    >
       <div className="absolute left-1/2 top-0 h-full w-px -translate-x-1/2 bg-border" />
       <div
         className={

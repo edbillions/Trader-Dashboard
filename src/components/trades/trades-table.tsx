@@ -24,24 +24,24 @@ const GRADE_CLASS: Record<string, string> = {
 function StatusBadge({ netPnl }: { netPnl: number | null }) {
   if (netPnl == null) {
     return (
-      <span className="rounded-full border border-border bg-surface-raised px-2 py-0.5 text-[11px] font-semibold text-muted">
+      <span className="whitespace-nowrap rounded-full border border-border bg-surface-raised px-1.5 py-0.5 text-[10px] font-semibold text-muted">
         OPEN
       </span>
     );
   }
   if (netPnl === 0) {
     return (
-      <span className="rounded-full border border-border bg-surface-raised px-2 py-0.5 text-[11px] font-semibold text-muted">
+      <span className="whitespace-nowrap rounded-full border border-border bg-surface-raised px-1.5 py-0.5 text-[10px] font-semibold text-muted">
         BREAKEVEN
       </span>
     );
   }
   return netPnl > 0 ? (
-    <span className="rounded-full border border-profit/40 bg-profit-muted px-2 py-0.5 text-[11px] font-semibold text-profit">
+    <span className="whitespace-nowrap rounded-full border border-profit/40 bg-profit-muted px-1.5 py-0.5 text-[10px] font-semibold text-profit">
       WIN
     </span>
   ) : (
-    <span className="rounded-full border border-loss/40 bg-loss-muted px-2 py-0.5 text-[11px] font-semibold text-loss">
+    <span className="whitespace-nowrap rounded-full border border-loss/40 bg-loss-muted px-1.5 py-0.5 text-[10px] font-semibold text-loss">
       LOSS
     </span>
   );
@@ -118,10 +118,10 @@ export function TradesTable({ trades }: { trades: TradeListItem[] }) {
       </div>
 
       <div className="overflow-x-auto rounded-xl border border-border">
-        <table className="w-full text-sm">
-          <thead className="bg-surface-raised text-left text-xs uppercase tracking-wide text-muted">
+        <table className="w-full whitespace-nowrap text-xs">
+          <thead className="bg-surface-raised text-left text-[10px] uppercase tracking-wide text-muted">
             <tr>
-              <th className="px-4 py-3">
+              <th className="px-2 py-2">
                 <input
                   type="checkbox"
                   checked={allSelected}
@@ -129,17 +129,17 @@ export function TradesTable({ trades }: { trades: TradeListItem[] }) {
                   aria-label="Select all trades"
                 />
               </th>
-              <th className="px-4 py-3">Date</th>
-              <th className="px-4 py-3">Symbol</th>
-              <th className="px-4 py-3">Entry price</th>
-              <th className="px-4 py-3">Exit price</th>
-              <th className="px-4 py-3">Net P&L</th>
-              <th className="px-4 py-3">Status</th>
-              <th className="px-4 py-3">Side</th>
-              <th className="px-4 py-3">Setups</th>
-              <th className="px-4 py-3">Grade</th>
-              <th className="px-4 py-3">R multiple</th>
-              <th className="px-4 py-3">Account</th>
+              <th className="px-2 py-2">Date</th>
+              <th className="px-2 py-2">Symbol</th>
+              <th className="px-2 py-2">Entry</th>
+              <th className="px-2 py-2">Exit</th>
+              <th className="px-2 py-2">Net P&L</th>
+              <th className="px-2 py-2">Status</th>
+              <th className="px-2 py-2">Side</th>
+              <th className="px-2 py-2">Setups</th>
+              <th className="px-2 py-2">Grade</th>
+              <th className="px-2 py-2">R multiple</th>
+              <th className="px-2 py-2">Account</th>
             </tr>
           </thead>
           <tbody>
@@ -151,7 +151,7 @@ export function TradesTable({ trades }: { trades: TradeListItem[] }) {
                   selected.has(t.id) && "bg-accent/5",
                 )}
               >
-                <td className="px-4 py-3">
+                <td className="px-2 py-2">
                   <input
                     type="checkbox"
                     checked={selected.has(t.id)}
@@ -159,7 +159,7 @@ export function TradesTable({ trades }: { trades: TradeListItem[] }) {
                     aria-label={`Select ${t.symbol} trade`}
                   />
                 </td>
-                <td className="px-4 py-3 text-muted">
+                <td className="px-2 py-2 text-muted">
                   <Link
                     href={`/trades/${t.id}`}
                     className="font-medium text-foreground hover:text-accent"
@@ -167,44 +167,44 @@ export function TradesTable({ trades }: { trades: TradeListItem[] }) {
                     {dateKey(t.tradingDay.date)}
                   </Link>
                 </td>
-                <td className="px-4 py-3 font-medium text-foreground">
+                <td className="px-2 py-2 font-medium text-foreground">
                   {t.symbol}
                 </td>
-                <td className="px-4 py-3 text-muted">
+                <td className="px-2 py-2 text-muted">
                   {t.entryPrice.toString()}
                 </td>
-                <td className="px-4 py-3 text-muted">
+                <td className="px-2 py-2 text-muted">
                   {t.exitPrice != null ? t.exitPrice.toString() : "—"}
                 </td>
                 <td
                   className={
                     (t.netPnl ?? 0) >= 0
-                      ? "px-4 py-3 font-semibold text-profit"
-                      : "px-4 py-3 font-semibold text-loss"
+                      ? "px-2 py-2 font-semibold text-profit"
+                      : "px-2 py-2 font-semibold text-loss"
                   }
                 >
                   {formatCurrency(t.netPnl)}
                 </td>
-                <td className="px-4 py-3">
+                <td className="px-2 py-2">
                   <StatusBadge netPnl={t.netPnl} />
                 </td>
-                <td className="px-4 py-3 text-muted uppercase">
+                <td className="px-2 py-2 text-muted uppercase">
                   {t.direction}
                 </td>
-                <td className="px-4 py-3">
+                <td className="px-2 py-2">
                   {t.entryModel ? (
-                    <span className="rounded-full border border-accent/30 bg-accent/10 px-2 py-0.5 text-[11px] font-medium text-accent">
+                    <span className="whitespace-nowrap rounded-full border border-accent/30 bg-accent/10 px-1.5 py-0.5 text-[10px] font-medium text-accent">
                       {t.entryModel}
                     </span>
                   ) : (
                     <span className="text-muted">—</span>
                   )}
                 </td>
-                <td className="px-4 py-3">
+                <td className="px-2 py-2">
                   {t.setupGrade ? (
                     <span
                       className={clsx(
-                        "rounded-full border px-2 py-0.5 text-[11px] font-semibold",
+                        "whitespace-nowrap rounded-full border px-1.5 py-0.5 text-[10px] font-semibold",
                         GRADE_CLASS[t.setupGrade] ??
                           "border-border bg-surface-raised text-muted",
                       )}
@@ -215,15 +215,15 @@ export function TradesTable({ trades }: { trades: TradeListItem[] }) {
                     <span className="text-muted">—</span>
                   )}
                 </td>
-                <td className="px-4 py-3">
-                  <div className="flex items-center gap-2">
-                    <RMultipleBar rMultiple={t.rMultiple} />
-                    <span className="text-xs text-muted">
+                <td className="px-2 py-2">
+                  <div className="flex items-center gap-1.5">
+                    <RMultipleBar rMultiple={t.rMultiple} width={64} />
+                    <span className="text-[10px] text-muted">
                       {formatR(t.rMultiple)}
                     </span>
                   </div>
                 </td>
-                <td className="px-4 py-3 text-muted">
+                <td className="px-2 py-2 text-muted">
                   {t.account ? t.account.firmName : "—"}
                 </td>
               </tr>
