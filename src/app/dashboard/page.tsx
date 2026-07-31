@@ -341,7 +341,7 @@ export default async function DashboardPage() {
                 {day.tradeCount === 0 ? (
                   <span className="text-xs text-muted">No trades logged</span>
                 ) : (
-                  <div className="flex flex-wrap items-center gap-x-4 gap-y-1 text-xs text-muted">
+                  <div className="flex flex-wrap items-center justify-between gap-x-4 gap-y-1 text-xs text-muted">
                     <span>
                       {day.tradeCount} trade{day.tradeCount === 1 ? "" : "s"}
                     </span>
