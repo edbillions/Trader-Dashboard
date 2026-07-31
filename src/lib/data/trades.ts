@@ -35,6 +35,16 @@ export async function listAccountsForFilter() {
   });
 }
 
+export async function listTagCategoriesForPicker() {
+  return prisma.tagCategory.findMany({
+    where: { active: true },
+    orderBy: { order: "asc" },
+    include: {
+      tags: { where: { active: true }, orderBy: { label: "asc" } },
+    },
+  });
+}
+
 export async function getTradeDetail(id: string) {
   return prisma.trade.findUnique({
     where: { id },

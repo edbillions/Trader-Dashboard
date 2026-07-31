@@ -288,6 +288,48 @@ export async function bulkDeleteTradesAction(
   return { deletedCount: result.count };
 }
 
+export async function bulkTagTradesAction(
+  tradeIds: string[],
+  tagIds: string[],
+): Promise<{ updatedCount: number }> {
+  if (tradeIds.length === 0 || tagIds.length === 0) return { updatedCount: 0 };
+
+  // Tags follow a one-per-category invariant per trade (see TagCategoryPicker),
+  // so applying a tag from a category replaces whatever that trade already
+  // had selected in that same category, rather than piling up alongside it.
+  const selectedTags = await prisma.tagOption.findMany({
+    where: { id: { in: tagIds } },
+    select: { categoryId: true },
+  });
+  const touchedCategoryIds = Array.from(
+    new Set(selectedTags.map((t) => t.categoryId)),
+  );
+  const categoryTags = await prisma.tagOption.findMany({
+    where: { categoryId: { in: touchedCategoryIds } },
+    select: { id: true },
+  });
+
+  await prisma.$transaction(
+    tradeIds.map((id) =>
+      prisma.trade.update({
+        where: { id },
+        data: {
+          tags: {
+            disconnect: categoryTags.map((t) => ({ id: t.id })),
+            connect: tagIds.map((id) => ({ id })),
+          },
+        },
+      }),
+    ),
+  );
+
+  revalidatePath("/dashboard");
+  revalidatePath("/trades");
+  revalidatePath("/calendar");
+
+  return { updatedCount: tradeIds.length };
+}
+
 export async function clearPreMarketPlanAction(formData: FormData) {
   const id = formData.get("id");
   const date = formData.get("date");

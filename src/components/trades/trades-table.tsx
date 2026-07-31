@@ -4,9 +4,11 @@ import { useState, useTransition } from "react";
 import Link from "next/link";
 import { clsx } from "clsx";
 import { formatCurrency, formatR } from "@/lib/pnl";
-import { bulkDeleteTradesAction } from "@/lib/actions/journal";
+import { bulkDeleteTradesAction, bulkTagTradesAction } from "@/lib/actions/journal";
 import { RMultipleBar } from "@/components/trades/r-multiple-bar";
+import { TagCategoryPicker } from "@/components/ui/tag-category-picker";
 import type { TradeListItem } from "@/lib/data/trades";
+import type { listTagCategoriesForPicker } from "@/lib/data/trades";
 
 function dateKey(d: Date) {
   return d.toISOString().slice(0, 10);
@@ -47,10 +49,20 @@ function StatusBadge({ netPnl }: { netPnl: number | null }) {
   );
 }
 
-export function TradesTable({ trades }: { trades: TradeListItem[] }) {
+type TagCategories = Awaited<ReturnType<typeof listTagCategoriesForPicker>>;
+
+export function TradesTable({
+  trades,
+  tagCategories,
+}: {
+  trades: TradeListItem[];
+  tagCategories: TagCategories;
+}) {
   const [selected, setSelected] = useState<Set<string>>(new Set());
   const [isPending, startTransition] = useTransition();
   const [error, setError] = useState<string | null>(null);
+  const [showTagPanel, setShowTagPanel] = useState(false);
+  const [tagIds, setTagIds] = useState<string[]>([]);
 
   const allSelected = trades.length > 0 && selected.size === trades.length;
 
@@ -88,32 +100,91 @@ export function TradesTable({ trades }: { trades: TradeListItem[] }) {
     });
   }
 
+  function handleApplyTags() {
+    if (selected.size === 0 || tagIds.length === 0) return;
+    setError(null);
+    startTransition(async () => {
+      try {
+        await bulkTagTradesAction([...selected], tagIds);
+        setShowTagPanel(false);
+        setTagIds([]);
+        setSelected(new Set());
+      } catch (err) {
+        setError(err instanceof Error ? err.message : "Failed to tag trades.");
+      }
+    });
+  }
+
   return (
     <section>
       <div className="mb-3 flex items-center justify-between">
         <h2 className="text-sm font-semibold text-foreground">
           Your trades report
         </h2>
-        <div className="flex items-center gap-3">
+        <div className="relative flex items-center gap-3">
           {error && <span className="text-xs text-loss">{error}</span>}
-          <button
-            type="button"
-            disabled={selected.size === 0 || isPending}
-            onClick={handleBulkDelete}
-            className={clsx(
-              "rounded-lg border px-3 py-1.5 text-xs font-medium transition-colors",
-              selected.size > 0
-                ? "border-loss/40 text-loss hover:bg-loss-muted"
-                : "border-border text-muted",
-              "disabled:opacity-50",
-            )}
-          >
-            {isPending
-              ? "Deleting..."
-              : selected.size > 0
-                ? `Delete selected (${selected.size})`
-                : "Bulk actions"}
-          </button>
+          {selected.size > 0 ? (
+            <>
+              <button
+                type="button"
+                disabled={isPending}
+                onClick={() => setShowTagPanel((v) => !v)}
+                className="rounded-lg border border-accent/40 px-3 py-1.5 text-xs font-medium text-accent transition-colors hover:bg-accent/10 disabled:opacity-50"
+              >
+                Tag selected ({selected.size})
+              </button>
+              <button
+                type="button"
+                disabled={isPending}
+                onClick={handleBulkDelete}
+                className="rounded-lg border border-loss/40 px-3 py-1.5 text-xs font-medium text-loss transition-colors hover:bg-loss-muted disabled:opacity-50"
+              >
+                {isPending ? "Deleting..." : `Delete selected (${selected.size})`}
+              </button>
+            </>
+          ) : (
+            <button
+              type="button"
+              disabled
+              className="rounded-lg border border-border px-3 py-1.5 text-xs font-medium text-muted disabled:opacity-50"
+            >
+              Bulk actions
+            </button>
+          )}
+
+          {showTagPanel && selected.size > 0 && (
+            <div className="absolute right-0 top-full z-10 mt-2 w-80 rounded-xl border border-border bg-surface p-4 shadow-lg">
+              <p className="mb-3 text-xs font-semibold text-foreground">
+                Apply tags to {selected.size} selected trade
+                {selected.size === 1 ? "" : "s"}
+              </p>
+              <TagCategoryPicker
+                categories={tagCategories}
+                selectedIds={tagIds}
+                onChange={setTagIds}
+              />
+              <div className="mt-4 flex justify-end gap-2">
+                <button
+                  type="button"
+                  onClick={() => {
+                    setShowTagPanel(false);
+                    setTagIds([]);
+                  }}
+                  className="rounded-lg border border-border px-3 py-1.5 text-xs font-medium text-muted hover:text-foreground"
+                >
+                  Cancel
+                </button>
+                <button
+                  type="button"
+                  disabled={tagIds.length === 0 || isPending}
+                  onClick={handleApplyTags}
+                  className="rounded-lg bg-accent px-3 py-1.5 text-xs font-medium text-white disabled:opacity-50"
+                >
+                  {isPending ? "Applying..." : "Apply tags"}
+                </button>
+              </div>
+            </div>
+          )}
         </div>
       </div>
 

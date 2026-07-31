@@ -1,6 +1,10 @@
 import Link from "next/link";
 import { PageHeader } from "@/components/layout/page-header";
-import { listTrades, listAccountsForFilter } from "@/lib/data/trades";
+import {
+  listTrades,
+  listAccountsForFilter,
+  listTagCategoriesForPicker,
+} from "@/lib/data/trades";
 import { formatCurrency } from "@/lib/pnl";
 import { EquityCurveChart } from "@/components/dashboard/equity-curve-chart";
 import { DailyPnlChart } from "@/components/trades/daily-pnl-chart";
@@ -16,9 +20,10 @@ export default async function TradesPage({
   searchParams: Promise<{ accountId?: string; start?: string; end?: string }>;
 }) {
   const { accountId, start, end } = await searchParams;
-  const [trades, accounts] = await Promise.all([
+  const [trades, accounts, tagCategories] = await Promise.all([
     listTrades({ accountId, start, end }),
     listAccountsForFilter(),
+    listTagCategoriesForPicker(),
   ]);
 
   const netPnl = trades.reduce((sum, t) => sum + (t.netPnl ?? 0), 0);
@@ -115,7 +120,7 @@ export default async function TradesPage({
             : "No trades logged yet."}
         </div>
       ) : (
-        <TradesTable trades={trades} />
+        <TradesTable trades={trades} tagCategories={tagCategories} />
       )}
     </div>
   );
