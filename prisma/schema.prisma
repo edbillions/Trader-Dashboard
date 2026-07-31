@@ -437,6 +437,16 @@ model TradingViewLayout {
   @@unique([instrument, timeframe])
 }
 
+// ---------- Notebook ----------
+
+model NotebookEntry {
+  id        String   @id @default(cuid())
+  date      DateTime @unique
+  content   String   @default("")
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+}
+
 // ---------- Chart Vault ----------
 
 model ChartImage {

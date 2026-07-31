@@ -13,6 +13,7 @@ const NAV_GROUPS = [
       { href: "/setup-grader", label: "Setup Grader" },
       { href: "/playbook", label: "Playbook" },
       { href: "/journal", label: "Journal" },
+      { href: "/notebook", label: "Notebook" },
       { href: "/todo", label: "To-Do" },
     ],
   },
