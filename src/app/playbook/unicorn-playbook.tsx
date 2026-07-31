@@ -173,6 +173,10 @@ const BODY_HTML = `
       <div class="seq-chip"><span class="sn">10</span>Retrace entry</div>
     </div>
     <p style="margin-top:12px;"><strong>A Unicorn is not "an FVG" or "a breaker."</strong> It's the specific, rare condition where both exist on top of each other. If they don't share the same price range, it's a lesser, lower-confluence setup — and the grade should reflect that.</p>
+    <div class="sec-img">
+      <img src="/playbook/unicorn-full-setup.jpg" alt="Diagram of the full Unicorn setup showing the breaker block and Fair Value Gap overlapping into a single zone, with entry, stop loss, and 2R take-profit marked." />
+    </div>
+    <p class="sec-cap">The Unicorn zone is where the breaker block's price range and the FVG's price range overlap — entry inside that shared zone, stop beyond it, target at minimum 2R.</p>
   </div>
 </div>
 
