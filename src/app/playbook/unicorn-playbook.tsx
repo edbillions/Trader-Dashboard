@@ -150,7 +150,7 @@ const BODY_HTML = `
     <p>An FVG floating on its own is one signal. A breaker block on its own is a second, independent signal. When the FVG's price range sits <em>inside</em> the breaker's price range, two unrelated concepts agree on the exact same zone — that overlap is rare and strong enough to earn its own name: the Unicorn.</p>
     <div class="note"><strong>HTF FVG delivery (4 pts) →</strong> beyond the entry-timeframe FVG, you want price arriving from a higher-timeframe FVG (15M/1H/4H) too — confirmation the move is part of a larger institutional order-flow story, not just a local reaction.</div>
     <div class="sec-img">
-      <img src="/playbook/fair-value-gap-bullish-bearish.jpg" alt="Fair Value Gap diagram comparing a bullish FVG (three-candle imbalance where candle 1's high doesn't overlap candle 3's low) and a bearish FVG (candle 1's low doesn't overlap candle 3's high)." />
+      <img src="/playbook/publicplaybookfair-value-gap-bullish-bearish.jpg" alt="Fair Value Gap diagram comparing a bullish FVG (three-candle imbalance where candle 1's high doesn't overlap candle 3's low) and a bearish FVG (candle 1's low doesn't overlap candle 3's high)." />
     </div>
     <p class="sec-cap"><strong>A bullish FVG</strong> is the three-candle imbalance left behind by a strong upward displacement — the high of the first candle doesn't overlap the low of the third, leaving a gap price tends to return to before continuing higher. <strong>A bearish FVG</strong> is the mirror image on a downward displacement — the low of the first candle doesn't overlap the high of the third.</p>
   </div>
@@ -174,7 +174,7 @@ const BODY_HTML = `
     </div>
     <p style="margin-top:12px;"><strong>A Unicorn is not "an FVG" or "a breaker."</strong> It's the specific, rare condition where both exist on top of each other. If they don't share the same price range, it's a lesser, lower-confluence setup — and the grade should reflect that.</p>
     <div class="sec-img">
-      <img src="/playbook/unicorn-full-setup.jpg" alt="Diagram of the full Unicorn setup showing the breaker block and Fair Value Gap overlapping into a single zone, with entry, stop loss, and 2R take-profit marked." />
+      <img src="/playbook/publicplaybookunicorn-full-setup.jpg" alt="Diagram of the full Unicorn setup showing the breaker block and Fair Value Gap overlapping into a single zone, with entry, stop loss, and 2R take-profit marked." />
     </div>
     <p class="sec-cap">The Unicorn zone is where the breaker block's price range and the FVG's price range overlap — entry inside that shared zone, stop beyond it, target at minimum 2R.</p>
   </div>
