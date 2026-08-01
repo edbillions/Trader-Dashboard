@@ -156,13 +156,20 @@ export default async function JournalDayPage({
         {day.planScreenshots.length > 0 && (
           <div className="mt-4 flex flex-wrap gap-2">
             {day.planScreenshots.map((s) => (
-              // eslint-disable-next-line @next/next/no-img-element
-              <img
+              <a
                 key={s.id}
-                src={s.filePath}
-                alt="Pre-market plan screenshot"
-                className="h-20 w-20 rounded-lg border border-border object-cover"
-              />
+                href={s.filePath}
+                target="_blank"
+                rel="noreferrer"
+                className="block overflow-hidden rounded-lg border border-border transition-colors hover:border-accent/40"
+              >
+                {/* eslint-disable-next-line @next/next/no-img-element */}
+                <img
+                  src={s.filePath}
+                  alt="Pre-market plan screenshot"
+                  className="h-20 w-20 object-cover"
+                />
+              </a>
             ))}
           </div>
         )}
