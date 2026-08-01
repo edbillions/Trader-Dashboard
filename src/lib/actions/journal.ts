@@ -8,7 +8,12 @@ import { redirect } from "next/navigation";
 import { prisma } from "@/lib/prisma";
 import { calculateTrade } from "@/lib/pnl";
 import { getTradingDayDetail } from "@/lib/data/trading-day";
+import { getTradeDetail } from "@/lib/data/trades";
 import { summarizeTradingDay } from "@/lib/ai/summarize";
+import {
+  generateTradeSmartReview,
+  buildTradeSmartReviewInput,
+} from "@/lib/ai/trade-smart-review";
 import type { SaveTradingDayInput } from "@/lib/types/journal";
 
 export async function uploadScreenshotAction(
@@ -209,6 +214,20 @@ export async function saveTradingDayAction(
           data: { aiSummary: summary },
         });
       }
+
+      await Promise.all(
+        detail.trades.map(async (trade) => {
+          const review = await generateTradeSmartReview(
+            buildTradeSmartReviewInput(trade, detail.date),
+          );
+          if (review) {
+            await prisma.trade.update({
+              where: { id: trade.id },
+              data: { smartReview: JSON.stringify(review) },
+            });
+          }
+        }),
+      );
     }
   } catch (error) {
     console.error("AI summary failed:", error);
@@ -221,6 +240,26 @@ export async function saveTradingDayAction(
   revalidatePath(`/journal/${input.date}`);
 
   return { id: tradingDay.id, date: input.date };
+}
+
+export async function generateTradeSmartReviewAction(
+  tradeId: string,
+): Promise<{ available: boolean }> {
+  const trade = await getTradeDetail(tradeId);
+  if (!trade) return { available: false };
+
+  const review = await generateTradeSmartReview(
+    buildTradeSmartReviewInput(trade, trade.tradingDay.date),
+  );
+  if (!review) return { available: false };
+
+  await prisma.trade.update({
+    where: { id: tradeId },
+    data: { smartReview: JSON.stringify(review) },
+  });
+
+  revalidatePath(`/trades/${tradeId}`);
+  return { available: true };
 }
 
 export async function saveTradingDayAndRedirectAction(

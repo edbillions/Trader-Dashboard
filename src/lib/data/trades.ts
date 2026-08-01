@@ -56,6 +56,7 @@ export async function getTradeDetail(id: string) {
       confluenceFactors: true,
       mistakes: true,
       screenshots: true,
+      tags: true,
     },
   });
 }

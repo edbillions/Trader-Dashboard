@@ -142,7 +142,7 @@ export async function getTradingDayDetail(date: string) {
     include: {
       ruleViolations: true,
       trades: {
-        include: { confluenceFactors: true, mistakes: true, screenshots: true },
+        include: { confluenceFactors: true, mistakes: true, screenshots: true, tags: true },
         orderBy: { entryTime: "asc" },
       },
       missedTrades: { include: { confluenceFactors: true } },
