@@ -255,6 +255,12 @@ export async function getAnalyticsData(filter: AnalyticsFilter = {}) {
     management,
     systemEdge,
     outlierTrades,
+    // Raw per-trade P&L, for the client-side Daily/Weekly/Monthly/Total
+    // equity curve filter (same shape as getDashboardData()'s field).
+    equityCurveTrades: trades.map((t) => ({
+      entryTime: t.entryTime.toISOString(),
+      netPnl: t.netPnl ?? 0,
+    })),
   };
 }
 

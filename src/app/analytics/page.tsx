@@ -15,6 +15,7 @@ import { ManagementSection } from "@/components/analytics/management-section";
 import { TrueSystemEdgeCard } from "@/components/analytics/true-system-edge-card";
 import { OutlierTradesList } from "@/components/analytics/outlier-trades-list";
 import { AnalyticsFilterBar } from "@/components/analytics/analytics-filter-bar";
+import { EquityCurveSection } from "@/components/dashboard/equity-curve-section";
 
 export const dynamic = "force-dynamic";
 
@@ -35,6 +36,7 @@ export default async function AnalyticsPage({
     management,
     systemEdge,
     outlierTrades,
+    equityCurveTrades,
   } = data;
 
   const rankedSessions = [...breakdowns.bySession].sort(
@@ -62,6 +64,8 @@ export default async function AnalyticsPage({
       <AnalyticsFilterBar />
 
       <PatternInsights />
+
+      <EquityCurveSection trades={equityCurveTrades} />
 
       <div className="mb-8 grid grid-cols-1 gap-4 lg:grid-cols-3">
         <div className="rounded-xl border border-border bg-surface p-4 lg:col-span-1">
