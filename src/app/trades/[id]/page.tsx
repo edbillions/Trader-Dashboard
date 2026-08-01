@@ -6,6 +6,7 @@ import { getTradeDetail } from "@/lib/data/trades";
 import { formatCurrency, formatR, formatDateWithWeekday } from "@/lib/pnl";
 import { SmartReviewPanel } from "@/components/trades/smart-review-panel";
 import { ReviewedButton } from "@/components/trades/reviewed-button";
+import { CoachReviewPanel } from "@/components/trades/coach-review-panel";
 
 function dateKey(d: Date) {
   return d.toISOString().slice(0, 10);
@@ -155,7 +156,7 @@ export default async function TradeDetailPage({
           )}
 
           {trade.screenshots.length > 0 && (
-            <section>
+            <section className="mb-6">
               <h2 className="mb-3 text-sm font-semibold text-foreground">
                 Screenshots
               </h2>
@@ -179,6 +180,8 @@ export default async function TradeDetailPage({
               </div>
             </section>
           )}
+
+          <CoachReviewPanel trade={trade} />
         </div>
 
         <aside className="lg:sticky lg:top-6 lg:self-start">
