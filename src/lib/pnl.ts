@@ -1,5 +1,19 @@
 export type Direction = "long" | "short";
 
+export function formatDateWithWeekday(d: Date): string {
+  const iso = d.toISOString().slice(0, 10);
+  // Reparse as local midnight (same trick used elsewhere in this app,
+  // e.g. requiredStartDate in actions/reviews.ts) so weekday/month/day
+  // are read off the stored calendar date, not shifted by the server's
+  // local timezone converting the UTC-midnight Date first.
+  return new Date(`${iso}T00:00:00`).toLocaleDateString("en-US", {
+    weekday: "long",
+    year: "numeric",
+    month: "long",
+    day: "numeric",
+  });
+}
+
 export interface InstrumentTick {
   tickValue: number;
   tickSize: number;

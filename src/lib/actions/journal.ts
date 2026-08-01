@@ -287,6 +287,15 @@ export async function generateTradeSmartReviewAction(
   return { available: true };
 }
 
+export async function toggleTradeReviewedAction(
+  tradeId: string,
+  reviewed: boolean,
+): Promise<void> {
+  await prisma.trade.update({ where: { id: tradeId }, data: { reviewed } });
+  revalidatePath(`/trades/${tradeId}`);
+  revalidatePath("/trades");
+}
+
 export async function saveTradingDayAndRedirectAction(
   input: SaveTradingDayInput,
 ) {

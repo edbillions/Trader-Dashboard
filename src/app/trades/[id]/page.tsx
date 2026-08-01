@@ -3,8 +3,9 @@ import { clsx } from "clsx";
 import { notFound } from "next/navigation";
 import { PageHeader } from "@/components/layout/page-header";
 import { getTradeDetail } from "@/lib/data/trades";
-import { formatCurrency, formatR } from "@/lib/pnl";
+import { formatCurrency, formatR, formatDateWithWeekday } from "@/lib/pnl";
 import { SmartReviewPanel } from "@/components/trades/smart-review-panel";
+import { ReviewedButton } from "@/components/trades/reviewed-button";
 
 function dateKey(d: Date) {
   return d.toISOString().slice(0, 10);
@@ -21,6 +22,7 @@ export default async function TradeDetailPage({
   if (!trade) notFound();
 
   const date = dateKey(trade.tradingDay.date);
+  const displayDate = formatDateWithWeekday(trade.tradingDay.date);
   const durationMinutes = trade.exitTime
     ? Math.round(
         (trade.exitTime.getTime() - trade.entryTime.getTime()) / 60000,
@@ -31,9 +33,10 @@ export default async function TradeDetailPage({
     <div>
       <PageHeader
         title={`${trade.symbol} · ${trade.direction.toUpperCase()}`}
-        description={date}
+        description={displayDate}
         actions={
           <div className="flex items-center gap-2">
+            <ReviewedButton tradeId={trade.id} reviewed={trade.reviewed} />
             <Link
               href={`/journal/new?date=${date}`}
               className="rounded-lg border border-border px-4 py-2 text-sm font-medium text-foreground hover:bg-surface-raised"

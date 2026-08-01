@@ -152,6 +152,7 @@ model Trade {
   writeup String?
 
   smartReview String? // JSON: { summary, setup, execution, psychology } — AI-generated per-trade review
+  reviewed    Boolean @default(false)
 
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
