@@ -15,6 +15,7 @@ const NAV_GROUPS = [
       { href: "/journal", label: "Journal" },
       { href: "/notebook", label: "Notebook" },
       { href: "/todo", label: "To-Do" },
+      { href: "/schedule", label: "Schedule" },
     ],
   },
   {

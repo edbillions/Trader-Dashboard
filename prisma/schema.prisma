@@ -295,6 +295,31 @@ model TodoItem {
   updatedAt DateTime @updatedAt
 }
 
+// ---------- Daily Schedule / Habit Tracker ----------
+
+model Habit {
+  id      String  @id @default(cuid())
+  label   String  @unique
+  cadence String  @default("daily") // "daily" | "weekday" — which days count toward its streak
+  order   Int     @default(0)
+  active  Boolean @default(true)
+
+  createdAt DateTime @default(now())
+
+  logs HabitLog[]
+}
+
+model HabitLog {
+  id      String @id @default(cuid())
+  habitId String
+  habit   Habit  @relation(fields: [habitId], references: [id], onDelete: Cascade)
+  date    DateTime // normalized to local midnight, same convention as TradingDay.date
+
+  createdAt DateTime @default(now())
+
+  @@unique([habitId, date])
+}
+
 // ---------- Life Goals (Business / Personal) ----------
 
 model LifeGoal {

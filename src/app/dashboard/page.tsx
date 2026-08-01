@@ -18,17 +18,21 @@ import { SessionClocks } from "@/components/layout/session-clocks";
 import { quoteOfTheDay } from "@/lib/motivational-quotes";
 import { getTodoWidgetItems } from "@/lib/data/todos";
 import { DaySparkline } from "@/components/journal/day-sparkline";
+import { getScheduleWidgetData } from "@/lib/data/schedule";
+import { TodaysScheduleWidget } from "@/components/dashboard/todays-schedule-widget";
 
 export const dynamic = "force-dynamic";
 
 export default async function DashboardPage() {
-  const [data, analytics, todayTodos, agents, macroBriefing] = await Promise.all([
-    getDashboardData(),
-    getAnalyticsData(),
-    getTodoWidgetItems(),
-    getAgentInsights(),
-    getTodayMacroBriefing(),
-  ]);
+  const [data, analytics, todayTodos, agents, macroBriefing, scheduleData] =
+    await Promise.all([
+      getDashboardData(),
+      getAnalyticsData(),
+      getTodoWidgetItems(),
+      getAgentInsights(),
+      getTodayMacroBriefing(),
+      getScheduleWidgetData(),
+    ]);
 
   const { tradeStreaks } = data;
   const isLossStreak = tradeStreaks.currentType === "loss";
@@ -181,6 +185,8 @@ export default async function DashboardPage() {
       <div className="mb-8 rounded-xl border border-border bg-surface p-6">
         <SessionClocks />
       </div>
+
+      <TodaysScheduleWidget data={scheduleData} />
 
       <DashboardTodoWidget todos={todayTodos} />
 

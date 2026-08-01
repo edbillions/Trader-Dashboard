@@ -37,6 +37,19 @@ const ruleViolations = [
   "Stopped at planned max loss",
 ];
 
+const habits: { label: string; cadence: "daily" | "weekday"; order: number }[] = [
+  { label: "Up by 5:15 AM + prayer/gratitude", cadence: "daily", order: 1 },
+  { label: "Completed today's workout", cadence: "daily", order: 2 },
+  { label: "Coffee with wife", cadence: "daily", order: 3 },
+  { label: "Pre-market prep (no YouTube/social)", cadence: "weekday", order: 4 },
+  { label: "Traded the plan, no revenge trades", cadence: "weekday", order: 5 },
+  { label: "Journaled trades", cadence: "weekday", order: 6 },
+  { label: "Homeschool complete", cadence: "weekday", order: 7 },
+  { label: "60+ min outdoor time with son", cadence: "daily", order: 8 },
+  { label: "Wife time, phones away", cadence: "daily", order: 9 },
+  { label: "Lights out by 10 PM", cadence: "daily", order: 10 },
+];
+
 const instruments = [
   { symbol: "ES", tickValue: 12.5, tickSize: 0.25, pointValue: 50 },
   { symbol: "NQ", tickValue: 5, tickSize: 0.25, pointValue: 20 },
@@ -176,6 +189,14 @@ async function main() {
       where: { symbol: instrument.symbol },
       update: {},
       create: instrument,
+    });
+  }
+
+  for (const habit of habits) {
+    await prisma.habit.upsert({
+      where: { label: habit.label },
+      update: { cadence: habit.cadence, order: habit.order },
+      create: habit,
     });
   }
 
