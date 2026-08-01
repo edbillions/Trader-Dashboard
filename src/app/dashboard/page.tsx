@@ -8,7 +8,7 @@ import { getTodayMacroBriefing } from "@/lib/data/macro-briefing";
 import { formatCurrency, formatR } from "@/lib/pnl";
 import { AnimatedNumber } from "@/components/ui/animated-number";
 import { CompositeRadar } from "@/components/analytics/composite-radar";
-import { EquityCurveChart } from "@/components/dashboard/equity-curve-chart";
+import { EquityCurveSection } from "@/components/dashboard/equity-curve-section";
 import { DashboardTodoWidget } from "@/components/dashboard/dashboard-todo-widget";
 import { StreakCard } from "@/components/dashboard/streak-card";
 import { TodayRiskWidget } from "@/components/dashboard/today-risk-widget";
@@ -202,29 +202,7 @@ export default async function DashboardPage() {
         />
       </div>
 
-      <section className="mb-8 rounded-xl border border-border bg-surface p-4">
-        <div className="mb-3 flex items-center justify-between">
-          <h3 className="text-sm font-semibold text-foreground">
-            Equity curve
-          </h3>
-          <span
-            className={
-              data.netPnl >= 0
-                ? "text-sm font-semibold text-profit"
-                : "text-sm font-semibold text-loss"
-            }
-          >
-            {formatCurrency(data.netPnl)} all-time
-          </span>
-        </div>
-        {data.equityCurve.length > 1 ? (
-          <EquityCurveChart data={data.equityCurve} />
-        ) : (
-          <p className="py-8 text-center text-sm text-muted">
-            Log a few more days to see your equity curve.
-          </p>
-        )}
-      </section>
+      <EquityCurveSection trades={data.equityCurveTrades} />
 
       <div className="mb-8 grid grid-cols-1 gap-4 lg:grid-cols-3">
         <div className="rounded-xl border border-border bg-surface p-4 lg:col-span-1">

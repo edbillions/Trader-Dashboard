@@ -89,6 +89,13 @@ export async function getDashboardData() {
     netPnl,
     winRate,
     equityCurve,
+    // Raw per-trade P&L, for client-side Daily/Weekly/Monthly/Total
+    // period filtering on the equity curve — day-level equityCurve above
+    // can't be re-aggregated into a same-day intraday curve.
+    equityCurveTrades: allTrades.map((t) => ({
+      entryTime: t.entryTime.toISOString(),
+      netPnl: t.netPnl ?? 0,
+    })),
     noRuleBreakStreak,
     tradeStreaks,
     todayRisk,
