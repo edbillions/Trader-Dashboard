@@ -26,6 +26,7 @@ import {
   scorecardTotal,
   scorecardBand,
 } from "@/lib/types/scorecard";
+import { ECONOMIC_EVENTS } from "@/lib/economic-events";
 
 const STEPS = [
   { key: "plan", label: "Pre-Market Plan" },
@@ -51,6 +52,8 @@ export function JournalWizard({
   >(null);
   const [aiUnavailable, setAiUnavailable] = useState(false);
   const [isUploadingPlan, startPlanUpload] = useTransition();
+  const [newsEventPick, setNewsEventPick] = useState("");
+  const [newsTimePick, setNewsTimePick] = useState("");
   const router = useRouter();
 
   const step = STEPS[stepIndex];
@@ -87,6 +90,24 @@ export function JournalWizard({
     val: SaveTradingDayInput[K],
   ) {
     setData((d) => ({ ...d, [key]: val }));
+  }
+
+  function formatTimePick(time: string): string {
+    const [hourStr, minuteStr] = time.split(":");
+    const hour24 = Number(hourStr);
+    const period = hour24 >= 12 ? "PM" : "AM";
+    const hour12 = hour24 % 12 === 0 ? 12 : hour24 % 12;
+    return `${hour12}:${minuteStr} ${period}`;
+  }
+
+  function addNewsEvent() {
+    if (!newsEventPick) return;
+    const entry = newsTimePick
+      ? `${newsEventPick} at ${formatTimePick(newsTimePick)}`
+      : newsEventPick;
+    set("news", data.news ? `${data.news}, ${entry}` : entry);
+    setNewsEventPick("");
+    setNewsTimePick("");
   }
 
   function setChecklist(patch: Partial<PreMarketChecklist>) {
@@ -410,6 +431,34 @@ export function JournalWizard({
                   onChange={(e) => set("news", e.target.value)}
                   placeholder="CPI at 8:30am"
                 />
+                <div className="mt-2 flex gap-2">
+                  <Select
+                    value={newsEventPick}
+                    onChange={(e) => setNewsEventPick(e.target.value)}
+                    className="flex-1"
+                  >
+                    <option value="">Add an event...</option>
+                    {ECONOMIC_EVENTS.map((event) => (
+                      <option key={event} value={event}>
+                        {event}
+                      </option>
+                    ))}
+                  </Select>
+                  <input
+                    type="time"
+                    value={newsTimePick}
+                    onChange={(e) => setNewsTimePick(e.target.value)}
+                    className="w-32 rounded-lg border border-border bg-surface px-2 py-2 text-sm text-foreground"
+                  />
+                  <button
+                    type="button"
+                    onClick={addNewsEvent}
+                    disabled={!newsEventPick}
+                    className="rounded-lg border border-border px-3 py-2 text-xs font-medium text-foreground hover:bg-surface-raised disabled:opacity-50"
+                  >
+                    Add
+                  </button>
+                </div>
               </Field>
             </div>
             <div className="grid grid-cols-3 gap-4">
