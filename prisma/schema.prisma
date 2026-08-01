@@ -496,6 +496,28 @@ model NotebookEntry {
   updatedAt DateTime @updatedAt
 }
 
+// ---------- Notebook folders (flat, one level — separate from daily NotebookEntry) ----------
+
+model NotebookFolder {
+  id        String   @id @default(cuid())
+  name      String
+  color     String? // palette key from src/lib/domain/notebook-colors.ts, e.g. "rose"
+  order     Int      @default(0)
+  createdAt DateTime @default(now())
+
+  notes NotebookNote[]
+}
+
+model NotebookNote {
+  id        String   @id @default(cuid())
+  folderId  String
+  folder    NotebookFolder @relation(fields: [folderId], references: [id], onDelete: Cascade)
+  title     String   @default("Untitled")
+  content   String   @default("")
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+}
+
 // ---------- Chart Vault ----------
 
 model ChartImage {

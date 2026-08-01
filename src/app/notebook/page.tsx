@@ -1,9 +1,23 @@
 import Link from "next/link";
+import { redirect } from "next/navigation";
 import { format } from "date-fns";
 import { PageHeader } from "@/components/layout/page-header";
-import { getNotebookEntry, listNotebookDatesInMonth } from "@/lib/data/notebook";
+import {
+  getNotebookEntry,
+  listNotebookDatesInMonth,
+  listNotebookFolders,
+  listRecentNotebookItems,
+  listAllNotesForSearch,
+  getNotebookFolder,
+  listNotesInFolder,
+  getNotebookNote,
+} from "@/lib/data/notebook";
+import { createNotebookNoteAction } from "@/lib/actions/notebook";
 import { NotebookEditor } from "@/components/notebook/notebook-editor";
 import { NotebookCalendar } from "@/components/notebook/notebook-calendar";
+import { NotebookSidebar } from "@/components/notebook/notebook-sidebar";
+import { NotebookNotesList } from "@/components/notebook/notebook-notes-list";
+import { NotebookNoteEditor } from "@/components/notebook/notebook-note-editor";
 
 export const dynamic = "force-dynamic";
 
@@ -20,9 +34,71 @@ function shiftDate(date: string, days: number) {
 export default async function NotebookPage({
   searchParams,
 }: {
-  searchParams: Promise<{ date?: string; year?: string; month?: string }>;
+  searchParams: Promise<{
+    date?: string;
+    year?: string;
+    month?: string;
+    folder?: string;
+    note?: string;
+  }>;
 }) {
   const params = await searchParams;
+  const [folders, recent, allNotesForSearch] = await Promise.all([
+    listNotebookFolders(),
+    listRecentNotebookItems(),
+    listAllNotesForSearch(),
+  ]);
+
+  if (params.folder) {
+    const [folder, notes] = await Promise.all([
+      getNotebookFolder(params.folder),
+      listNotesInFolder(params.folder),
+    ]);
+    if (!folder) redirect("/notebook");
+
+    const selectedNote = params.note ? await getNotebookNote(params.note) : null;
+
+    return (
+      <div>
+        <PageHeader
+          title="Notebook"
+          description="Quick notes for the trading session — autosaves as you type."
+        />
+        <div className="grid grid-cols-1 gap-4 lg:grid-cols-[220px_260px_1fr]">
+          <NotebookSidebar
+            folders={folders}
+            recent={recent}
+            allNotesForSearch={allNotesForSearch}
+            activeFolderId={folder.id}
+          />
+          <NotebookNotesList
+            folder={folder}
+            notes={notes}
+            activeNoteId={selectedNote?.id ?? null}
+          />
+          {selectedNote ? (
+            <NotebookNoteEditor key={selectedNote.id} note={selectedNote} />
+          ) : (
+            <div className="flex h-fit flex-col items-center justify-center gap-3 rounded-xl border border-dashed border-border bg-surface p-12 text-center">
+              <p className="text-sm text-muted">
+                Select a note, or create one to get started.
+              </p>
+              <form action={createNotebookNoteAction}>
+                <input type="hidden" name="folderId" value={folder.id} />
+                <button
+                  type="submit"
+                  className="rounded-lg bg-accent px-4 py-2 text-sm font-medium text-white"
+                >
+                  + New note
+                </button>
+              </form>
+            </div>
+          )}
+        </div>
+      </div>
+    );
+  }
+
   const date = params.date ?? todayKey();
   const dateObj = new Date(`${date}T00:00:00`);
   const year = params.year ? Number(params.year) : dateObj.getFullYear();
@@ -66,7 +142,13 @@ export default async function NotebookPage({
         </span>
       </div>
 
-      <div className="grid grid-cols-1 gap-4 lg:grid-cols-[1fr_280px]">
+      <div className="grid grid-cols-1 gap-4 lg:grid-cols-[220px_1fr_280px]">
+        <NotebookSidebar
+          folders={folders}
+          recent={recent}
+          allNotesForSearch={allNotesForSearch}
+          activeFolderId={null}
+        />
         <NotebookEditor
           key={date}
           date={date}
