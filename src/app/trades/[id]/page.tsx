@@ -32,12 +32,20 @@ export default async function TradeDetailPage({
         title={`${trade.symbol} · ${trade.direction.toUpperCase()}`}
         description={date}
         actions={
-          <Link
-            href={`/journal/${date}`}
-            className="rounded-lg border border-border px-4 py-2 text-sm font-medium text-foreground hover:bg-surface-raised"
-          >
-            View journal day
-          </Link>
+          <div className="flex items-center gap-2">
+            <Link
+              href={`/journal/new?date=${date}`}
+              className="rounded-lg border border-border px-4 py-2 text-sm font-medium text-foreground hover:bg-surface-raised"
+            >
+              Edit
+            </Link>
+            <Link
+              href={`/journal/${date}`}
+              className="rounded-lg border border-border px-4 py-2 text-sm font-medium text-foreground hover:bg-surface-raised"
+            >
+              View journal day
+            </Link>
+          </div>
         }
       />
 
