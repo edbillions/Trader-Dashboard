@@ -13,6 +13,7 @@ function requiredString(formData: FormData, key: string): string {
 
 export async function createLifeGoalAction(formData: FormData) {
   const category = requiredString(formData, "category");
+  const tier = formData.get("tier");
   const title = requiredString(formData, "title");
   const description = formData.get("description");
   const targetValue = formData.get("targetValue");
@@ -31,6 +32,7 @@ export async function createLifeGoalAction(formData: FormData) {
   await prisma.lifeGoal.create({
     data: {
       category,
+      tier: typeof tier === "string" && tier.trim() ? tier.trim() : null,
       title,
       description:
         typeof description === "string" && description.trim()

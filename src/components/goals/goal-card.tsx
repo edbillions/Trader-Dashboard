@@ -1,5 +1,5 @@
 import { clsx } from "clsx";
-import { goalProgress } from "@/lib/data/goals-tracker";
+import { goalProgress, goalStatus } from "@/lib/data/goals-tracker";
 import {
   deleteLifeGoalAction,
   setPrimaryGoalAction,
@@ -11,6 +11,7 @@ import { ConfirmSubmitButton } from "@/components/ui/confirm-submit-button";
 interface Goal {
   id: string;
   category: string;
+  tier: string | null;
   title: string;
   description: string | null;
   isPrimary: boolean;
@@ -22,8 +23,18 @@ interface Goal {
   achieved: boolean;
 }
 
+const STATUS_BADGE: Record<
+  ReturnType<typeof goalStatus>,
+  { label: string; className: string }
+> = {
+  active: { label: "Active", className: "bg-surface-raised text-muted" },
+  completed: { label: "Completed", className: "bg-profit-muted text-profit" },
+  failed: { label: "Failed", className: "bg-loss-muted text-loss" },
+};
+
 export function GoalCard({ goal, index }: { goal: Goal; index?: number }) {
   const progress = goalProgress(goal);
+  const status = goalStatus(goal);
   const isLimit = goal.direction === "limit";
   const overCap = isLimit && goal.targetValue != null && goal.currentValue >= goal.targetValue;
 
@@ -41,7 +52,9 @@ export function GoalCard({ goal, index }: { goal: Goal; index?: number }) {
         "rounded-xl border p-4",
         goal.achieved
           ? "border-profit/30 bg-profit-muted/40"
-          : "border-border bg-surface",
+          : status === "failed"
+            ? "border-loss/30 bg-loss-muted/40"
+            : "border-border bg-surface",
       )}
     >
       <div className="flex items-start justify-between gap-3">
@@ -62,6 +75,19 @@ export function GoalCard({ goal, index }: { goal: Goal; index?: number }) {
             </span>
             <span className="rounded-full bg-surface-raised px-2 py-0.5 text-[10px] font-medium uppercase tracking-wide text-muted">
               {goal.category}
+            </span>
+            {goal.tier && (
+              <span className="rounded-full bg-surface-raised px-2 py-0.5 text-[10px] font-medium uppercase tracking-wide text-muted">
+                {goal.tier}
+              </span>
+            )}
+            <span
+              className={clsx(
+                "rounded-full px-2 py-0.5 text-[10px] font-semibold uppercase tracking-wide",
+                STATUS_BADGE[status].className,
+              )}
+            >
+              {STATUS_BADGE[status].label}
             </span>
             {overCap && !goal.achieved && (
               <span className="rounded-full bg-loss/20 px-2 py-0.5 text-[10px] font-semibold text-loss">
@@ -116,21 +142,28 @@ export function GoalCard({ goal, index }: { goal: Goal; index?: number }) {
 
       {goal.targetValue != null && (
         <div className="mt-3">
-          <div className="mb-1 flex items-center justify-between text-xs text-muted">
-            <span>
-              {goal.currentValue}
-              {goal.unit ?? ""} / {goal.targetValue}
-              {goal.unit ?? ""}
-              {isLimit ? " cap" : ""}
+          <div className="mb-1.5 flex items-end justify-between">
+            <span className="text-[10px] font-semibold uppercase tracking-wide text-muted">
+              Progress
             </span>
-            {progress != null && <span>{progress.toFixed(0)}%</span>}
+            {progress != null && (
+              <span className="text-lg font-bold leading-none text-foreground">
+                {progress.toFixed(0)}%
+              </span>
+            )}
           </div>
-          <div className="h-2 w-full overflow-hidden rounded-full bg-surface-raised">
+          <div className="h-3 w-full overflow-hidden rounded-full bg-surface-raised">
             <div
-              className={clsx("h-full", barColor)}
+              className={clsx("h-full rounded-full", barColor)}
               style={{ width: `${progress ?? 0}%` }}
             />
           </div>
+          <p className="mt-1 text-xs text-muted">
+            {goal.currentValue}
+            {goal.unit ?? ""} / {goal.targetValue}
+            {goal.unit ?? ""}
+            {isLimit ? " cap" : ""}
+          </p>
           <form
             action={updateProgressAction}
             className="mt-2 flex items-center gap-2"

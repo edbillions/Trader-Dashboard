@@ -327,6 +327,7 @@ model HabitLog {
 model LifeGoal {
   id           String    @id @default(cuid())
   category     String // "business" | "personal"
+  tier         String? // "daily" | "weekly" | "monthly" | "quarterly" | "annual" — optional, purely for filtering
   title        String
   description  String?
   isPrimary    Boolean   @default(false)

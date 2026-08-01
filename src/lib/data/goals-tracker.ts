@@ -15,3 +15,14 @@ export function goalProgress(goal: {
   const pct = (goal.currentValue / goal.targetValue) * 100;
   return Math.min(100, Math.max(0, pct));
 }
+
+export type GoalStatus = "active" | "completed" | "failed";
+
+export function goalStatus(goal: {
+  achieved: boolean;
+  targetDate: Date | null;
+}): GoalStatus {
+  if (goal.achieved) return "completed";
+  if (goal.targetDate && goal.targetDate < new Date()) return "failed";
+  return "active";
+}
