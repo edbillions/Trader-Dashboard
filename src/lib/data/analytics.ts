@@ -4,6 +4,7 @@ import { computeCompositeScore } from "@/lib/domain/composite-score";
 import { computeTradeStats, computeMonthlyPnl } from "@/lib/domain/trade-stats";
 import { computeManagementStats } from "@/lib/domain/trade-management";
 import { computeTrueSystemEdge } from "@/lib/domain/system-edge";
+import { ECONOMIC_EVENTS } from "@/lib/economic-events";
 
 export interface GroupStat {
   label: string;
@@ -141,6 +142,27 @@ export async function getAnalyticsData(filter: AnalyticsFilter = {}) {
   const byNewsDay = groupStats(trades, (t) =>
     t.tradingDay.news ? "News day" : "No news",
   );
+
+  // A day's news text can mention multiple events (e.g. "CPI at 8:30am,
+  // FOMC Interest Rate Decision at 2:00pm"), so a trade can land in more
+  // than one bucket — same non-exclusive grouping as byConfluenceFactor
+  // below, just matched against the known economic-event list instead of
+  // tagged confluence factors.
+  const newsEventGroups = new Map<string, typeof trades>();
+  for (const t of trades) {
+    const newsText = t.tradingDay.news ?? "";
+    if (!newsText) continue;
+    for (const event of ECONOMIC_EVENTS) {
+      if (newsText.includes(event)) {
+        if (!newsEventGroups.has(event)) newsEventGroups.set(event, []);
+        newsEventGroups.get(event)!.push(t);
+      }
+    }
+  }
+  const byNewsEvent = Array.from(newsEventGroups.entries())
+    .map(([label, group]) => groupStats(group, () => label)[0])
+    .sort((a, b) => b.netPnl - a.netPnl);
+
   const byTimeframe = groupStats(trades, (t) => t.entryTimeframe);
   const byEntryModel = groupStats(trades, (t) => t.entryModel);
   const bySession = groupStats(trades, (t) => t.session);
@@ -243,6 +265,7 @@ export async function getAnalyticsData(filter: AnalyticsFilter = {}) {
       byHour,
       bySymbol,
       byNewsDay,
+      byNewsEvent,
       byTimeframe,
       byEntryModel,
       bySession,

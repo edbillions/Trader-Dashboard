@@ -204,6 +204,7 @@ export default async function AnalyticsPage({
       <div className="grid grid-cols-1 gap-4 md:grid-cols-2">
         <BreakdownTable title="By symbol" stats={breakdowns.bySymbol} />
         <BreakdownTable title="News day vs. no news" stats={breakdowns.byNewsDay} />
+        <BreakdownTable title="By news event" stats={breakdowns.byNewsEvent} />
         <BreakdownTable title="By entry timeframe" stats={breakdowns.byTimeframe} />
         <BreakdownTable title="By entry model" stats={breakdowns.byEntryModel} />
       </div>
