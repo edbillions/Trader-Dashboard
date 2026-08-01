@@ -89,6 +89,7 @@ model TradingDayScreenshot {
   tradingDayId String
   tradingDay   TradingDay @relation(fields: [tradingDayId], references: [id], onDelete: Cascade)
   filePath     String
+  kind         String? // "daily" | "htf4h" | "mtf15m" — null = generic/unlabeled plan screenshot
 
   createdAt DateTime @default(now())
 }

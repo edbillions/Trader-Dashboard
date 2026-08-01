@@ -62,6 +62,9 @@ export interface SaveTradingDayInput {
   positionSizePlan: string;
   maxTradeCountPlan: number | null;
   planScreenshotPaths: string[];
+  dailyChartScreenshotPath: string | null;
+  htf4hChartScreenshotPath: string | null;
+  mtf15mChartScreenshotPath: string | null;
   preMarketChecklist: PreMarketChecklist;
   trades: TradeInput[];
   missedTrades: MissedTradeInput[];
@@ -132,6 +135,9 @@ export function emptyTradingDay(date: string): SaveTradingDayInput {
     positionSizePlan: "",
     maxTradeCountPlan: null,
     planScreenshotPaths: [],
+    dailyChartScreenshotPath: null,
+    htf4hChartScreenshotPath: null,
+    mtf15mChartScreenshotPath: null,
     preMarketChecklist: emptyPreMarketChecklist(),
     trades: [],
     missedTrades: [],

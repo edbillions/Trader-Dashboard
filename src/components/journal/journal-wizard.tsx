@@ -168,6 +168,25 @@ export function JournalWizard({
     e.target.value = "";
   }
 
+  function handleNamedSlotFileChange(
+    e: React.ChangeEvent<HTMLInputElement>,
+    field:
+      | "dailyChartScreenshotPath"
+      | "htf4hChartScreenshotPath"
+      | "mtf15mChartScreenshotPath",
+  ) {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    const formData = new FormData();
+    formData.set("file", file);
+    formData.set("folder", "plans");
+    startPlanUpload(async () => {
+      const result = await uploadScreenshotAction(formData);
+      set(field, result.path);
+    });
+    e.target.value = "";
+  }
+
   function handleSuggest() {
     setAiUnavailable(false);
     startSuggest(async () => {
@@ -498,9 +517,30 @@ export function JournalWizard({
             </div>
           </PlanSection>
 
+          <div className="grid grid-cols-1 gap-3 sm:grid-cols-3">
+            <PlanScreenshotSlot
+              label="Daily Chart Screenshot"
+              path={data.dailyChartScreenshotPath}
+              isUploading={isUploadingPlan}
+              onUpload={(e) => handleNamedSlotFileChange(e, "dailyChartScreenshotPath")}
+            />
+            <PlanScreenshotSlot
+              label="HTF 4H Chart Screenshot"
+              path={data.htf4hChartScreenshotPath}
+              isUploading={isUploadingPlan}
+              onUpload={(e) => handleNamedSlotFileChange(e, "htf4hChartScreenshotPath")}
+            />
+            <PlanScreenshotSlot
+              label="MTF 15M Chart Screenshot"
+              path={data.mtf15mChartScreenshotPath}
+              isUploading={isUploadingPlan}
+              onUpload={(e) => handleNamedSlotFileChange(e, "mtf15mChartScreenshotPath")}
+            />
+          </div>
+
           <div className="flex flex-col gap-1.5">
             <span className="text-xs font-medium text-muted">
-              Screenshots
+              Other screenshots
             </span>
             <div className="flex flex-wrap items-center gap-3">
               {data.planScreenshotPaths.map((p) => (
@@ -828,6 +868,46 @@ function PlanSection({
     <div className="flex flex-col gap-3 rounded-xl border border-border bg-surface p-4">
       <h3 className="text-sm font-semibold text-foreground">{title}</h3>
       {children}
+    </div>
+  );
+}
+
+function PlanScreenshotSlot({
+  label,
+  path,
+  isUploading,
+  onUpload,
+}: {
+  label: string;
+  path: string | null;
+  isUploading: boolean;
+  onUpload: (e: React.ChangeEvent<HTMLInputElement>) => void;
+}) {
+  return (
+    <div className="flex flex-col gap-1.5">
+      <span className="text-xs font-medium uppercase tracking-wide text-muted">
+        {label}
+      </span>
+      <label className="cursor-pointer">
+        {path ? (
+          // eslint-disable-next-line @next/next/no-img-element
+          <img
+            src={path}
+            alt={label}
+            className="h-32 w-full rounded-lg border border-border object-cover hover:opacity-80"
+          />
+        ) : (
+          <div className="flex h-32 w-full items-center justify-center rounded-lg border border-dashed border-border px-3 py-2 text-center text-xs text-muted hover:text-foreground">
+            {isUploading ? "Uploading..." : `+ Upload ${label}`}
+          </div>
+        )}
+        <input
+          type="file"
+          accept="image/*"
+          className="hidden"
+          onChange={onUpload}
+        />
+      </label>
     </div>
   );
 }

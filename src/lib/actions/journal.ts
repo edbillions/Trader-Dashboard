@@ -100,13 +100,38 @@ export async function saveTradingDayAction(
       where: { tradingDayId: day.id },
     });
 
-    if (input.planScreenshotPaths.length > 0) {
-      await tx.tradingDayScreenshot.createMany({
-        data: input.planScreenshotPaths.map((filePath) => ({
-          tradingDayId: day.id,
-          filePath,
-        })),
+    const planScreenshotRows: {
+      tradingDayId: string;
+      filePath: string;
+      kind: string | null;
+    }[] = input.planScreenshotPaths.map((filePath) => ({
+      tradingDayId: day.id,
+      filePath,
+      kind: null,
+    }));
+    if (input.dailyChartScreenshotPath) {
+      planScreenshotRows.push({
+        tradingDayId: day.id,
+        filePath: input.dailyChartScreenshotPath,
+        kind: "daily",
       });
+    }
+    if (input.htf4hChartScreenshotPath) {
+      planScreenshotRows.push({
+        tradingDayId: day.id,
+        filePath: input.htf4hChartScreenshotPath,
+        kind: "htf4h",
+      });
+    }
+    if (input.mtf15mChartScreenshotPath) {
+      planScreenshotRows.push({
+        tradingDayId: day.id,
+        filePath: input.mtf15mChartScreenshotPath,
+        kind: "mtf15m",
+      });
+    }
+    if (planScreenshotRows.length > 0) {
+      await tx.tradingDayScreenshot.createMany({ data: planScreenshotRows });
     }
 
     for (const trade of input.trades) {

@@ -80,7 +80,15 @@ export async function getTradingDayInputForDate(
     maxLossPlan: day.maxLossPlan,
     positionSizePlan: day.positionSizePlan ?? "",
     maxTradeCountPlan: day.maxTradeCountPlan,
-    planScreenshotPaths: day.planScreenshots.map((s) => s.filePath),
+    planScreenshotPaths: day.planScreenshots
+      .filter((s) => !s.kind)
+      .map((s) => s.filePath),
+    dailyChartScreenshotPath:
+      day.planScreenshots.find((s) => s.kind === "daily")?.filePath ?? null,
+    htf4hChartScreenshotPath:
+      day.planScreenshots.find((s) => s.kind === "htf4h")?.filePath ?? null,
+    mtf15mChartScreenshotPath:
+      day.planScreenshots.find((s) => s.kind === "mtf15m")?.filePath ?? null,
     preMarketChecklist: parsePreMarketChecklist(day.preMarketChecklist),
     planAdherenceGrade: day.planAdherenceGrade ?? "",
     psychologyLog: day.psychologyLog ?? "",
