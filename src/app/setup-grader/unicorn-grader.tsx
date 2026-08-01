@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useId, useMemo, useState } from "react";
+import { useEffect, useId, useMemo, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
 import "./grader.css";
 import {
@@ -30,11 +30,11 @@ import {
 // used by the Journal's Setup Factors checklist.
 const MAX_POSSIBLE_POINTS = TOTAL_POINTS + MAX_LIQUIDITY_BONUS + MAX_HTF_FVG_BONUS;
 
-// Persists all grader inputs across page navigation — client components
-// unmount on route change in the App Router, so without this, clicking to
-// another page and back wiped the in-progress grade. Session-scoped (not
-// localStorage) since this is scratch data for the current sitting, not
-// something meant to survive closing the browser.
+// Persists all grader inputs across page navigation and browser restarts —
+// client components unmount on route change in the App Router, so without
+// this, clicking to another page and back wiped the in-progress grade.
+// localStorage (not sessionStorage) since a trader may close and reopen the
+// tab mid-session and still expect the in-progress grade to be there.
 const STORAGE_KEY = "unicorn-grader-state";
 
 type CheckedState = Record<CriterionKey, boolean>;
@@ -59,11 +59,11 @@ export function UnicornGrader() {
   const [account, setAccount] = useState(50000);
   const [accountInput, setAccountInput] = useState("50,000");
 
-  // Rehydrate from sessionStorage after mount (not via a lazy useState
+  // Rehydrate from localStorage after mount (not via a lazy useState
   // initializer) to avoid an SSR/client hydration mismatch — the first
   // client render must match the server's empty-state HTML.
   useEffect(() => {
-    const raw = sessionStorage.getItem(STORAGE_KEY);
+    const raw = localStorage.getItem(STORAGE_KEY);
     if (!raw) return;
     try {
       const saved = JSON.parse(raw) as {
@@ -89,8 +89,22 @@ export function UnicornGrader() {
     }
   }, []);
 
+  // isFirstPersistRun skips exactly this effect's first (mount) invocation.
+  // That first run fires in the same commit as the rehydrate effect above,
+  // in declaration order, but its closure still sees the pre-hydration
+  // default state — setState calls don't apply until the next render. Left
+  // unguarded, that first run would immediately overwrite whatever the
+  // rehydrate effect just read from storage with the stale defaults, a
+  // heartbeat before the corrected write (triggered by the state actually
+  // changing) landed. Skipping only the first run removes that race.
+  const isFirstPersistRun = useRef(true);
+
   useEffect(() => {
-    sessionStorage.setItem(
+    if (isFirstPersistRun.current) {
+      isFirstPersistRun.current = false;
+      return;
+    }
+    localStorage.setItem(
       STORAGE_KEY,
       JSON.stringify({
         checked,
@@ -163,7 +177,7 @@ export function UnicornGrader() {
     setDolTarget(null);
     setHtfpdLevels(new Set());
     setLiqSwept(new Set());
-    sessionStorage.removeItem(STORAGE_KEY);
+    localStorage.removeItem(STORAGE_KEY);
   }
 
   function sendToJournal() {
