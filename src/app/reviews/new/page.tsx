@@ -6,15 +6,7 @@ import { createReviewAction } from "@/lib/actions/reviews";
 
 export const dynamic = "force-dynamic";
 
-const CATEGORY_SUGGESTIONS = [
-  "Week",
-  "Month",
-  "Quarter",
-  "Year",
-  "Discipline",
-  "Performance",
-  "Psychology",
-];
+const CATEGORY_SUGGESTIONS = ["Discipline", "Performance", "Psychology"];
 
 export default function NewReviewPage() {
   return (

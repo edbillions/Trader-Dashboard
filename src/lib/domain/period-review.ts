@@ -1,5 +1,13 @@
 export type PeriodType = "week" | "month" | "quarter" | "year" | "custom";
 
+// Gates every weekly-only Review section (Process Score, Trade Breakdown,
+// Opportunity Review, Screenshot Review, Confidence Scores, Decision
+// Quality Score) — month/quarter/year/custom/null all render the rolled-up
+// template instead.
+export function isWeeklyTemplate(periodType: string | null | undefined): boolean {
+  return periodType === "week";
+}
+
 export function startOfWeek(d: Date): Date {
   const date = new Date(d);
   const day = date.getDay();

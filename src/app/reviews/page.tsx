@@ -9,6 +9,14 @@ function fmtDate(d: Date) {
   return d.toISOString().slice(0, 10);
 }
 
+const PERIOD_TYPE_LABELS: Record<string, string> = {
+  week: "Week",
+  month: "Month",
+  quarter: "Quarter",
+  year: "Year",
+  custom: "Custom",
+};
+
 export default async function ReviewsPage() {
   const reviews = await getReviewsData();
 
@@ -64,6 +72,9 @@ export default async function ReviewsPage() {
                     )}
                   </td>
                   <td className="px-4 py-3 text-muted">
+                    <span className="mr-2 rounded-full border border-border px-2 py-0.5 text-[10px] font-medium text-muted">
+                      {r.periodType ? (PERIOD_TYPE_LABELS[r.periodType] ?? r.periodType) : "—"}
+                    </span>
                     {fmtDate(r.periodStart)} → {fmtDate(r.periodEnd)}
                   </td>
                   <td className="px-4 py-3 text-muted">

@@ -349,9 +349,28 @@ model PeriodReview {
   rating      Int? // 1-5
   periodStart DateTime
   periodEnd   DateTime
+  periodType  String? // "week" | "month" | "quarter" | "year" | "custom" — drives which template sections render; null = legacy row, treated as rolled-up
   category    String? // free text w/ suggestions ("Discipline", "Performance", "Psychology", ...)
   notes       String?
   isDraft     Boolean  @default(false)
+
+  // Weekly-only self-assessment sections (JSON, all nullable)
+  processScore         String? // JSON ProcessScoreScores — {preparation,execution,discipline,emotionalControl} 1-10
+  confidenceScores      String? // JSON ConfidenceScores — {preparation,execution,psychology,patience,risk,consistency,overall} 1-10
+  decisionQualityScore  String? // JSON DecisionQualityScore — {preparation:0-20,htfBias:0-15,setup:0-20,entry:0-20,risk:0-15,emotionalControl:0-10}
+  tradeBreakdown         String? // JSON Record<tradeId, {whatWentWell,improvements,executionScore,confidenceScore}> — weekly only
+  opportunityReview      String? // JSON {narrative} — missed A+ setups in period; weekly only
+  screenshotReview       String? // JSON {bestTradeId,bestTradeScreenshotId,worstTradeId,worstTradeScreenshotId,bestMissedSetupNote,biggestMistakeTradeId,biggestMistakeScreenshotId} — weekly only
+
+  // Sections available at every period type (week + rolled-up)
+  mistakeTracker         String? // JSON {costliestMistakeLabel,narrative}
+  ruleViolationsSummary  String? // JSON {narrative}
+  patternRecognition     String? // JSON {narrative}
+  lessonsLearned         String? // JSON string[] (up to 3)
+  actionItems            String? // JSON string[] (up to 3)
+  playbookUpdate         String? // JSON {notes} — pure user text, never AI-drafted
+  periodGrade            String? // JSON {scores:{preparation,analysis,execution,riskManagement,psychology,consistency,overall} 1-10, aiSuggestion:{tone,assessment}|null}
+  ceoQuestions           String? // JSON {mostProfit,mostCost,repeatingPattern,oneHabit,satisfiedIfIdentical}
 
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt

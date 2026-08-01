@@ -37,6 +37,7 @@ export function PeriodTypeSelector({
     <div className="grid grid-cols-3 gap-3">
       <Field label="Period type">
         <Select
+          name="periodType"
           value={type}
           onChange={(e) => handleTypeChange(e.target.value as PeriodType)}
         >
