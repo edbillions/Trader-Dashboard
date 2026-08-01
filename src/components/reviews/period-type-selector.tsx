@@ -18,8 +18,16 @@ export function PeriodTypeSelector({
   const [type, setType] = useState<PeriodType>(
     initialStart || initialEnd ? "custom" : "week",
   );
-  const [start, setStart] = useState(initialStart ?? "");
-  const [end, setEnd] = useState(initialEnd ?? "");
+  // "Week" is the default type, but a user who never touches the dropdown
+  // never fires handleTypeChange — so the initial start/end must already be
+  // computed here, not left empty waiting for an onChange that may never
+  // come.
+  const [start, setStart] = useState(
+    () => initialStart ?? toDateInputValue(getPeriodRange("week", new Date())!.start),
+  );
+  const [end, setEnd] = useState(
+    () => initialEnd ?? toDateInputValue(getPeriodRange("week", new Date())!.end),
+  );
 
   function handleTypeChange(next: PeriodType) {
     setType(next);
@@ -48,25 +56,25 @@ export function PeriodTypeSelector({
           <option value="custom">Custom</option>
         </Select>
       </Field>
-      <Field label="Period start">
+      <Field label={readOnly ? "Period start (set by period type)" : "Period start"}>
         <TextInput
           name="periodStart"
           type="date"
           value={start}
           onChange={(e) => setStart(e.target.value)}
           readOnly={readOnly}
-          className={readOnly ? "text-muted" : undefined}
+          className={readOnly ? "cursor-not-allowed bg-surface-raised text-muted" : undefined}
           required
         />
       </Field>
-      <Field label="Period end">
+      <Field label={readOnly ? "Period end (set by period type)" : "Period end"}>
         <TextInput
           name="periodEnd"
           type="date"
           value={end}
           onChange={(e) => setEnd(e.target.value)}
           readOnly={readOnly}
-          className={readOnly ? "text-muted" : undefined}
+          className={readOnly ? "cursor-not-allowed bg-surface-raised text-muted" : undefined}
           required
         />
       </Field>
