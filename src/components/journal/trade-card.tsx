@@ -10,7 +10,7 @@ import { DatalistInput } from "@/components/ui/datalist-input";
 import { ChipMultiSelect } from "@/components/ui/chip-multiselect";
 import { TagCategoryPicker } from "@/components/ui/tag-category-picker";
 import { SetupFactorsSection } from "@/components/journal/setup-factors-checklist";
-import { ACCOUNT_TYPE_LABELS } from "@/lib/domain/account-type";
+import { ACCOUNT_TYPES, ACCOUNT_TYPE_LABELS } from "@/lib/domain/account-type";
 
 export function TradeCard({
   index,
@@ -28,6 +28,11 @@ export function TradeCard({
   const [isUploading, startUpload] = useTransition();
   const [mfePriceStr, setMfePriceStr] = useState("");
   const [maePriceStr, setMaePriceStr] = useState("");
+  // Local picking aid only, not saved anywhere — narrows the Account
+  // dropdown below. Keeps the currently selected account visible even if
+  // it doesn't match the filter, so switching the filter never silently
+  // clears an existing selection.
+  const [accountTypeFilter, setAccountTypeFilter] = useState("");
 
   function set<K extends keyof TradeInput>(key: K, val: TradeInput[K]) {
     onChange({ ...value, [key]: val });
@@ -126,17 +131,37 @@ export function TradeCard({
             <option value="short">Short</option>
           </Select>
         </Field>
+        <Field label="Account type">
+          <Select
+            value={accountTypeFilter}
+            onChange={(e) => setAccountTypeFilter(e.target.value)}
+          >
+            <option value="">All types</option>
+            {ACCOUNT_TYPES.map((t) => (
+              <option key={t} value={t}>
+                {ACCOUNT_TYPE_LABELS[t]}
+              </option>
+            ))}
+          </Select>
+        </Field>
         <Field label="Account">
           <Select
             value={value.accountId ?? ""}
             onChange={(e) => set("accountId", e.target.value || null)}
           >
             <option value="">— none —</option>
-            {lookups.accounts.map((a) => (
-              <option key={a.id} value={a.id}>
-                {a.firmName} · {a.accountName} ({ACCOUNT_TYPE_LABELS[a.accountType] ?? a.accountType})
-              </option>
-            ))}
+            {lookups.accounts
+              .filter(
+                (a) =>
+                  !accountTypeFilter ||
+                  a.accountType === accountTypeFilter ||
+                  a.id === value.accountId,
+              )
+              .map((a) => (
+                <option key={a.id} value={a.id}>
+                  {a.firmName} · {a.accountName} ({ACCOUNT_TYPE_LABELS[a.accountType] ?? a.accountType})
+                </option>
+              ))}
           </Select>
         </Field>
         <Field label="Position size (contracts)">
