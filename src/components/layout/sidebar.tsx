@@ -3,62 +3,88 @@
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { clsx } from "clsx";
+import {
+  LayoutDashboard,
+  Sunrise,
+  ClipboardCheck,
+  BookOpen,
+  PenLine,
+  StickyNote,
+  CheckSquare,
+  CalendarClock,
+  TrendingUp,
+  Ban,
+  Calendar,
+  BarChart3,
+  ClipboardList,
+  Images,
+  GraduationCap,
+  Target,
+  Repeat,
+  AlertTriangle,
+  Building2,
+  Settings as SettingsIcon,
+  type LucideIcon,
+} from "lucide-react";
 
 const NAV_GROUPS = [
   {
     label: "Daily",
     items: [
-      { href: "/dashboard", label: "Dashboard" },
-      { href: "/premarket", label: "Pre-Market Analyst" },
-      { href: "/setup-grader", label: "Setup Grader" },
-      { href: "/playbook", label: "Playbook" },
-      { href: "/journal", label: "Journal" },
-      { href: "/notebook", label: "Notebook" },
-      { href: "/todo", label: "To-Do" },
-      { href: "/schedule", label: "Schedule" },
+      { href: "/dashboard", label: "Dashboard", icon: LayoutDashboard },
+      { href: "/premarket", label: "Pre-Market Analyst", icon: Sunrise },
+      { href: "/setup-grader", label: "Setup Grader", icon: ClipboardCheck },
+      { href: "/playbook", label: "Playbook", icon: BookOpen },
+      { href: "/journal", label: "Journal", icon: PenLine },
+      { href: "/notebook", label: "Notebook", icon: StickyNote },
+      { href: "/todo", label: "To-Do", icon: CheckSquare },
+      { href: "/schedule", label: "Schedule", icon: CalendarClock },
     ],
   },
   {
     label: "History",
     items: [
-      { href: "/trades", label: "Trades" },
-      { href: "/missed-trades", label: "Missed Trades" },
-      { href: "/calendar", label: "Calendar" },
-      { href: "/analytics", label: "Analytics" },
-      { href: "/reviews", label: "Reviews" },
-      { href: "/chart-vault", label: "Chart Vault" },
+      { href: "/trades", label: "Trades", icon: TrendingUp },
+      { href: "/missed-trades", label: "Missed Trades", icon: Ban },
+      { href: "/calendar", label: "Calendar", icon: Calendar },
+      { href: "/analytics", label: "Analytics", icon: BarChart3 },
+      { href: "/reviews", label: "Reviews", icon: ClipboardList },
+      { href: "/chart-vault", label: "Chart Vault", icon: Images },
     ],
   },
 ];
 
 const STANDALONE_ITEMS = [
-  { href: "/coach", label: "Coach" },
-  { href: "/goals", label: "Goals" },
-  { href: "/tendencies", label: "Tendencies" },
-  { href: "/mistakes", label: "Mistakes" },
-  { href: "/prop-firms", label: "Prop Firms" },
-  { href: "/settings", label: "Settings" },
+  { href: "/coach", label: "Coach", icon: GraduationCap },
+  { href: "/goals", label: "Goals", icon: Target },
+  { href: "/tendencies", label: "Tendencies", icon: Repeat },
+  { href: "/mistakes", label: "Mistakes", icon: AlertTriangle },
+  { href: "/prop-firms", label: "Prop Firms", icon: Building2 },
+  { href: "/settings", label: "Settings", icon: SettingsIcon },
 ];
 
 function NavLink({
   href,
   label,
+  icon: Icon,
   active,
 }: {
   href: string;
   label: string;
+  icon: LucideIcon;
   active: boolean;
 }) {
   return (
     <Link
       href={href}
       className={clsx(
-        "relative rounded-lg px-3 py-2 text-sm font-medium transition-all",
+        "relative flex items-center gap-2.5 rounded-lg px-3 py-2 text-sm font-medium transition-all",
         active
           ? "bg-surface-raised text-foreground before:absolute before:left-0 before:top-1/2 before:h-4 before:w-0.5 before:-translate-y-1/2 before:rounded-full before:bg-accent before:content-['']"
           : "text-muted hover:bg-surface-raised hover:text-foreground",
       )}
     >
+      <Icon className="h-4 w-4 shrink-0" strokeWidth={2} />
       {label}
     </Link>
   );
@@ -92,6 +118,7 @@ export function Sidebar() {
                 key={item.href}
                 href={item.href}
                 label={item.label}
+                icon={item.icon}
                 active={isActive(item.href)}
               />
             ))}
@@ -103,6 +130,7 @@ export function Sidebar() {
               key={item.href}
               href={item.href}
               label={item.label}
+              icon={item.icon}
               active={isActive(item.href)}
             />
           ))}
