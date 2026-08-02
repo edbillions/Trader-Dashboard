@@ -411,6 +411,18 @@ Helper helper = Helper.new()
 var Trace trace = Trace.new()
 color color_transparent = #ffffff00
 
+// Correlated symbol resolution: manual override wins if set, else auto-detect NQ<->ES / MNQ<->MES
+// from the chart's own root ticker. Computed once here (before any method declarations below, so
+// every SMT method can reference it) rather than via a method call, since plain top-level
+// statements cannot be interspersed between method declarations in Pine.
+string smt_corr_root = switch syminfo.root
+    'NQ'  => 'ES'
+    'ES'  => 'NQ'
+    'MNQ' => 'MES'
+    'MES' => 'MNQ'
+    => ''
+var string resolvedCorrSymbol = str.length(settings.smt_corr_override) > 0 ? settings.smt_corr_override : (str.length(smt_corr_root) > 0 ? syminfo.prefix + ':' + smt_corr_root + '1!' : '')
+
 //+------------------------------------------------------------------------------------------------------------+//
 //+--- Internal Functions                                                                                   ---+//
 //+------------------------------------------------------------------------------------------------------------+//
@@ -708,6 +720,76 @@ method FindImbalance(CandleSet candleSet) =>
                     candleSet.imbalances.push(imb)
     candleSet
 
+//+------------------------------------------------------------------------------------------------------------+//
+//+--- SMT Engine Functions                                                                                 ---+//
+//+------------------------------------------------------------------------------------------------------------+//
+// SMT is detected per HTF slot, reusing that slot's own `candles` (rolling, index 0 = forming,
+// index 1 = most recently closed, ...) and `imbalances` (FVG/VI boxes) arrays. Everything below
+// only ever reads index >= 1 of `candles`, so historical signals never repaint. `corrCandles`
+// mirrors the correlated symbol's own confirmed HTF bars 1:1 with `candles`, but offset by one:
+// candles[k] (k>=1, confirmed) corresponds to corrCandles[k-1], because corrCandles[0] is first
+// pushed on the same bar candles[1] becomes confirmed.
+
+method CorrLabel(Helper helper, string corrSymbol) =>
+    helper.name := 'CorrLabel'
+    string root = ''
+    if str.length(corrSymbol) > 0
+        parts = str.split(corrSymbol, ':')
+        string tickerPart = array.size(parts) > 1 ? array.get(parts, 1) : array.get(parts, 0)
+        root := str.replace_all(tickerPart, '1!', '')
+    '[' + (str.length(root) > 0 ? root : '?') + ']'
+
+method RecentSmtCap(Helper helper, string setting) =>
+    helper.name := 'RecentSmtCap'
+    switch setting
+        '1'  => 1
+        '3'  => 3
+        '5'  => 5
+        '10' => 10
+        '20' => 20
+        => 40   // 'All' — internal safety ceiling, well under TradingView's shared 500-object limit across all 6 slots' drawings
+
+method HTFAtr(CandleSet candleSet, int length) =>
+    float sum = 0.0
+    int n = 0
+    if candleSet.candles.size() > length + 1
+        for i = 1 to length by 1
+            Candle cur = candleSet.candles.get(i)
+            Candle prev = candleSet.candles.get(i + 1)
+            tr = math.max(cur.h - cur.l, math.max(math.abs(cur.h - prev.c), math.abs(cur.l - prev.c)))
+            sum := sum + tr
+            n := n + 1
+    n > 0 ? sum / n : 0.0
+
+method PriceInFVG(CandleSet candleSet, float price) =>
+    bool found = false
+    if candleSet.imbalances.size() > 0
+        for i = 0 to candleSet.imbalances.size() - 1 by 1
+            Imbalance imb = candleSet.imbalances.get(i)
+            if imb.kind == 'FVG'
+                top = box.get_top(imb.b)
+                bottom = box.get_bottom(imb.b)
+                if price <= top and price >= bottom
+                    found := true
+    found
+
+method DeleteSmtSignal(CandleSet candleSet, int index) =>
+    SmtSignal s = candleSet.smtSignals.get(index)
+    if not na(s.connector)
+        line.delete(s.connector)
+    if not na(s.symbolLabel)
+        label.delete(s.symbolLabel)
+    candleSet.smtSignals.remove(index)
+    candleSet
+
+method EvictOrphanSmtSignals(CandleSet candleSet, int evictedOIdx) =>
+    if candleSet.smtSignals.size() > 0
+        for i = candleSet.smtSignals.size() - 1 to 0 by 1
+            SmtSignal s = candleSet.smtSignals.get(i)
+            if s.pivotOIdx == evictedOIdx or s.priorOIdx == evictedOIdx
+                candleSet.DeleteSmtSignal(i)
+    candleSet
+
 method IsNewHTFBar(CandleSet candleSet) =>
     HTFBarTime = time(candleSet.settings.htf, 'america/New_York')
     isNew = ta.change(HTFBarTime) > 0
@@ -859,91 +941,8 @@ method Update(CandleSet candleSet, int offset, bool showTrace) =>
     candleSet
 
 //+------------------------------------------------------------------------------------------------------------+//
-//+--- SMT Engine Functions                                                                                 ---+//
+//+--- SMT Engine Functions (continued) — signal creation, rendering, and the per-slot Smt() entry point   ---+//
 //+------------------------------------------------------------------------------------------------------------+//
-// SMT is detected per HTF slot, reusing that slot's own `candles` (rolling, index 0 = forming,
-// index 1 = most recently closed, ...) and `imbalances` (FVG/VI boxes) arrays. Everything below
-// only ever reads index >= 1 of `candles`, so historical signals never repaint. `corrCandles`
-// mirrors the correlated symbol's own confirmed HTF bars 1:1 with `candles`, but offset by one:
-// candles[k] (k>=1, confirmed) corresponds to corrCandles[k-1], because corrCandles[0] is first
-// pushed on the same bar candles[1] becomes confirmed.
-
-method ResolveCorrSymbol(Helper helper, string manualOverride) =>
-    helper.name := 'ResolveCorrSymbol'
-    string result = ''
-    if str.length(manualOverride) > 0
-        result := manualOverride
-    else
-        string root = syminfo.root
-        string corrRoot = switch root
-            'NQ'  => 'ES'
-            'ES'  => 'NQ'
-            'MNQ' => 'MES'
-            'MES' => 'MNQ'
-            => ''
-        if str.length(corrRoot) > 0
-            result := syminfo.prefix + ':' + corrRoot + '1!'
-    result
-
-method CorrLabel(Helper helper, string corrSymbol) =>
-    helper.name := 'CorrLabel'
-    string root = ''
-    if str.length(corrSymbol) > 0
-        parts = str.split(corrSymbol, ':')
-        string tickerPart = array.size(parts) > 1 ? array.get(parts, 1) : array.get(parts, 0)
-        root := str.replace_all(tickerPart, '1!', '')
-    '[' + (str.length(root) > 0 ? root : '?') + ']'
-
-method RecentSmtCap(Helper helper, string setting) =>
-    helper.name := 'RecentSmtCap'
-    switch setting
-        '1'  => 1
-        '3'  => 3
-        '5'  => 5
-        '10' => 10
-        '20' => 20
-        => 40   // 'All' — internal safety ceiling, well under TradingView's shared 500-object limit across all 6 slots' drawings
-
-method HTFAtr(CandleSet candleSet, int length) =>
-    float sum = 0.0
-    int n = 0
-    if candleSet.candles.size() > length + 1
-        for i = 1 to length by 1
-            Candle cur = candleSet.candles.get(i)
-            Candle prev = candleSet.candles.get(i + 1)
-            tr = math.max(cur.h - cur.l, math.max(math.abs(cur.h - prev.c), math.abs(cur.l - prev.c)))
-            sum := sum + tr
-            n := n + 1
-    n > 0 ? sum / n : 0.0
-
-method PriceInFVG(CandleSet candleSet, float price) =>
-    bool found = false
-    if candleSet.imbalances.size() > 0
-        for i = 0 to candleSet.imbalances.size() - 1 by 1
-            Imbalance imb = candleSet.imbalances.get(i)
-            if imb.kind == 'FVG'
-                top = box.get_top(imb.b)
-                bottom = box.get_bottom(imb.b)
-                if price <= top and price >= bottom
-                    found := true
-    found
-
-method DeleteSmtSignal(CandleSet candleSet, int index) =>
-    SmtSignal s = candleSet.smtSignals.get(index)
-    if not na(s.connector)
-        line.delete(s.connector)
-    if not na(s.symbolLabel)
-        label.delete(s.symbolLabel)
-    candleSet.smtSignals.remove(index)
-    candleSet
-
-method EvictOrphanSmtSignals(CandleSet candleSet, int evictedOIdx) =>
-    if candleSet.smtSignals.size() > 0
-        for i = candleSet.smtSignals.size() - 1 to 0 by 1
-            SmtSignal s = candleSet.smtSignals.get(i)
-            if s.pivotOIdx == evictedOIdx or s.priorOIdx == evictedOIdx
-                candleSet.DeleteSmtSignal(i)
-    candleSet
 
 method PruneSmtSignals(CandleSet candleSet, int maxKeep) =>
     while candleSet.smtSignals.size() > maxKeep
@@ -1123,8 +1122,6 @@ method Smt(CandleSet candleSet, float corrO, float corrH, float corrL, float cor
             cap = helper.RecentSmtCap(settings.smt_recent_count)
             candleSet.PruneSmtSignals(cap)
     candleSet
-
-var string resolvedCorrSymbol = helper.ResolveCorrSymbol(settings.smt_corr_override)
 
 int cnt = 0
 int last = helper.HTFEnabled()
