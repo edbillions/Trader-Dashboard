@@ -805,9 +805,7 @@ method IsNewHTFBar(CandleSet candleSet) =>
             isNew := not na(time(timeframe.period, "0930-0931:123456", 'America/New_York')) and na(time(timeframe.period, "0930-0931:123456", 'America/New_York')[1])
     isNew
 
-method Monitor(CandleSet candleSet) =>
-    isNewHTFCandle = candleSet.IsNewHTFBar()
-
+method Monitor(CandleSet candleSet, bool isNewHTFCandle) =>
     if isNewHTFCandle
         Candle candle = Candle.new()
         candle.o := open
@@ -1013,10 +1011,8 @@ method RepositionSmtSignals(CandleSet candleSet) =>
                 label.set_textcolor(sig.symbolLabel, sig.direction == 'Bullish' ? settings.smt_bull_color : settings.smt_bear_color)
     candleSet
 
-method Smt(CandleSet candleSet, float corrO, float corrH, float corrL, float corrC, int corrT) =>
+method Smt(CandleSet candleSet, float corrO, float corrH, float corrL, float corrC, int corrT, bool isNewBar) =>
     if candleSet.settings.smt_show and str.length(resolvedCorrSymbol) > 0
-        bool isNewBar = candleSet.IsNewHTFBar()
-
         // roll the correlated symbol's confirmed HTF bar in lockstep with the primary's own close
         if isNewBar and not na(corrC) and corrT != candleSet.lastCorrTime
             CorrCandle cc = CorrCandle.new(corrO, corrH, corrL, corrC, corrT)
@@ -1126,6 +1122,17 @@ method Smt(CandleSet candleSet, float corrO, float corrH, float corrL, float cor
 int cnt = 0
 int last = helper.HTFEnabled()
 
+// Computed unconditionally, every bar, for all 6 slots regardless of settings — required so the
+// ta.change()-based history inside IsNewHTFBar() is evaluated from a single consistent call site
+// per slot rather than from inside a conditionally-invoked method (Pine flags the latter as
+// potentially inconsistent; see CW10003).
+bool htf1_isNew = htf1.IsNewHTFBar()
+bool htf2_isNew = htf2.IsNewHTFBar()
+bool htf3_isNew = htf3.IsNewHTFBar()
+bool htf4_isNew = htf4.IsNewHTFBar()
+bool htf5_isNew = htf5.IsNewHTFBar()
+bool htf6_isNew = htf6.IsNewHTFBar()
+
 int offset = settings.offset
 if htf1.settings.show and helper.ValidTimeframe(htf1.settings.htf)
     bool showTrace = false
@@ -1136,10 +1143,10 @@ if htf1.settings.show and helper.ValidTimeframe(htf1.settings.htf)
         showTrace := true
         showTrace
     htf1.UpdateTime(offset)
-    htf1.Monitor().Update(offset, showTrace).FindImbalance()
+    htf1.Monitor(htf1_isNew).Update(offset, showTrace).FindImbalance()
     if htf1.settings.smt_show and str.length(resolvedCorrSymbol) > 0
         [smt1_o, smt1_h, smt1_l, smt1_c, smt1_t] = request.security(resolvedCorrSymbol, htf1.settings.htf, [open[1], high[1], low[1], close[1], time[1]], barmerge.gaps_off, barmerge.lookahead_off, ignore_invalid_symbol = true)
-        htf1.Smt(smt1_o, smt1_h, smt1_l, smt1_c, smt1_t)
+        htf1.Smt(smt1_o, smt1_h, smt1_l, smt1_c, smt1_t, htf1_isNew)
     cnt := cnt + 1
     offset := offset + (cnt > 0 ? htf1.candles.size() * settings.width + (htf1.candles.size() > 0 ? (htf1.candles.size() - 1) * settings.buffer : 0) + settings.htf_buffer : 0)
     offset
@@ -1152,10 +1159,10 @@ if htf2.settings.show and helper.ValidTimeframe(htf2.settings.htf) and cnt < las
         showTrace := true
         showTrace
     htf2.UpdateTime(offset)
-    htf2.Monitor().Update(offset, showTrace).FindImbalance()
+    htf2.Monitor(htf2_isNew).Update(offset, showTrace).FindImbalance()
     if htf2.settings.smt_show and str.length(resolvedCorrSymbol) > 0
         [smt2_o, smt2_h, smt2_l, smt2_c, smt2_t] = request.security(resolvedCorrSymbol, htf2.settings.htf, [open[1], high[1], low[1], close[1], time[1]], barmerge.gaps_off, barmerge.lookahead_off, ignore_invalid_symbol = true)
-        htf2.Smt(smt2_o, smt2_h, smt2_l, smt2_c, smt2_t)
+        htf2.Smt(smt2_o, smt2_h, smt2_l, smt2_c, smt2_t, htf2_isNew)
     cnt := cnt + 1
     offset := offset + (cnt > 0 ? htf2.candles.size() * settings.width + (htf2.candles.size() > 0 ? (htf2.candles.size() - 1) * settings.buffer : 0) + settings.htf_buffer : 0)
     offset
@@ -1168,10 +1175,10 @@ if htf3.settings.show and helper.ValidTimeframe(htf3.settings.htf) and cnt < las
         showTrace := true
         showTrace
     htf3.UpdateTime(offset)
-    htf3.Monitor().Update(offset, showTrace).FindImbalance()
+    htf3.Monitor(htf3_isNew).Update(offset, showTrace).FindImbalance()
     if htf3.settings.smt_show and str.length(resolvedCorrSymbol) > 0
         [smt3_o, smt3_h, smt3_l, smt3_c, smt3_t] = request.security(resolvedCorrSymbol, htf3.settings.htf, [open[1], high[1], low[1], close[1], time[1]], barmerge.gaps_off, barmerge.lookahead_off, ignore_invalid_symbol = true)
-        htf3.Smt(smt3_o, smt3_h, smt3_l, smt3_c, smt3_t)
+        htf3.Smt(smt3_o, smt3_h, smt3_l, smt3_c, smt3_t, htf3_isNew)
     cnt := cnt + 1
     offset := offset + (cnt > 0 ? htf3.candles.size() * settings.width + (htf3.candles.size() > 0 ? (htf3.candles.size() - 1) * settings.buffer : 0) + settings.htf_buffer : 0)
     offset
@@ -1184,10 +1191,10 @@ if htf4.settings.show and helper.ValidTimeframe(htf4.settings.htf) and cnt < las
         showTrace := true
         showTrace
     htf4.UpdateTime(offset)
-    htf4.Monitor().Update(offset, showTrace).FindImbalance()
+    htf4.Monitor(htf4_isNew).Update(offset, showTrace).FindImbalance()
     if htf4.settings.smt_show and str.length(resolvedCorrSymbol) > 0
         [smt4_o, smt4_h, smt4_l, smt4_c, smt4_t] = request.security(resolvedCorrSymbol, htf4.settings.htf, [open[1], high[1], low[1], close[1], time[1]], barmerge.gaps_off, barmerge.lookahead_off, ignore_invalid_symbol = true)
-        htf4.Smt(smt4_o, smt4_h, smt4_l, smt4_c, smt4_t)
+        htf4.Smt(smt4_o, smt4_h, smt4_l, smt4_c, smt4_t, htf4_isNew)
     cnt := cnt + 1
     offset := offset + (cnt > 0 ? htf4.candles.size() * settings.width + (htf4.candles.size() > 0 ? (htf4.candles.size() - 1) * settings.buffer : 0) + settings.htf_buffer : 0)
     offset
@@ -1200,10 +1207,10 @@ if htf5.settings.show and helper.ValidTimeframe(htf5.settings.htf) and cnt < las
         showTrace := true
         showTrace
     htf5.UpdateTime(offset)
-    htf5.Monitor().Update(offset, showTrace).FindImbalance()
+    htf5.Monitor(htf5_isNew).Update(offset, showTrace).FindImbalance()
     if htf5.settings.smt_show and str.length(resolvedCorrSymbol) > 0
         [smt5_o, smt5_h, smt5_l, smt5_c, smt5_t] = request.security(resolvedCorrSymbol, htf5.settings.htf, [open[1], high[1], low[1], close[1], time[1]], barmerge.gaps_off, barmerge.lookahead_off, ignore_invalid_symbol = true)
-        htf5.Smt(smt5_o, smt5_h, smt5_l, smt5_c, smt5_t)
+        htf5.Smt(smt5_o, smt5_h, smt5_l, smt5_c, smt5_t, htf5_isNew)
     cnt := cnt + 1
     offset := offset + (cnt > 0 ? htf5.candles.size() * settings.width + (htf5.candles.size() > 0 ? (htf5.candles.size() - 1) * settings.buffer : 0) + settings.htf_buffer : 0)
     offset
@@ -1216,7 +1223,7 @@ if htf6.settings.show and helper.ValidTimeframe(htf6.settings.htf) and cnt < las
         showTrace := true
         showTrace
     htf6.UpdateTime(offset)
-    htf6.Monitor().Update(offset, showTrace).FindImbalance()
+    htf6.Monitor(htf6_isNew).Update(offset, showTrace).FindImbalance()
     if htf6.settings.smt_show and str.length(resolvedCorrSymbol) > 0
         [smt6_o, smt6_h, smt6_l, smt6_c, smt6_t] = request.security(resolvedCorrSymbol, htf6.settings.htf, [open[1], high[1], low[1], close[1], time[1]], barmerge.gaps_off, barmerge.lookahead_off, ignore_invalid_symbol = true)
-        htf6.Smt(smt6_o, smt6_h, smt6_l, smt6_c, smt6_t)
+        htf6.Smt(smt6_o, smt6_h, smt6_l, smt6_c, smt6_t, htf6_isNew)
