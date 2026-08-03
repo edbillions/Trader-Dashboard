@@ -212,66 +212,67 @@ async function ensureWeeklyAutoDraft() {
 
   const { stats, tiltmeter } = await computePeriodSummary(start, end);
   const label = `Week of ${start.toISOString().slice(0, 10)}`;
-  const aiSummary = await generatePeriodReviewSummary({
-    periodLabel: label,
-    stats,
-    tiltmeter,
-  });
 
-  const detail = await computeReviewDetailData(start, end, "week");
-  const reflectionInput: PeriodReflectionInput = {
-    periodLabel: label,
-    isWeekly: true,
-    scoreboard: {
-      tradeCount: detail.trades.length,
-      winRate: detail.scoreboard.winRate,
-      profitFactor: detail.scoreboard.profitFactor,
-      tradeExpectancy: detail.scoreboard.tradeExpectancy,
-      avgWin: detail.scoreboard.avgWin,
-      avgLoss: detail.scoreboard.avgLoss,
-      largestProfit: detail.scoreboard.largestProfit,
-      largestLoss: detail.scoreboard.largestLoss,
-      netR: detail.scoreboard.netR,
-      aPlusSetupsPassed: detail.scoreboard.aPlusSetupsPassed,
-      ruleViolationCount: detail.scoreboard.ruleViolationCount,
-    },
-    patternRecognition: detail.patternRecognition,
-    mistakeBreakdown: detail.mistakeBreakdown,
-    ruleViolationBreakdown: detail.ruleViolationBreakdown,
-    missedTrades: detail.missedTrades.map((m) => ({
-      symbol: m.symbol,
-      setupDescription: m.setupDescription,
-      reasonMissed: m.reasonMissed,
-      estimatedRMultiple: m.estimatedRMultiple,
-    })),
-  };
+  // AI drafting is best-effort — any failure here (rate limit, network,
+  // API schema rejection, etc.) must never block the review from being
+  // created or take down the /reviews page for every visitor, matching
+  // the non-blocking AI pattern already used in saveTradingDayAction.
+  let aiSummary: string | null = null;
+  let aiSections: Record<string, string | null> = {};
+  try {
+    aiSummary = await generatePeriodReviewSummary({
+      periodLabel: label,
+      stats,
+      tiltmeter,
+    });
 
-  const [
-    lessonsAndActions,
-    mistakeNarrative,
-    ruleViolationsNarrative,
-    patternNarrative,
-    ceoQuestions,
-    gradeSuggestion,
-    opportunityNarrative,
-  ] = await Promise.all([
-    generateLessonsAndActionItems(reflectionInput),
-    generateMistakeTrackerNarrative(reflectionInput),
-    generateRuleViolationsNarrative(reflectionInput),
-    generatePatternRecognitionNarrative(reflectionInput),
-    generateCeoQuestions(reflectionInput),
-    generatePeriodGradeSuggestion(reflectionInput),
-    generateOpportunityReviewNarrative(reflectionInput),
-  ]);
+    const detail = await computeReviewDetailData(start, end, "week");
+    const reflectionInput: PeriodReflectionInput = {
+      periodLabel: label,
+      isWeekly: true,
+      scoreboard: {
+        tradeCount: detail.trades.length,
+        winRate: detail.scoreboard.winRate,
+        profitFactor: detail.scoreboard.profitFactor,
+        tradeExpectancy: detail.scoreboard.tradeExpectancy,
+        avgWin: detail.scoreboard.avgWin,
+        avgLoss: detail.scoreboard.avgLoss,
+        largestProfit: detail.scoreboard.largestProfit,
+        largestLoss: detail.scoreboard.largestLoss,
+        netR: detail.scoreboard.netR,
+        aPlusSetupsPassed: detail.scoreboard.aPlusSetupsPassed,
+        ruleViolationCount: detail.scoreboard.ruleViolationCount,
+      },
+      patternRecognition: detail.patternRecognition,
+      mistakeBreakdown: detail.mistakeBreakdown,
+      ruleViolationBreakdown: detail.ruleViolationBreakdown,
+      missedTrades: detail.missedTrades.map((m) => ({
+        symbol: m.symbol,
+        setupDescription: m.setupDescription,
+        reasonMissed: m.reasonMissed,
+        estimatedRMultiple: m.estimatedRMultiple,
+      })),
+    };
 
-  await prisma.periodReview.create({
-    data: {
-      title: label,
-      periodStart: start,
-      periodEnd: end,
-      periodType: "week",
-      notes: aiSummary,
-      isDraft: true,
+    const [
+      lessonsAndActions,
+      mistakeNarrative,
+      ruleViolationsNarrative,
+      patternNarrative,
+      ceoQuestions,
+      gradeSuggestion,
+      opportunityNarrative,
+    ] = await Promise.all([
+      generateLessonsAndActionItems(reflectionInput),
+      generateMistakeTrackerNarrative(reflectionInput),
+      generateRuleViolationsNarrative(reflectionInput),
+      generatePatternRecognitionNarrative(reflectionInput),
+      generateCeoQuestions(reflectionInput),
+      generatePeriodGradeSuggestion(reflectionInput),
+      generateOpportunityReviewNarrative(reflectionInput),
+    ]);
+
+    aiSections = {
       lessonsLearned: lessonsAndActions ? JSON.stringify(lessonsAndActions.lessons) : null,
       actionItems: lessonsAndActions ? JSON.stringify(lessonsAndActions.actionItems) : null,
       mistakeTracker: mistakeNarrative
@@ -293,6 +294,20 @@ async function ensureWeeklyAutoDraft() {
       opportunityReview: opportunityNarrative
         ? JSON.stringify({ narrative: opportunityNarrative })
         : null,
+    };
+  } catch (error) {
+    console.error("Weekly auto-draft AI generation failed:", error);
+  }
+
+  await prisma.periodReview.create({
+    data: {
+      title: label,
+      periodStart: start,
+      periodEnd: end,
+      periodType: "week",
+      notes: aiSummary,
+      isDraft: true,
+      ...aiSections,
     },
   });
 }

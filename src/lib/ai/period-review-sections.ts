@@ -117,8 +117,8 @@ export async function generateLessonsAndActionItems(
         schema: {
           type: "object",
           properties: {
-            lessons: { type: "array", items: { type: "string" }, minItems: 3, maxItems: 3 },
-            actionItems: { type: "array", items: { type: "string" }, minItems: 3, maxItems: 3 },
+            lessons: { type: "array", items: { type: "string" } },
+            actionItems: { type: "array", items: { type: "string" } },
           },
           required: ["lessons", "actionItems"],
           additionalProperties: false,

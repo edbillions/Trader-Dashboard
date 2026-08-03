@@ -276,16 +276,22 @@ export async function generateReviewAiDraftAction(
 
   if (input.scoreboard.tradeCount === 0) return { available: false };
 
-  const [lessonsAndActions, mistakeNarrative, ruleViolationsNarrative, patternNarrative, ceoQuestions, gradeSuggestion, opportunityNarrative] =
-    await Promise.all([
-      generateLessonsAndActionItems(input),
-      generateMistakeTrackerNarrative(input),
-      generateRuleViolationsNarrative(input),
-      generatePatternRecognitionNarrative(input),
-      generateCeoQuestions(input),
-      generatePeriodGradeSuggestion(input),
-      weekly ? generateOpportunityReviewNarrative(input) : Promise.resolve(null),
-    ]);
+  let lessonsAndActions, mistakeNarrative, ruleViolationsNarrative, patternNarrative, ceoQuestions, gradeSuggestion, opportunityNarrative;
+  try {
+    [lessonsAndActions, mistakeNarrative, ruleViolationsNarrative, patternNarrative, ceoQuestions, gradeSuggestion, opportunityNarrative] =
+      await Promise.all([
+        generateLessonsAndActionItems(input),
+        generateMistakeTrackerNarrative(input),
+        generateRuleViolationsNarrative(input),
+        generatePatternRecognitionNarrative(input),
+        generateCeoQuestions(input),
+        generatePeriodGradeSuggestion(input),
+        weekly ? generateOpportunityReviewNarrative(input) : Promise.resolve(null),
+      ]);
+  } catch (error) {
+    console.error("Review AI draft generation failed:", error);
+    return { available: false };
+  }
 
   if (
     !lessonsAndActions &&
