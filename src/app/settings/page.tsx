@@ -3,7 +3,9 @@ import { Field, TextInput } from "@/components/ui/field";
 import { LookupSection } from "@/components/settings/lookup-section";
 import { TagCategoryManager } from "@/components/settings/tag-category-manager";
 import { TradingViewLayoutsSection } from "@/components/settings/tradingview-layouts-section";
+import { DangerZone } from "@/components/settings/danger-zone";
 import { getSettingsData } from "@/lib/data/settings";
+import { DATA_CATEGORIES, getDataClearCounts } from "@/lib/data/data-clear";
 import {
   clearApiKeyAction,
   createConfluenceFactorAction,
@@ -24,7 +26,10 @@ import {
 export const dynamic = "force-dynamic";
 
 export default async function SettingsPage() {
-  const data = await getSettingsData();
+  const [data, dataClearCounts] = await Promise.all([
+    getSettingsData(),
+    getDataClearCounts(),
+  ]);
   const hasApiKey = !!data.settings?.anthropicApiKey;
 
   return (
@@ -167,6 +172,8 @@ export default async function SettingsPage() {
       <TagCategoryManager categories={data.tagCategories} />
 
       <TradingViewLayoutsSection layouts={data.tradingViewLayouts} />
+
+      <DangerZone categories={DATA_CATEGORIES} counts={dataClearCounts} />
     </div>
   );
 }
