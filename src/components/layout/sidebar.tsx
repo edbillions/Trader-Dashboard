@@ -4,6 +4,7 @@ import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { clsx } from "clsx";
 import {
+  Activity,
   LayoutDashboard,
   Sunrise,
   ClipboardCheck,
@@ -31,6 +32,7 @@ const NAV_GROUPS = [
   {
     label: "Daily",
     items: [
+      { href: "/live-session", label: "Live Session", icon: Activity },
       { href: "/dashboard", label: "Dashboard", icon: LayoutDashboard },
       { href: "/premarket", label: "Pre-Market Analyst", icon: Sunrise },
       { href: "/setup-grader", label: "Setup Grader", icon: ClipboardCheck },

@@ -52,6 +52,14 @@ export default async function SettingsPage() {
               placeholder={hasApiKey ? "•••••••••••••••• (set)" : "sk-ant-..."}
             />
           </Field>
+          <Field label="Live Session cooldown (minutes between trades)">
+            <TextInput
+              name="cooldownMinutes"
+              type="number"
+              min={0}
+              defaultValue={data.settings?.cooldownMinutes ?? 5}
+            />
+          </Field>
           <div className="flex gap-2">
             <button
               type="submit"

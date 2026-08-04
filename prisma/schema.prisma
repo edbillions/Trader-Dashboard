@@ -72,6 +72,14 @@ model TradingDay {
   freeformNotes      String?
   scorecard          String? // JSON-serialized ScorecardScores
 
+  // Live Session cockpit
+  emergencyPauseUntil DateTime? // set by the crashout button; compared against now() at read time, no cleanup job
+  sessionEndedAt      DateTime? // null = session open; set = Quick Log locked, Daily Recap available
+  profitLockPlan      Float?    // Today's Mission "profit lock" target
+  missionLabel        String?   // free-text mission tagline; null renders a default ("Trade the Plan") in code
+  debriefImprovement  String?   // Daily Recap debrief: "What to improve tomorrow"
+  debriefFeeling      String?   // Daily Recap debrief: "How I actually felt" — kept distinct from psychologyLog
+
   // AI
   aiSummary String?
 
@@ -153,6 +161,7 @@ model Trade {
 
   smartReview String? // JSON: { summary, setup, execution, psychology } — AI-generated per-trade review
   reviewed    Boolean @default(false)
+  quickLogged Boolean @default(false) // true = created via Live Session Quick Log, still needs fleshing out (placeholder entry/size)
 
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
@@ -545,4 +554,5 @@ model AppSettings {
   id              Int     @id @default(1)
   timezone        String  @default("America/New_York")
   anthropicApiKey String?
+  cooldownMinutes Int     @default(5) // Live Session: minutes between trades before the cooldown timer is considered active
 }

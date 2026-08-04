@@ -38,6 +38,7 @@ export interface TradeInput {
   mistakeIds: string[];
   tagIds: string[]; // at most one TagOption id per TagCategory, enforced on save
   screenshotPaths: string[];
+  quickLogged: boolean; // true = created via Live Session Quick Log, display-only
 }
 
 export interface MissedTradeInput {
@@ -108,6 +109,7 @@ export function emptyTrade(): TradeInput {
     mistakeIds: [],
     tagIds: [],
     screenshotPaths: [],
+    quickLogged: false,
   };
 }
 

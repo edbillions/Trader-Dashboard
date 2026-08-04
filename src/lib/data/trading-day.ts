@@ -15,6 +15,20 @@ function toDatetimeLocal(d: Date | null) {
   return local.toISOString().slice(0, 16);
 }
 
+// Find-or-create the TradingDay row for a given date key, normalized to
+// local midnight — same convention as every other date lookup in this file.
+// Shared by the Live Session actions, which need a day row to attach
+// Quick Log trades / session state to without going through the full-day
+// upsert in saveTradingDayAction.
+export async function findOrCreateTradingDay(dateKey: string) {
+  const dateOnly = new Date(`${dateKey}T00:00:00`);
+  return prisma.tradingDay.upsert({
+    where: { date: dateOnly },
+    update: {},
+    create: { date: dateOnly },
+  });
+}
+
 export async function listTradingDays(limit = 30) {
   const days = await prisma.tradingDay.findMany({
     orderBy: { date: "desc" },
@@ -128,6 +142,7 @@ export async function getTradingDayInputForDate(
       mistakeIds: t.mistakes.map((m) => m.id),
       tagIds: t.tags.map((tag) => tag.id),
       screenshotPaths: t.screenshots.map((s) => s.filePath),
+      quickLogged: t.quickLogged,
     })),
     missedTrades: day.missedTrades.map((m) => ({
       id: m.id,

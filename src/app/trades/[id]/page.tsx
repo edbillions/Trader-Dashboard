@@ -34,7 +34,18 @@ export default async function TradeDetailPage({
     <div>
       <PageHeader
         title={`${trade.symbol} · ${trade.direction.toUpperCase()}`}
-        description={displayDate}
+        description={
+          trade.quickLogged ? (
+            <span className="flex items-center gap-2">
+              {displayDate}
+              <span className="rounded-full bg-accent/10 px-2 py-0.5 text-[10px] font-medium uppercase tracking-wide text-accent">
+                Quick logged — add details
+              </span>
+            </span>
+          ) : (
+            displayDate
+          )
+        }
         actions={
           <div className="flex items-center gap-2">
             <ReviewedButton tradeId={trade.id} reviewed={trade.reviewed} />

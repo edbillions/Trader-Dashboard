@@ -241,6 +241,14 @@ export function TradesTable({
                 </td>
                 <td className="px-2 py-2 font-medium text-foreground">
                   {t.symbol}
+                  {t.quickLogged && (
+                    <span
+                      title="Quick logged from Live Session — needs fleshing out"
+                      className="ml-1.5 rounded-full bg-accent/10 px-1.5 py-0.5 text-[9px] font-medium uppercase tracking-wide text-accent"
+                    >
+                      QL
+                    </span>
+                  )}
                 </td>
                 <td className="px-2 py-2 text-muted">
                   {t.entryPrice.toString()}

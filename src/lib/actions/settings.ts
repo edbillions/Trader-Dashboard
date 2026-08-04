@@ -16,14 +16,20 @@ export async function updateSettingsAction(formData: FormData) {
   const apiKeyRaw = formData.get("anthropicApiKey");
   const anthropicApiKey =
     typeof apiKeyRaw === "string" && apiKeyRaw.trim() ? apiKeyRaw.trim() : null;
+  const cooldownRaw = formData.get("cooldownMinutes");
+  const cooldownMinutes =
+    typeof cooldownRaw === "string" && cooldownRaw.trim() && Number.isFinite(Number(cooldownRaw))
+      ? Math.max(0, Math.round(Number(cooldownRaw)))
+      : 5;
 
   await prisma.appSettings.upsert({
     where: { id: 1 },
-    update: { timezone, ...(anthropicApiKey ? { anthropicApiKey } : {}) },
-    create: { id: 1, timezone, anthropicApiKey },
+    update: { timezone, cooldownMinutes, ...(anthropicApiKey ? { anthropicApiKey } : {}) },
+    create: { id: 1, timezone, anthropicApiKey, cooldownMinutes },
   });
 
   revalidatePath("/settings");
+  revalidatePath("/live-session");
 }
 
 export async function clearApiKeyAction() {

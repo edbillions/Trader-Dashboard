@@ -98,9 +98,14 @@ export function TradeCard({
   return (
     <div className="rounded-xl border border-border bg-surface-raised p-5">
       <div className="mb-4 flex items-center justify-between">
-        <h3 className="text-sm font-semibold text-foreground">
+        <h3 className="flex items-center gap-2 text-sm font-semibold text-foreground">
           Trade {index + 1}
           {value.symbol ? ` — ${value.symbol.toUpperCase()}` : ""}
+          {value.quickLogged && (
+            <span className="rounded-full bg-accent/10 px-2 py-0.5 text-[10px] font-medium uppercase tracking-wide text-accent">
+              Quick logged — add details
+            </span>
+          )}
         </h3>
         <button
           type="button"
