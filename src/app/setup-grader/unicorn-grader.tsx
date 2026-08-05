@@ -48,7 +48,7 @@ function fmtDollars(n: number) {
   return "$" + n.toLocaleString("en-US", { maximumFractionDigits: 0 });
 }
 
-export function UnicornGrader() {
+export function UnicornGrader({ children }: { children?: React.ReactNode }) {
   const router = useRouter();
   const [checked, setChecked] = useState<CheckedState>(EMPTY_CHECKED);
   const [alertChecked, setAlertChecked] = useState(false);
@@ -757,6 +757,7 @@ export function UnicornGrader() {
           </div>
         </div>
       </div>
+      {children}
     </div>
   );
 }

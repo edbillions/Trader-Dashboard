@@ -80,6 +80,9 @@ model TradingDay {
   debriefImprovement  String?   // Daily Recap debrief: "What to improve tomorrow"
   debriefFeeling      String?   // Daily Recap debrief: "How I actually felt" — kept distinct from psychologyLog
 
+  // Setup Grader session
+  graderBias String? // "bullish" | "bearish" | "neutral" — Setup Grader's daily bias picker
+
   // AI
   aiSummary String?
 
@@ -90,6 +93,15 @@ model TradingDay {
   missedTrades       MissedTrade[]
   ruleViolations     RuleViolationChecklistItem[]
   planScreenshots    TradingDayScreenshot[]
+  graderNotes        SetupGraderNote[]
+}
+
+model SetupGraderNote {
+  id           String   @id @default(cuid())
+  tradingDayId String
+  tradingDay   TradingDay @relation(fields: [tradingDayId], references: [id], onDelete: Cascade)
+  text         String
+  createdAt    DateTime @default(now())
 }
 
 model TradingDayScreenshot {

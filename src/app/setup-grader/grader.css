@@ -929,6 +929,153 @@
 .unicorn-grader .send-btn:hover {
   background: color-mix(in srgb, var(--profit) 22%, transparent);
 }
+.unicorn-grader .session-panel {
+  margin-top: 12px;
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  overflow: hidden;
+}
+.unicorn-grader .session-panel-hdr {
+  background: var(--surface-raised);
+  color: var(--foreground);
+  font-size: 11px;
+  font-weight: 700;
+  letter-spacing: 0.06em;
+  padding: 8px 12px;
+  text-transform: uppercase;
+  border-bottom: 1px solid var(--border);
+}
+.unicorn-grader .session-panel-body {
+  padding: 14px 16px;
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+}
+.unicorn-grader .bias-row {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+.unicorn-grader .bias-label {
+  font-size: 11px;
+  font-weight: 700;
+  letter-spacing: 0.05em;
+  text-transform: uppercase;
+  color: var(--muted);
+}
+.unicorn-grader .bias-pills {
+  display: flex;
+  gap: 6px;
+}
+.unicorn-grader .bias-pill {
+  padding: 5px 12px;
+  border-radius: 999px;
+  border: 1px solid var(--border);
+  background: var(--background);
+  color: var(--muted);
+  font-size: 12px;
+  font-weight: 600;
+  cursor: pointer;
+  transition: all 0.15s;
+}
+.unicorn-grader .bias-pill:hover {
+  color: var(--foreground);
+}
+.unicorn-grader .bias-pill.active-bullish {
+  border-color: var(--profit);
+  background: color-mix(in srgb, var(--profit) 16%, transparent);
+  color: var(--profit);
+}
+.unicorn-grader .bias-pill.active-bearish {
+  border-color: var(--loss);
+  background: color-mix(in srgb, var(--loss) 16%, transparent);
+  color: var(--loss);
+}
+.unicorn-grader .bias-pill.active-neutral {
+  border-color: var(--accent);
+  background: color-mix(in srgb, var(--accent) 16%, transparent);
+  color: var(--accent);
+}
+.unicorn-grader .note-form {
+  display: flex;
+  gap: 8px;
+}
+.unicorn-grader .note-input {
+  flex: 1;
+  padding: 8px 10px;
+  border-radius: 8px;
+  border: 1px solid var(--border);
+  background: var(--background);
+  color: var(--foreground);
+  font-size: 13px;
+  font-family: inherit;
+}
+.unicorn-grader .note-input:focus {
+  outline: none;
+  border-color: var(--accent);
+}
+.unicorn-grader .note-add-btn {
+  padding: 8px 14px;
+  border-radius: 8px;
+  border: 1px solid var(--accent);
+  background: color-mix(in srgb, var(--accent) 18%, transparent);
+  color: var(--accent);
+  font-size: 12px;
+  font-weight: 700;
+  cursor: pointer;
+  transition: all 0.15s;
+}
+.unicorn-grader .note-add-btn:hover {
+  background: color-mix(in srgb, var(--accent) 30%, transparent);
+}
+.unicorn-grader .note-add-btn:disabled {
+  opacity: 0.4;
+  cursor: not-allowed;
+}
+.unicorn-grader .note-list {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+.unicorn-grader .note-empty {
+  font-size: 12px;
+  color: var(--muted);
+}
+.unicorn-grader .note-row {
+  display: flex;
+  align-items: baseline;
+  gap: 10px;
+  padding: 6px 0;
+  border-bottom: 1px solid color-mix(in srgb, var(--border) 60%, transparent);
+}
+.unicorn-grader .note-row:last-child {
+  border-bottom: none;
+}
+.unicorn-grader .note-time {
+  font-size: 11px;
+  color: var(--muted);
+  white-space: nowrap;
+  min-width: 62px;
+}
+.unicorn-grader .note-text {
+  flex: 1;
+  font-size: 13px;
+  color: var(--foreground);
+  line-height: 1.4;
+}
+.unicorn-grader .note-del-btn {
+  background: none;
+  border: none;
+  color: var(--muted);
+  font-size: 14px;
+  line-height: 1;
+  cursor: pointer;
+  padding: 2px 4px;
+}
+.unicorn-grader .note-del-btn:hover {
+  color: var(--loss);
+}
 .unicorn-grader .send-btn:disabled {
   opacity: 0.4;
   cursor: not-allowed;

@@ -2,6 +2,8 @@ import { PageHeader } from "@/components/layout/page-header";
 import { getLiveSessionData } from "@/lib/data/live-session";
 import { LiveSessionCockpit } from "@/components/live-session/live-session-cockpit";
 
+export const dynamic = "force-dynamic";
+
 function todayKey() {
   return new Date().toISOString().slice(0, 10);
 }
