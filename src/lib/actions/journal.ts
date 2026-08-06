@@ -229,34 +229,10 @@ export async function saveTradingDayAction(
     return day;
   });
 
-  try {
-    const detail = await getTradingDayDetail(input.date);
-    if (detail) {
-      const summary = await summarizeTradingDay(detail);
-      if (summary) {
-        await prisma.tradingDay.update({
-          where: { id: tradingDay.id },
-          data: { aiSummary: summary },
-        });
-      }
-
-      await Promise.all(
-        detail.trades.map(async (trade) => {
-          const review = await generateTradeSmartReview(
-            buildTradeSmartReviewInput(trade, detail.date),
-          );
-          if (review) {
-            await prisma.trade.update({
-              where: { id: trade.id },
-              data: { smartReview: JSON.stringify(review) },
-            });
-          }
-        }),
-      );
-    }
-  } catch (error) {
-    console.error("AI summary failed:", error);
-  }
+  // Both the day-level AI summary and per-trade Smart Review are generated
+  // on-demand via their own buttons (generateJournalAiSummaryAction on the
+  // Journal day page, generateTradeSmartReviewAction on the trade detail
+  // page) — not automatically on every save.
 
   revalidatePath("/dashboard");
   revalidatePath("/journal");
@@ -284,6 +260,24 @@ export async function generateTradeSmartReviewAction(
   });
 
   revalidatePath(`/trades/${tradeId}`);
+  return { available: true };
+}
+
+export async function generateJournalAiSummaryAction(
+  date: string,
+): Promise<{ available: boolean }> {
+  const detail = await getTradingDayDetail(date);
+  if (!detail) return { available: false };
+
+  const summary = await summarizeTradingDay(detail);
+  if (!summary) return { available: false };
+
+  await prisma.tradingDay.update({
+    where: { id: detail.id },
+    data: { aiSummary: summary },
+  });
+
+  revalidatePath(`/journal/${date}`);
   return { available: true };
 }
 

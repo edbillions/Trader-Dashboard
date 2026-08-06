@@ -6,6 +6,7 @@ import { getTradingDayDetail } from "@/lib/data/trading-day";
 import { formatCurrency, formatR } from "@/lib/pnl";
 import { quoteOfTheDay } from "@/lib/motivational-quotes";
 import { DayPerformanceCard } from "@/components/journal/day-performance-card";
+import { AiSummaryPanel } from "@/components/journal/ai-summary-panel";
 import {
   deleteTradingDayAction,
   deleteTradeAction,
@@ -113,14 +114,7 @@ export default async function JournalDayPage({
 
       <DayPerformanceCard trades={day.trades} />
 
-      {day.aiSummary && (
-        <div className="mb-6 rounded-xl border border-accent/40 bg-accent/10 p-4">
-          <p className="text-xs font-semibold uppercase tracking-wide text-accent">
-            AI summary
-          </p>
-          <p className="mt-1 text-sm text-foreground">{day.aiSummary}</p>
-        </div>
-      )}
+      <AiSummaryPanel date={date} aiSummary={day.aiSummary} />
 
       <section className="mb-8 rounded-xl border border-border bg-surface p-5">
         <div className="mb-3 flex items-center justify-between">
