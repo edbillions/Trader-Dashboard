@@ -66,6 +66,28 @@ var int lastHtfFvgAnchorTimeD = na
 var box closestBullHtfFvgBox = na
 var box closestBearHtfFvgBox = na
 
+// HTF FVG Context: last-seen scan result per slot/direction, so registration only pushes a new
+// HTFFvg when the security-side scan actually surfaces a different gap (not the same one again).
+var float lastBullTopA = na
+var float lastBullBottomA = na
+var float lastBearTopA = na
+var float lastBearBottomA = na
+
+var float lastBullTopB = na
+var float lastBullBottomB = na
+var float lastBearTopB = na
+var float lastBearBottomB = na
+
+var float lastBullTopC = na
+var float lastBullBottomC = na
+var float lastBearTopC = na
+var float lastBearBottomC = na
+
+var float lastBullTopD = na
+var float lastBullBottomD = na
+var float lastBearTopD = na
+var float lastBearBottomD = na
+
 // ========================================
 // GLOBAL USER FUNCTIONS (Defined next)
 // ========================================
@@ -228,10 +250,51 @@ f_getHTFData() =>
     latestSL = ta.valuewhen(isSwingLow, low, 0)
     [hPrev, lPrev, latestSH, latestSL]
 
-// HTF FVG Context: fetch the last 3 CLOSED bars on a higher timeframe (never the forming bar),
-// used to detect a 3-candle Fair Value Gap the same way f_getHTFData() safely avoids repaint.
-f_getHtfFvgData() =>
-    [high[1], high[3], low[1], low[3], time[1]]
+// HTF FVG Context: scan backward up to 100 CLOSED bars on a higher timeframe (never the forming
+// bar, same repaint discipline as f_getHTFData()) for the most recent still-unmitigated 3-candle
+// FVG in each direction. This mirrors f_findBullishFVG/f_findBearishFVG's own detection and
+// mitigation rule exactly (unmitigated = no more-recent bar has traded through the far boundary),
+// just evaluated at the HTF resolution via request.security instead of the chart resolution.
+// Returns the nearest bull/bear gap found (if any) plus how many HTF bars ago its left edge was.
+f_scanHtfFvg() =>
+    float bullTop = na
+    float bullBottom = na
+    int bullBarsAgo = na
+    float bearTop = na
+    float bearBottom = na
+    int bearBarsAgo = na
+    int limit = math.min(bar_index - 1, 100)
+    if limit >= 3
+        for i = 1 to limit - 2
+            if na(bullTop) and low[i] > high[i+2]
+                fTop = low[i]
+                fBtm = high[i+2]
+                bool unmitigated = true
+                if i > 1
+                    for j = 1 to i - 1
+                        if low[j] < fBtm
+                            unmitigated := false
+                            break
+                if unmitigated
+                    bullTop := fTop
+                    bullBottom := fBtm
+                    bullBarsAgo := i
+            if na(bearTop) and high[i] < low[i+2]
+                fTop2 = low[i+2]
+                fBtm2 = high[i]
+                bool unmitigated2 = true
+                if i > 1
+                    for j = 1 to i - 1
+                        if high[j] > fTop2
+                            unmitigated2 := false
+                            break
+                if unmitigated2
+                    bearTop := fTop2
+                    bearBottom := fBtm2
+                    bearBarsAgo := i
+            if not na(bullTop) and not na(bearTop)
+                break
+    [bullTop, bullBottom, bullBarsAgo, bearTop, bearBottom, bearBarsAgo, time[1]]
 
 // Find opposing candle runs
 f_findDownCandlesSeries(sweepOffset) =>
@@ -757,11 +820,11 @@ htfFvgTfBValid = useHtfFvgB and timeframe.in_seconds(htfFvgTfB) > timeframe.in_s
 htfFvgTfCValid = useHtfFvgC and timeframe.in_seconds(htfFvgTfC) > timeframe.in_seconds(timeframe.period)
 htfFvgTfDValid = useHtfFvgD and timeframe.in_seconds(htfFvgTfD) > timeframe.in_seconds(timeframe.period)
 
-// HTF FVG Context: request last 3 CLOSED HTF bars for each enabled slot
-[htfFvgH1_A, htfFvgH3_A, htfFvgL1_A, htfFvgL3_A, htfFvgAnchorTimeA] = request.security(syminfo.tickerid, htfFvgTfA, f_getHtfFvgData(), barmerge.gaps_off, barmerge.lookahead_off)
-[htfFvgH1_B, htfFvgH3_B, htfFvgL1_B, htfFvgL3_B, htfFvgAnchorTimeB] = request.security(syminfo.tickerid, htfFvgTfB, f_getHtfFvgData(), barmerge.gaps_off, barmerge.lookahead_off)
-[htfFvgH1_C, htfFvgH3_C, htfFvgL1_C, htfFvgL3_C, htfFvgAnchorTimeC] = request.security(syminfo.tickerid, htfFvgTfC, f_getHtfFvgData(), barmerge.gaps_off, barmerge.lookahead_off)
-[htfFvgH1_D, htfFvgH3_D, htfFvgL1_D, htfFvgL3_D, htfFvgAnchorTimeD] = request.security(syminfo.tickerid, htfFvgTfD, f_getHtfFvgData(), barmerge.gaps_off, barmerge.lookahead_off)
+// HTF FVG Context: for each enabled slot, scan the HTF for the nearest unmitigated gap (see f_scanHtfFvg)
+[htfFvgBullTopA, htfFvgBullBottomA, htfFvgBullBarsAgoA, htfFvgBearTopA, htfFvgBearBottomA, htfFvgBearBarsAgoA, htfFvgAnchorTimeA] = request.security(syminfo.tickerid, htfFvgTfA, f_scanHtfFvg(), barmerge.gaps_off, barmerge.lookahead_off)
+[htfFvgBullTopB, htfFvgBullBottomB, htfFvgBullBarsAgoB, htfFvgBearTopB, htfFvgBearBottomB, htfFvgBearBarsAgoB, htfFvgAnchorTimeB] = request.security(syminfo.tickerid, htfFvgTfB, f_scanHtfFvg(), barmerge.gaps_off, barmerge.lookahead_off)
+[htfFvgBullTopC, htfFvgBullBottomC, htfFvgBullBarsAgoC, htfFvgBearTopC, htfFvgBearBottomC, htfFvgBearBarsAgoC, htfFvgAnchorTimeC] = request.security(syminfo.tickerid, htfFvgTfC, f_scanHtfFvg(), barmerge.gaps_off, barmerge.lookahead_off)
+[htfFvgBullTopD, htfFvgBullBottomD, htfFvgBullBarsAgoD, htfFvgBearTopD, htfFvgBearBottomD, htfFvgBearBarsAgoD, htfFvgAnchorTimeD] = request.security(syminfo.tickerid, htfFvgTfD, f_scanHtfFvg(), barmerge.gaps_off, barmerge.lookahead_off)
 
 // Track formation bar index for each liquidity level
 var float lastPrevH_A = na
@@ -853,42 +916,57 @@ if useD_resolved
             lastSl_D := sl_D
             f_registerLevel(f_getTFLabel(htfD_resolved), "Swing", false, sl_D)
 
-// HTF FVG Context: register newly detected FVGs (fires at most once per newly-closed HTF bar, per slot)
+// HTF FVG Context: register the current nearest unmitigated gap from the backward scan whenever
+// it differs from the last one seen for that slot+direction (fires at most once per newly-closed
+// HTF bar, per slot). Comparing against the last-seen top/bottom avoids re-registering the same
+// still-valid gap on every single HTF close.
 // Slot A
 if htfFvgTfAValid and not na(htfFvgAnchorTimeA) and htfFvgAnchorTimeA != lastHtfFvgAnchorTimeA
     lastHtfFvgAnchorTimeA := htfFvgAnchorTimeA
-    if not na(htfFvgH1_A) and not na(htfFvgH3_A) and not na(htfFvgL1_A) and not na(htfFvgL3_A)
-        if htfFvgL1_A > htfFvgH3_A
-            f_registerHtfFvg(f_getTFLabel(htfFvgTfA), true, htfFvgL1_A, htfFvgH3_A, bar_index)
-        if htfFvgH1_A < htfFvgL3_A
-            f_registerHtfFvg(f_getTFLabel(htfFvgTfA), false, htfFvgL3_A, htfFvgH1_A, bar_index)
+    if not na(htfFvgBullTopA) and (na(lastBullTopA) or htfFvgBullTopA != lastBullTopA or htfFvgBullBottomA != lastBullBottomA)
+        lastBullTopA := htfFvgBullTopA
+        lastBullBottomA := htfFvgBullBottomA
+        f_registerHtfFvg(f_getTFLabel(htfFvgTfA), true, htfFvgBullTopA, htfFvgBullBottomA, bar_index - htfFvgBullBarsAgoA)
+    if not na(htfFvgBearTopA) and (na(lastBearTopA) or htfFvgBearTopA != lastBearTopA or htfFvgBearBottomA != lastBearBottomA)
+        lastBearTopA := htfFvgBearTopA
+        lastBearBottomA := htfFvgBearBottomA
+        f_registerHtfFvg(f_getTFLabel(htfFvgTfA), false, htfFvgBearTopA, htfFvgBearBottomA, bar_index - htfFvgBearBarsAgoA)
 
 // Slot B
 if htfFvgTfBValid and not na(htfFvgAnchorTimeB) and htfFvgAnchorTimeB != lastHtfFvgAnchorTimeB
     lastHtfFvgAnchorTimeB := htfFvgAnchorTimeB
-    if not na(htfFvgH1_B) and not na(htfFvgH3_B) and not na(htfFvgL1_B) and not na(htfFvgL3_B)
-        if htfFvgL1_B > htfFvgH3_B
-            f_registerHtfFvg(f_getTFLabel(htfFvgTfB), true, htfFvgL1_B, htfFvgH3_B, bar_index)
-        if htfFvgH1_B < htfFvgL3_B
-            f_registerHtfFvg(f_getTFLabel(htfFvgTfB), false, htfFvgL3_B, htfFvgH1_B, bar_index)
+    if not na(htfFvgBullTopB) and (na(lastBullTopB) or htfFvgBullTopB != lastBullTopB or htfFvgBullBottomB != lastBullBottomB)
+        lastBullTopB := htfFvgBullTopB
+        lastBullBottomB := htfFvgBullBottomB
+        f_registerHtfFvg(f_getTFLabel(htfFvgTfB), true, htfFvgBullTopB, htfFvgBullBottomB, bar_index - htfFvgBullBarsAgoB)
+    if not na(htfFvgBearTopB) and (na(lastBearTopB) or htfFvgBearTopB != lastBearTopB or htfFvgBearBottomB != lastBearBottomB)
+        lastBearTopB := htfFvgBearTopB
+        lastBearBottomB := htfFvgBearBottomB
+        f_registerHtfFvg(f_getTFLabel(htfFvgTfB), false, htfFvgBearTopB, htfFvgBearBottomB, bar_index - htfFvgBearBarsAgoB)
 
 // Slot C
 if htfFvgTfCValid and not na(htfFvgAnchorTimeC) and htfFvgAnchorTimeC != lastHtfFvgAnchorTimeC
     lastHtfFvgAnchorTimeC := htfFvgAnchorTimeC
-    if not na(htfFvgH1_C) and not na(htfFvgH3_C) and not na(htfFvgL1_C) and not na(htfFvgL3_C)
-        if htfFvgL1_C > htfFvgH3_C
-            f_registerHtfFvg(f_getTFLabel(htfFvgTfC), true, htfFvgL1_C, htfFvgH3_C, bar_index)
-        if htfFvgH1_C < htfFvgL3_C
-            f_registerHtfFvg(f_getTFLabel(htfFvgTfC), false, htfFvgL3_C, htfFvgH1_C, bar_index)
+    if not na(htfFvgBullTopC) and (na(lastBullTopC) or htfFvgBullTopC != lastBullTopC or htfFvgBullBottomC != lastBullBottomC)
+        lastBullTopC := htfFvgBullTopC
+        lastBullBottomC := htfFvgBullBottomC
+        f_registerHtfFvg(f_getTFLabel(htfFvgTfC), true, htfFvgBullTopC, htfFvgBullBottomC, bar_index - htfFvgBullBarsAgoC)
+    if not na(htfFvgBearTopC) and (na(lastBearTopC) or htfFvgBearTopC != lastBearTopC or htfFvgBearBottomC != lastBearBottomC)
+        lastBearTopC := htfFvgBearTopC
+        lastBearBottomC := htfFvgBearBottomC
+        f_registerHtfFvg(f_getTFLabel(htfFvgTfC), false, htfFvgBearTopC, htfFvgBearBottomC, bar_index - htfFvgBearBarsAgoC)
 
 // Slot D
 if htfFvgTfDValid and not na(htfFvgAnchorTimeD) and htfFvgAnchorTimeD != lastHtfFvgAnchorTimeD
     lastHtfFvgAnchorTimeD := htfFvgAnchorTimeD
-    if not na(htfFvgH1_D) and not na(htfFvgH3_D) and not na(htfFvgL1_D) and not na(htfFvgL3_D)
-        if htfFvgL1_D > htfFvgH3_D
-            f_registerHtfFvg(f_getTFLabel(htfFvgTfD), true, htfFvgL1_D, htfFvgH3_D, bar_index)
-        if htfFvgH1_D < htfFvgL3_D
-            f_registerHtfFvg(f_getTFLabel(htfFvgTfD), false, htfFvgL3_D, htfFvgH1_D, bar_index)
+    if not na(htfFvgBullTopD) and (na(lastBullTopD) or htfFvgBullTopD != lastBullTopD or htfFvgBullBottomD != lastBullBottomD)
+        lastBullTopD := htfFvgBullTopD
+        lastBullBottomD := htfFvgBullBottomD
+        f_registerHtfFvg(f_getTFLabel(htfFvgTfD), true, htfFvgBullTopD, htfFvgBullBottomD, bar_index - htfFvgBullBarsAgoD)
+    if not na(htfFvgBearTopD) and (na(lastBearTopD) or htfFvgBearTopD != lastBearTopD or htfFvgBearBottomD != lastBearBottomD)
+        lastBearTopD := htfFvgBearTopD
+        lastBearBottomD := htfFvgBearBottomD
+        f_registerHtfFvg(f_getTFLabel(htfFvgTfD), false, htfFvgBearTopD, htfFvgBearBottomD, bar_index - htfFvgBearBarsAgoD)
 
 // ========================================
 // MAIN EXECUTION STATE MACHINE (Level update & sweep check)
@@ -1611,6 +1689,13 @@ if barstate.islast and showDashboard
         htfFvgActiveSlots := htfFvgActiveSlots + f_getTFLabel(htfFvgTfC) + " "
     if useHtfFvgD
         htfFvgActiveSlots := htfFvgActiveSlots + f_getTFLabel(htfFvgTfD) + " "
+    // Live gap/tap counts, mainly for diagnosing whether HTF FVGs are being detected at all.
+    int htfFvgTrackedCount = array.size(activeHtfFvgs)
+    int htfFvgTappedCount = 0
+    if htfFvgTrackedCount > 0
+        for i = 0 to htfFvgTrackedCount - 1
+            if array.get(activeHtfFvgs, i).tapped
+                htfFvgTappedCount += 1
     table.cell(dashboardTable, 0, 13, "HTF FVG Context:", text_color=tableTextColor, text_size=tSize, text_halign=text.align_left, text_font_family=font.family_monospace)
     table.cell(dashboardTable, 1, 13, requireHtfFvgContext ? "REQUIRED" : "OFF", text_color=requireHtfFvgContext ? color.green : color.gray, text_size=tSize, text_font_family=font.family_monospace)
-    table.cell(dashboardTable, 2, 13, htfFvgActiveSlots, text_color=color.gray, text_size=tSize, text_font_family=font.family_monospace)
+    table.cell(dashboardTable, 2, 13, htfFvgActiveSlots + "(" + str.tostring(htfFvgTappedCount) + "/" + str.tostring(htfFvgTrackedCount) + " tapped)", text_color=color.gray, text_size=tSize, text_font_family=font.family_monospace)
