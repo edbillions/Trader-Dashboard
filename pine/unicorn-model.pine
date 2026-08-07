@@ -287,7 +287,7 @@ f_scanHtfFvgFromArrays(float[] highs, float[] lows) =>
     float bearBottom = na
     int bearBarsAgo = na
     int n = array.size(highs)
-    int maxK = math.min(n - 2, 100)
+    int maxK = math.min(n - 2, 1000)
     if maxK >= 1
         for k = 1 to maxK
             int idxK = n - k
@@ -723,11 +723,11 @@ htfFvgTfD = input.timeframe("240", "", inline="htf_fvg_d", tooltip="Timeframe fo
 requireHtfFvgContext = input.bool(true, "Require HTF FVG Context", tooltip="Only confirm signals when price has tapped (wicked into) an unmitigated HTF Fair Value Gap (from any enabled HTF above) in the setup's direction. Price does not need to still be inside the gap when the setup confirms.", group=GRP_HTF_FVG)
 showClosestHtfFvg = input.bool(true, "Show Closest HTF FVG", tooltip="Purely visual — when a setup confirms, draws a single static box around the specific HTF Fair Value Gap it delivered from. Fixed at the confirmation bar; does not extend with price. Does not affect signals.", group=GRP_HTF_FVG)
 
-htfFvgBullFillColor = input.color(color.new(color.gray, 85), "Bull HTF FVG", inline="htf_fvg_bull_col", tooltip="Fill color for a bullish setup's origin HTF FVG box. Muted gray by default to stay clean/minimal.", group=GRP_HTF_FVG)
-htfFvgBullBorderColor = input.color(color.new(color.gray, 70), "", inline="htf_fvg_bull_col", tooltip="Border color for a bullish setup's origin HTF FVG box.", group=GRP_HTF_FVG)
+htfFvgBullFillColor = input.color(color.new(#4a6fa5, 85), "Bull HTF FVG", inline="htf_fvg_bull_col", tooltip="Fill color for a bullish setup's origin HTF FVG box. Muted slate-blue by default — subtle, but still visually distinct from bearish so you can confirm a bullish setup tagged a bullish gap at a glance.", group=GRP_HTF_FVG)
+htfFvgBullBorderColor = input.color(color.new(#4a6fa5, 70), "", inline="htf_fvg_bull_col", tooltip="Border color for a bullish setup's origin HTF FVG box.", group=GRP_HTF_FVG)
 
-htfFvgBearFillColor = input.color(color.new(color.gray, 85), "Bear HTF FVG", inline="htf_fvg_bear_col", tooltip="Fill color for a bearish setup's origin HTF FVG box. Muted gray by default to stay clean/minimal.", group=GRP_HTF_FVG)
-htfFvgBearBorderColor = input.color(color.new(color.gray, 70), "", inline="htf_fvg_bear_col", tooltip="Border color for a bearish setup's origin HTF FVG box.", group=GRP_HTF_FVG)
+htfFvgBearFillColor = input.color(color.new(#a54a4a, 85), "Bear HTF FVG", inline="htf_fvg_bear_col", tooltip="Fill color for a bearish setup's origin HTF FVG box. Muted brick-red by default — subtle, but still visually distinct from bullish so you can confirm a bearish setup tagged a bearish gap at a glance.", group=GRP_HTF_FVG)
+htfFvgBearBorderColor = input.color(color.new(#a54a4a, 70), "", inline="htf_fvg_bear_col", tooltip="Border color for a bearish setup's origin HTF FVG box.", group=GRP_HTF_FVG)
 
 // ========================================
 // INPUTS - Group 3.6: Setup Grade
@@ -1006,8 +1006,9 @@ if useD_resolved
             f_registerLevel(f_getTFLabel(htfD_resolved), "Swing", false, sl_D)
 
 // HTF FVG Context: on each newly-closed HTF bar per slot, append it to that slot's accumulated
-// high/low arrays (capped at 150 bars). Then, every bar, scan the accumulated arrays in the main
-// context (f_scanHtfFvgFromArrays) and register the result whenever it differs from the last one
+// high/low arrays (capped at 1000 bars — the FVG scan below looks back up to 1000 HTF bars).
+// Then, every bar, scan the accumulated arrays in the main context (f_scanHtfFvgFromArrays) and
+// register the result whenever it differs from the last one
 // seen for that slot+direction — avoids re-registering the same still-valid gap repeatedly.
 // Slot A
 if htfFvgTfAValid and not na(htfFvgAnchorTimeA) and (htfFvgAnchorTimeA != lastHtfFvgAnchorTimeA or (na(lastHtfFvgAnchorTimeA) and not na(htfFvgAnchorTimeA)))
@@ -1015,9 +1016,9 @@ if htfFvgTfAValid and not na(htfFvgAnchorTimeA) and (htfFvgAnchorTimeA != lastHt
     if not na(htfFvgH1A) and not na(htfFvgL1A)
         array.push(htfFvgHighsA, htfFvgH1A)
         array.push(htfFvgLowsA, htfFvgL1A)
-        while array.size(htfFvgHighsA) > 150
+        while array.size(htfFvgHighsA) > 1000
             array.shift(htfFvgHighsA)
-        while array.size(htfFvgLowsA) > 150
+        while array.size(htfFvgLowsA) > 1000
             array.shift(htfFvgLowsA)
 [htfFvgBullTopA, htfFvgBullBottomA, htfFvgBullBarsAgoA, htfFvgBearTopA, htfFvgBearBottomA, htfFvgBearBarsAgoA] = f_scanHtfFvgFromArrays(htfFvgHighsA, htfFvgLowsA)
 if not na(htfFvgBullTopA) and (na(lastBullTopA) or htfFvgBullTopA != lastBullTopA or htfFvgBullBottomA != lastBullBottomA)
@@ -1035,9 +1036,9 @@ if htfFvgTfBValid and not na(htfFvgAnchorTimeB) and (htfFvgAnchorTimeB != lastHt
     if not na(htfFvgH1B) and not na(htfFvgL1B)
         array.push(htfFvgHighsB, htfFvgH1B)
         array.push(htfFvgLowsB, htfFvgL1B)
-        while array.size(htfFvgHighsB) > 150
+        while array.size(htfFvgHighsB) > 1000
             array.shift(htfFvgHighsB)
-        while array.size(htfFvgLowsB) > 150
+        while array.size(htfFvgLowsB) > 1000
             array.shift(htfFvgLowsB)
 [htfFvgBullTopB, htfFvgBullBottomB, htfFvgBullBarsAgoB, htfFvgBearTopB, htfFvgBearBottomB, htfFvgBearBarsAgoB] = f_scanHtfFvgFromArrays(htfFvgHighsB, htfFvgLowsB)
 if not na(htfFvgBullTopB) and (na(lastBullTopB) or htfFvgBullTopB != lastBullTopB or htfFvgBullBottomB != lastBullBottomB)
@@ -1055,9 +1056,9 @@ if htfFvgTfCValid and not na(htfFvgAnchorTimeC) and (htfFvgAnchorTimeC != lastHt
     if not na(htfFvgH1C) and not na(htfFvgL1C)
         array.push(htfFvgHighsC, htfFvgH1C)
         array.push(htfFvgLowsC, htfFvgL1C)
-        while array.size(htfFvgHighsC) > 150
+        while array.size(htfFvgHighsC) > 1000
             array.shift(htfFvgHighsC)
-        while array.size(htfFvgLowsC) > 150
+        while array.size(htfFvgLowsC) > 1000
             array.shift(htfFvgLowsC)
 [htfFvgBullTopC, htfFvgBullBottomC, htfFvgBullBarsAgoC, htfFvgBearTopC, htfFvgBearBottomC, htfFvgBearBarsAgoC] = f_scanHtfFvgFromArrays(htfFvgHighsC, htfFvgLowsC)
 if not na(htfFvgBullTopC) and (na(lastBullTopC) or htfFvgBullTopC != lastBullTopC or htfFvgBullBottomC != lastBullBottomC)
@@ -1075,9 +1076,9 @@ if htfFvgTfDValid and not na(htfFvgAnchorTimeD) and (htfFvgAnchorTimeD != lastHt
     if not na(htfFvgH1D) and not na(htfFvgL1D)
         array.push(htfFvgHighsD, htfFvgH1D)
         array.push(htfFvgLowsD, htfFvgL1D)
-        while array.size(htfFvgHighsD) > 150
+        while array.size(htfFvgHighsD) > 1000
             array.shift(htfFvgHighsD)
-        while array.size(htfFvgLowsD) > 150
+        while array.size(htfFvgLowsD) > 1000
             array.shift(htfFvgLowsD)
 [htfFvgBullTopD, htfFvgBullBottomD, htfFvgBullBarsAgoD, htfFvgBearTopD, htfFvgBearBottomD, htfFvgBearBarsAgoD] = f_scanHtfFvgFromArrays(htfFvgHighsD, htfFvgLowsD)
 if not na(htfFvgBullTopD) and (na(lastBullTopD) or htfFvgBullTopD != lastBullTopD or htfFvgBullBottomD != lastBullBottomD)
@@ -1306,11 +1307,11 @@ if not na(pendingBullSweepIdx)
                                  )
 
                         // HTF FVG Context: highlight only the specific HTF FVG this setup delivered
-                        // from (if any) — muted, minimal band + small edge label, fixed at the
-                        // confirmation bar (does not extend with price).
+                        // from (if any) — muted, minimal band + small edge label. Fixed 15-bar
+                        // width ending at the confirmation bar (does not extend with price).
                         if showClosestHtfFvg and foundHtfOrigin
                             newBull.htfFvgOriginBox := box.new(
-                                 left = htfOriginStart,
+                                 left = bar_index - 15,
                                  top = htfOriginTop,
                                  right = bar_index,
                                  bottom = htfOriginBottom,
@@ -1321,7 +1322,7 @@ if not na(pendingBullSweepIdx)
                             newBull.htfFvgOriginLabel := label.new(
                                  x = bar_index,
                                  y = (htfOriginTop + htfOriginBottom) / 2.0,
-                                 text = htfOriginTfLabel + " FVG",
+                                 text = htfOriginTfLabel + " Bull FVG",
                                  color = color.new(na, na),
                                  textcolor = labelTextColor,
                                  style = label.style_label_left,
@@ -1521,11 +1522,11 @@ if not na(pendingBearSweepIdx)
                                  )
 
                         // HTF FVG Context: highlight only the specific HTF FVG this setup delivered
-                        // from (if any) — muted, minimal band + small edge label, fixed at the
-                        // confirmation bar (does not extend with price).
+                        // from (if any) — muted, minimal band + small edge label. Fixed 15-bar
+                        // width ending at the confirmation bar (does not extend with price).
                         if showClosestHtfFvg and foundHtfOrigin
                             newBear.htfFvgOriginBox := box.new(
-                                 left = htfOriginStart,
+                                 left = bar_index - 15,
                                  top = htfOriginTop,
                                  right = bar_index,
                                  bottom = htfOriginBottom,
@@ -1536,7 +1537,7 @@ if not na(pendingBearSweepIdx)
                             newBear.htfFvgOriginLabel := label.new(
                                  x = bar_index,
                                  y = (htfOriginTop + htfOriginBottom) / 2.0,
-                                 text = htfOriginTfLabel + " FVG",
+                                 text = htfOriginTfLabel + " Bear FVG",
                                  color = color.new(na, na),
                                  textcolor = labelTextColor,
                                  style = label.style_label_left,
