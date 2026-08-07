@@ -944,7 +944,7 @@ if useD_resolved
 // context (f_scanHtfFvgFromArrays) and register the result whenever it differs from the last one
 // seen for that slot+direction — avoids re-registering the same still-valid gap repeatedly.
 // Slot A
-if htfFvgTfAValid and not na(htfFvgAnchorTimeA) and htfFvgAnchorTimeA != lastHtfFvgAnchorTimeA
+if htfFvgTfAValid and not na(htfFvgAnchorTimeA) and (htfFvgAnchorTimeA != lastHtfFvgAnchorTimeA or (na(lastHtfFvgAnchorTimeA) and not na(htfFvgAnchorTimeA)))
     lastHtfFvgAnchorTimeA := htfFvgAnchorTimeA
     if not na(htfFvgH1A) and not na(htfFvgL1A)
         array.push(htfFvgHighsA, htfFvgH1A)
@@ -964,7 +964,7 @@ if not na(htfFvgBearTopA) and (na(lastBearTopA) or htfFvgBearTopA != lastBearTop
     f_registerHtfFvg(f_getTFLabel(htfFvgTfA), false, htfFvgBearTopA, htfFvgBearBottomA, bar_index)
 
 // Slot B
-if htfFvgTfBValid and not na(htfFvgAnchorTimeB) and htfFvgAnchorTimeB != lastHtfFvgAnchorTimeB
+if htfFvgTfBValid and not na(htfFvgAnchorTimeB) and (htfFvgAnchorTimeB != lastHtfFvgAnchorTimeB or (na(lastHtfFvgAnchorTimeB) and not na(htfFvgAnchorTimeB)))
     lastHtfFvgAnchorTimeB := htfFvgAnchorTimeB
     if not na(htfFvgH1B) and not na(htfFvgL1B)
         array.push(htfFvgHighsB, htfFvgH1B)
@@ -984,7 +984,7 @@ if not na(htfFvgBearTopB) and (na(lastBearTopB) or htfFvgBearTopB != lastBearTop
     f_registerHtfFvg(f_getTFLabel(htfFvgTfB), false, htfFvgBearTopB, htfFvgBearBottomB, bar_index)
 
 // Slot C
-if htfFvgTfCValid and not na(htfFvgAnchorTimeC) and htfFvgAnchorTimeC != lastHtfFvgAnchorTimeC
+if htfFvgTfCValid and not na(htfFvgAnchorTimeC) and (htfFvgAnchorTimeC != lastHtfFvgAnchorTimeC or (na(lastHtfFvgAnchorTimeC) and not na(htfFvgAnchorTimeC)))
     lastHtfFvgAnchorTimeC := htfFvgAnchorTimeC
     if not na(htfFvgH1C) and not na(htfFvgL1C)
         array.push(htfFvgHighsC, htfFvgH1C)
@@ -1004,7 +1004,7 @@ if not na(htfFvgBearTopC) and (na(lastBearTopC) or htfFvgBearTopC != lastBearTop
     f_registerHtfFvg(f_getTFLabel(htfFvgTfC), false, htfFvgBearTopC, htfFvgBearBottomC, bar_index)
 
 // Slot D
-if htfFvgTfDValid and not na(htfFvgAnchorTimeD) and htfFvgAnchorTimeD != lastHtfFvgAnchorTimeD
+if htfFvgTfDValid and not na(htfFvgAnchorTimeD) and (htfFvgAnchorTimeD != lastHtfFvgAnchorTimeD or (na(lastHtfFvgAnchorTimeD) and not na(htfFvgAnchorTimeD)))
     lastHtfFvgAnchorTimeD := htfFvgAnchorTimeD
     if not na(htfFvgH1D) and not na(htfFvgL1D)
         array.push(htfFvgHighsD, htfFvgH1D)
@@ -1751,6 +1751,10 @@ if barstate.islast and showDashboard
         for i = 0 to htfFvgTrackedCount - 1
             if array.get(activeHtfFvgs, i).tapped
                 htfFvgTappedCount += 1
+    // Raw accumulated-HTF-bar counts per slot - if these stay at 0, the anchor-change detection
+    // itself never fired (accumulation problem). If these grow but tracked/tapped stay 0, the
+    // scan or registration is the problem instead. Diagnostic only.
+    int htfFvgRawBarsTotal = array.size(htfFvgHighsA) + array.size(htfFvgHighsB) + array.size(htfFvgHighsC) + array.size(htfFvgHighsD)
     table.cell(dashboardTable, 0, 13, "HTF FVG Context:", text_color=tableTextColor, text_size=tSize, text_halign=text.align_left, text_font_family=font.family_monospace)
-    table.cell(dashboardTable, 1, 13, requireHtfFvgContext ? "REQUIRED" : "OFF", text_color=requireHtfFvgContext ? color.green : color.gray, text_size=tSize, text_font_family=font.family_monospace)
+    table.cell(dashboardTable, 1, 13, (requireHtfFvgContext ? "REQUIRED" : "OFF") + " (" + str.tostring(htfFvgRawBarsTotal) + "b)", text_color=requireHtfFvgContext ? color.green : color.gray, text_size=tSize, text_font_family=font.family_monospace)
     table.cell(dashboardTable, 2, 13, htfFvgActiveSlots + "(" + str.tostring(htfFvgTappedCount) + "/" + str.tostring(htfFvgTrackedCount) + " tapped)", text_color=color.gray, text_size=tSize, text_font_family=font.family_monospace)
