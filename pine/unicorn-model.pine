@@ -72,14 +72,20 @@ var int lastHtfFvgAnchorTimeD = na
 
 // HTF FVG Context: accumulated closed-HTF-bar highs/lows per slot, oldest-first (index n-1 is
 // the most recently closed bar). f_scanHtfFvgFromArrays reads these in the main chart context.
+// htfFvgBarIdx* stores the CHART bar_index each HTF bar was appended at, so a found gap's true
+// origin (not just "when we happened to detect it") can be recovered for the origin box's left edge.
 var float[] htfFvgHighsA = array.new_float()
 var float[] htfFvgLowsA = array.new_float()
+var int[] htfFvgBarIdxA = array.new_int()
 var float[] htfFvgHighsB = array.new_float()
 var float[] htfFvgLowsB = array.new_float()
+var int[] htfFvgBarIdxB = array.new_int()
 var float[] htfFvgHighsC = array.new_float()
 var float[] htfFvgLowsC = array.new_float()
+var int[] htfFvgBarIdxC = array.new_int()
 var float[] htfFvgHighsD = array.new_float()
 var float[] htfFvgLowsD = array.new_float()
+var int[] htfFvgBarIdxD = array.new_int()
 
 // HTF FVG Context: last-seen scan result per slot/direction, so registration only pushes a new
 // HTFFvg when the security-side scan actually surfaces a different gap (not the same one again).
@@ -279,13 +285,16 @@ f_getHtf1BarData() =>
 // boundary) and uses the identical dynamic nested-loop technique those functions already run
 // successfully in the main context — just reading from an accumulated array (array.get) instead
 // of live historical offsets ([i]), since these values came from a different timeframe.
-f_scanHtfFvgFromArrays(float[] highs, float[] lows) =>
+// barIdxs is the parallel array of CHART bar_index values (see htfFvgBarIdx*) — returns the
+// TRUE chart bar_index of the gap's older boundary candle (its real origin), not just the bar
+// this scan happened to run on.
+f_scanHtfFvgFromArrays(float[] highs, float[] lows, int[] barIdxs) =>
     float bullTop = na
     float bullBottom = na
-    int bullBarsAgo = na
+    int bullOriginBar = na
     float bearTop = na
     float bearBottom = na
-    int bearBarsAgo = na
+    int bearOriginBar = na
     int n = array.size(highs)
     int maxK = math.min(n - 2, 1000)
     if maxK >= 1
@@ -304,7 +313,7 @@ f_scanHtfFvgFromArrays(float[] highs, float[] lows) =>
                 if unmitigated
                     bullTop := fTop
                     bullBottom := fBtm
-                    bullBarsAgo := k
+                    bullOriginBar := array.get(barIdxs, idxK2)
             if na(bearTop) and array.get(highs, idxK) < array.get(lows, idxK2)
                 fTop2 = array.get(lows, idxK2)
                 fBtm2 = array.get(highs, idxK)
@@ -317,10 +326,10 @@ f_scanHtfFvgFromArrays(float[] highs, float[] lows) =>
                 if unmitigated2
                     bearTop := fTop2
                     bearBottom := fBtm2
-                    bearBarsAgo := k
+                    bearOriginBar := array.get(barIdxs, idxK2)
             if not na(bullTop) and not na(bearTop)
                 break
-    [bullTop, bullBottom, bullBarsAgo, bearTop, bearBottom, bearBarsAgo]
+    [bullTop, bullBottom, bullOriginBar, bearTop, bearBottom, bearOriginBar]
 
 // Find opposing candle runs
 f_findDownCandlesSeries(sweepOffset) =>
@@ -1016,19 +1025,22 @@ if htfFvgTfAValid and not na(htfFvgAnchorTimeA) and (htfFvgAnchorTimeA != lastHt
     if not na(htfFvgH1A) and not na(htfFvgL1A)
         array.push(htfFvgHighsA, htfFvgH1A)
         array.push(htfFvgLowsA, htfFvgL1A)
+        array.push(htfFvgBarIdxA, bar_index)
         while array.size(htfFvgHighsA) > 1000
             array.shift(htfFvgHighsA)
         while array.size(htfFvgLowsA) > 1000
             array.shift(htfFvgLowsA)
-[htfFvgBullTopA, htfFvgBullBottomA, htfFvgBullBarsAgoA, htfFvgBearTopA, htfFvgBearBottomA, htfFvgBearBarsAgoA] = f_scanHtfFvgFromArrays(htfFvgHighsA, htfFvgLowsA)
+        while array.size(htfFvgBarIdxA) > 1000
+            array.shift(htfFvgBarIdxA)
+[htfFvgBullTopA, htfFvgBullBottomA, htfFvgBullOriginBarA, htfFvgBearTopA, htfFvgBearBottomA, htfFvgBearOriginBarA] = f_scanHtfFvgFromArrays(htfFvgHighsA, htfFvgLowsA, htfFvgBarIdxA)
 if not na(htfFvgBullTopA) and (na(lastBullTopA) or htfFvgBullTopA != lastBullTopA or htfFvgBullBottomA != lastBullBottomA)
     lastBullTopA := htfFvgBullTopA
     lastBullBottomA := htfFvgBullBottomA
-    f_registerHtfFvg(f_getHtfCompactLabel(htfFvgTfA), true, htfFvgBullTopA, htfFvgBullBottomA, bar_index)
+    f_registerHtfFvg(f_getHtfCompactLabel(htfFvgTfA), true, htfFvgBullTopA, htfFvgBullBottomA, htfFvgBullOriginBarA)
 if not na(htfFvgBearTopA) and (na(lastBearTopA) or htfFvgBearTopA != lastBearTopA or htfFvgBearBottomA != lastBearBottomA)
     lastBearTopA := htfFvgBearTopA
     lastBearBottomA := htfFvgBearBottomA
-    f_registerHtfFvg(f_getHtfCompactLabel(htfFvgTfA), false, htfFvgBearTopA, htfFvgBearBottomA, bar_index)
+    f_registerHtfFvg(f_getHtfCompactLabel(htfFvgTfA), false, htfFvgBearTopA, htfFvgBearBottomA, htfFvgBearOriginBarA)
 
 // Slot B
 if htfFvgTfBValid and not na(htfFvgAnchorTimeB) and (htfFvgAnchorTimeB != lastHtfFvgAnchorTimeB or (na(lastHtfFvgAnchorTimeB) and not na(htfFvgAnchorTimeB)))
@@ -1036,19 +1048,22 @@ if htfFvgTfBValid and not na(htfFvgAnchorTimeB) and (htfFvgAnchorTimeB != lastHt
     if not na(htfFvgH1B) and not na(htfFvgL1B)
         array.push(htfFvgHighsB, htfFvgH1B)
         array.push(htfFvgLowsB, htfFvgL1B)
+        array.push(htfFvgBarIdxB, bar_index)
         while array.size(htfFvgHighsB) > 1000
             array.shift(htfFvgHighsB)
         while array.size(htfFvgLowsB) > 1000
             array.shift(htfFvgLowsB)
-[htfFvgBullTopB, htfFvgBullBottomB, htfFvgBullBarsAgoB, htfFvgBearTopB, htfFvgBearBottomB, htfFvgBearBarsAgoB] = f_scanHtfFvgFromArrays(htfFvgHighsB, htfFvgLowsB)
+        while array.size(htfFvgBarIdxB) > 1000
+            array.shift(htfFvgBarIdxB)
+[htfFvgBullTopB, htfFvgBullBottomB, htfFvgBullOriginBarB, htfFvgBearTopB, htfFvgBearBottomB, htfFvgBearOriginBarB] = f_scanHtfFvgFromArrays(htfFvgHighsB, htfFvgLowsB, htfFvgBarIdxB)
 if not na(htfFvgBullTopB) and (na(lastBullTopB) or htfFvgBullTopB != lastBullTopB or htfFvgBullBottomB != lastBullBottomB)
     lastBullTopB := htfFvgBullTopB
     lastBullBottomB := htfFvgBullBottomB
-    f_registerHtfFvg(f_getHtfCompactLabel(htfFvgTfB), true, htfFvgBullTopB, htfFvgBullBottomB, bar_index)
+    f_registerHtfFvg(f_getHtfCompactLabel(htfFvgTfB), true, htfFvgBullTopB, htfFvgBullBottomB, htfFvgBullOriginBarB)
 if not na(htfFvgBearTopB) and (na(lastBearTopB) or htfFvgBearTopB != lastBearTopB or htfFvgBearBottomB != lastBearBottomB)
     lastBearTopB := htfFvgBearTopB
     lastBearBottomB := htfFvgBearBottomB
-    f_registerHtfFvg(f_getHtfCompactLabel(htfFvgTfB), false, htfFvgBearTopB, htfFvgBearBottomB, bar_index)
+    f_registerHtfFvg(f_getHtfCompactLabel(htfFvgTfB), false, htfFvgBearTopB, htfFvgBearBottomB, htfFvgBearOriginBarB)
 
 // Slot C
 if htfFvgTfCValid and not na(htfFvgAnchorTimeC) and (htfFvgAnchorTimeC != lastHtfFvgAnchorTimeC or (na(lastHtfFvgAnchorTimeC) and not na(htfFvgAnchorTimeC)))
@@ -1056,19 +1071,22 @@ if htfFvgTfCValid and not na(htfFvgAnchorTimeC) and (htfFvgAnchorTimeC != lastHt
     if not na(htfFvgH1C) and not na(htfFvgL1C)
         array.push(htfFvgHighsC, htfFvgH1C)
         array.push(htfFvgLowsC, htfFvgL1C)
+        array.push(htfFvgBarIdxC, bar_index)
         while array.size(htfFvgHighsC) > 1000
             array.shift(htfFvgHighsC)
         while array.size(htfFvgLowsC) > 1000
             array.shift(htfFvgLowsC)
-[htfFvgBullTopC, htfFvgBullBottomC, htfFvgBullBarsAgoC, htfFvgBearTopC, htfFvgBearBottomC, htfFvgBearBarsAgoC] = f_scanHtfFvgFromArrays(htfFvgHighsC, htfFvgLowsC)
+        while array.size(htfFvgBarIdxC) > 1000
+            array.shift(htfFvgBarIdxC)
+[htfFvgBullTopC, htfFvgBullBottomC, htfFvgBullOriginBarC, htfFvgBearTopC, htfFvgBearBottomC, htfFvgBearOriginBarC] = f_scanHtfFvgFromArrays(htfFvgHighsC, htfFvgLowsC, htfFvgBarIdxC)
 if not na(htfFvgBullTopC) and (na(lastBullTopC) or htfFvgBullTopC != lastBullTopC or htfFvgBullBottomC != lastBullBottomC)
     lastBullTopC := htfFvgBullTopC
     lastBullBottomC := htfFvgBullBottomC
-    f_registerHtfFvg(f_getHtfCompactLabel(htfFvgTfC), true, htfFvgBullTopC, htfFvgBullBottomC, bar_index)
+    f_registerHtfFvg(f_getHtfCompactLabel(htfFvgTfC), true, htfFvgBullTopC, htfFvgBullBottomC, htfFvgBullOriginBarC)
 if not na(htfFvgBearTopC) and (na(lastBearTopC) or htfFvgBearTopC != lastBearTopC or htfFvgBearBottomC != lastBearBottomC)
     lastBearTopC := htfFvgBearTopC
     lastBearBottomC := htfFvgBearBottomC
-    f_registerHtfFvg(f_getHtfCompactLabel(htfFvgTfC), false, htfFvgBearTopC, htfFvgBearBottomC, bar_index)
+    f_registerHtfFvg(f_getHtfCompactLabel(htfFvgTfC), false, htfFvgBearTopC, htfFvgBearBottomC, htfFvgBearOriginBarC)
 
 // Slot D
 if htfFvgTfDValid and not na(htfFvgAnchorTimeD) and (htfFvgAnchorTimeD != lastHtfFvgAnchorTimeD or (na(lastHtfFvgAnchorTimeD) and not na(htfFvgAnchorTimeD)))
@@ -1076,19 +1094,22 @@ if htfFvgTfDValid and not na(htfFvgAnchorTimeD) and (htfFvgAnchorTimeD != lastHt
     if not na(htfFvgH1D) and not na(htfFvgL1D)
         array.push(htfFvgHighsD, htfFvgH1D)
         array.push(htfFvgLowsD, htfFvgL1D)
+        array.push(htfFvgBarIdxD, bar_index)
         while array.size(htfFvgHighsD) > 1000
             array.shift(htfFvgHighsD)
         while array.size(htfFvgLowsD) > 1000
             array.shift(htfFvgLowsD)
-[htfFvgBullTopD, htfFvgBullBottomD, htfFvgBullBarsAgoD, htfFvgBearTopD, htfFvgBearBottomD, htfFvgBearBarsAgoD] = f_scanHtfFvgFromArrays(htfFvgHighsD, htfFvgLowsD)
+        while array.size(htfFvgBarIdxD) > 1000
+            array.shift(htfFvgBarIdxD)
+[htfFvgBullTopD, htfFvgBullBottomD, htfFvgBullOriginBarD, htfFvgBearTopD, htfFvgBearBottomD, htfFvgBearOriginBarD] = f_scanHtfFvgFromArrays(htfFvgHighsD, htfFvgLowsD, htfFvgBarIdxD)
 if not na(htfFvgBullTopD) and (na(lastBullTopD) or htfFvgBullTopD != lastBullTopD or htfFvgBullBottomD != lastBullBottomD)
     lastBullTopD := htfFvgBullTopD
     lastBullBottomD := htfFvgBullBottomD
-    f_registerHtfFvg(f_getHtfCompactLabel(htfFvgTfD), true, htfFvgBullTopD, htfFvgBullBottomD, bar_index)
+    f_registerHtfFvg(f_getHtfCompactLabel(htfFvgTfD), true, htfFvgBullTopD, htfFvgBullBottomD, htfFvgBullOriginBarD)
 if not na(htfFvgBearTopD) and (na(lastBearTopD) or htfFvgBearTopD != lastBearTopD or htfFvgBearBottomD != lastBearBottomD)
     lastBearTopD := htfFvgBearTopD
     lastBearBottomD := htfFvgBearBottomD
-    f_registerHtfFvg(f_getHtfCompactLabel(htfFvgTfD), false, htfFvgBearTopD, htfFvgBearBottomD, bar_index)
+    f_registerHtfFvg(f_getHtfCompactLabel(htfFvgTfD), false, htfFvgBearTopD, htfFvgBearBottomD, htfFvgBearOriginBarD)
 
 // ========================================
 // SETUP GRADE — DATA FETCH (unconditional, cheap; only consumed at confirmation time)
