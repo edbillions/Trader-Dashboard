@@ -34,6 +34,7 @@ type Setup
     label levelLabel          // Text label at origin of level line
     box breakerBox            // Box drawing for breaker
     box fvgBox                // Box drawing for FVG
+    box htfFvgOriginBox       // Box drawing for the HTF FVG this setup delivered from (static, not extended)
     line[] targetLines        // Array of lines for target projections
     label[] targetLabels      // Array of labels for targets
     label setupLabel          // Monospaced text label (+Unicorn / -Breaker)
@@ -43,7 +44,7 @@ type Setup
 // commonly blows straight through a gap on its way to the sweep, and that tap should still count
 // as "delivering from" the HTF FVG. Only untapped, never-touched gaps get pruned on mitigation.
 type HTFFvg
-    string tfLabel    // Friendly label of the HTF it was found on, e.g. "15m", "1H"
+    string tfLabel    // Friendly label of the HTF it was found on, e.g. "M15", "H1"
     bool isBull       // true = bullish (discount) gap, false = bearish (premium) gap
     float top
     float bottom
@@ -63,8 +64,6 @@ var int lastHtfFvgAnchorTimeA = na
 var int lastHtfFvgAnchorTimeB = na
 var int lastHtfFvgAnchorTimeC = na
 var int lastHtfFvgAnchorTimeD = na
-var box closestBullHtfFvgBox = na
-var box closestBearHtfFvgBox = na
 
 // HTF FVG Context: accumulated closed-HTF-bar highs/lows per slot, oldest-first (index n-1 is
 // the most recently closed bar). f_scanHtfFvgFromArrays reads these in the main chart context.
@@ -443,11 +442,12 @@ f_hasTappedHtfFvg(bool isBull) =>
                 result := true
     result
 
-// HTF FVG Context: nearest unmitigated HTF FVG of the given direction (by distance to price).
-// Purely for the "Show Closest HTF FVG" visual — does not gate signals. Explicitly excludes
-// mitigated gaps since activeHtfFvgs can now retain tapped-but-mitigated entries (see the sweep
-// loop above) purely so the "Require HTF FVG Context" gate can still see they were tapped.
-f_getNearestUnmitigatedHtfFvg(bool isBull) =>
+// HTF FVG Context: the nearest TAPPED HTF FVG of the given direction (by distance to price) —
+// i.e. the specific gap a setup confirming right now is most likely delivering from. Used only
+// at setup-confirmation time to draw the "Show Closest HTF FVG" origin box for that one setup;
+// does not gate signals. Deliberately does NOT exclude mitigated gaps (a tapped gap still counts
+// as the origin even if price later broke fully through it — same reasoning as f_hasTappedHtfFvg).
+f_getTappedHtfFvgOrigin(bool isBull) =>
     float bestTop = na
     float bestBottom = na
     int bestStart = na
@@ -455,7 +455,7 @@ f_getNearestUnmitigatedHtfFvg(bool isBull) =>
     if array.size(activeHtfFvgs) > 0
         for i = array.size(activeHtfFvgs) - 1 to 0
             fvg = array.get(activeHtfFvgs, i)
-            if fvg.isBull == isBull and not fvg.mitigated
+            if fvg.isBull == isBull and fvg.tapped
                 dist = close > fvg.top ? close - fvg.top : (close < fvg.bottom ? fvg.bottom - close : 0.0)
                 if na(bestDist) or dist < bestDist
                     bestDist := dist
@@ -463,6 +463,26 @@ f_getNearestUnmitigatedHtfFvg(bool isBull) =>
                     bestBottom := fvg.bottom
                     bestStart := fvg.startBar
     [not na(bestTop), bestTop, bestBottom, bestStart]
+
+// HTF FVG Context: compact ICT-style timeframe label (e.g. "M5", "M15", "H1", "H4", "D1"),
+// letter-prefix instead of f_getTFLabel's number-suffix style ("5m", "1H") — used only for HTF
+// FVG display so the feature reads clean and minimal, independent of the rest of the indicator.
+f_getHtfCompactLabel(string tf) =>
+    seconds = timeframe.in_seconds(tf)
+    res = ""
+    if seconds < 60
+        res := "S" + str.tostring(seconds)
+    else if (seconds / 60) < 60
+        res := "M" + str.tostring(math.round(seconds / 60))
+    else if (seconds / 3600) < 24
+        res := "H" + str.tostring(math.round(seconds / 3600))
+    else if (seconds / 86400) < 7
+        res := "D" + str.tostring(math.round(seconds / 86400))
+    else if (seconds / 604800) < 5
+        res := "W" + str.tostring(math.round(seconds / 604800))
+    else
+        res := "MN" + str.tostring(math.round(seconds / 2592000))
+    res
 
 // Size filter
 f_checkSizeFilter(breakerTop, breakerBottom, sizeFilterMode, minBreakerSize, maxBreakerSize, breakerSizeUnit) =>
@@ -668,13 +688,13 @@ useHtfFvgD = input.bool(true, "HTF FVG D", inline="htf_fvg_d", tooltip="Enable t
 htfFvgTfD = input.timeframe("240", "", inline="htf_fvg_d", tooltip="Timeframe for HTF FVG D (e.g. 4H).", group=GRP_HTF_FVG, active=useHtfFvgD)
 
 requireHtfFvgContext = input.bool(true, "Require HTF FVG Context", tooltip="Only confirm signals when price has tapped (wicked into) an unmitigated HTF Fair Value Gap (from any enabled HTF above) in the setup's direction. Price does not need to still be inside the gap when the setup confirms.", group=GRP_HTF_FVG)
-showClosestHtfFvg = input.bool(true, "Show Closest HTF FVG", tooltip="Purely visual — draws a box around the nearest unmitigated bullish and bearish HTF Fair Value Gap. Does not affect signals.", group=GRP_HTF_FVG)
+showClosestHtfFvg = input.bool(true, "Show Closest HTF FVG", tooltip="Purely visual — when a setup confirms, draws a single static box around the specific HTF Fair Value Gap it delivered from. Fixed at the confirmation bar; does not extend with price. Does not affect signals.", group=GRP_HTF_FVG)
 
-htfFvgBullFillColor = input.color(color.new(#2962ff, 80), "Bull HTF FVG", inline="htf_fvg_bull_col", tooltip="Fill color for the closest bullish HTF FVG box.", group=GRP_HTF_FVG)
-htfFvgBullBorderColor = input.color(color.new(#2962ff, 40), "", inline="htf_fvg_bull_col", tooltip="Border color for the closest bullish HTF FVG box.", group=GRP_HTF_FVG)
+htfFvgBullFillColor = input.color(color.new(#2962ff, 80), "Bull HTF FVG", inline="htf_fvg_bull_col", tooltip="Fill color for a bullish setup's origin HTF FVG box.", group=GRP_HTF_FVG)
+htfFvgBullBorderColor = input.color(color.new(#2962ff, 40), "", inline="htf_fvg_bull_col", tooltip="Border color for a bullish setup's origin HTF FVG box.", group=GRP_HTF_FVG)
 
-htfFvgBearFillColor = input.color(color.new(#ff6d00, 80), "Bear HTF FVG", inline="htf_fvg_bear_col", tooltip="Fill color for the closest bearish HTF FVG box.", group=GRP_HTF_FVG)
-htfFvgBearBorderColor = input.color(color.new(#ff6d00, 40), "", inline="htf_fvg_bear_col", tooltip="Border color for the closest bearish HTF FVG box.", group=GRP_HTF_FVG)
+htfFvgBearFillColor = input.color(color.new(#ff6d00, 80), "Bear HTF FVG", inline="htf_fvg_bear_col", tooltip="Fill color for a bearish setup's origin HTF FVG box.", group=GRP_HTF_FVG)
+htfFvgBearBorderColor = input.color(color.new(#ff6d00, 40), "", inline="htf_fvg_bear_col", tooltip="Border color for a bearish setup's origin HTF FVG box.", group=GRP_HTF_FVG)
 
 // ========================================
 // INPUTS - Group 4: Target Projections (Separate, No Inlines)
@@ -957,11 +977,11 @@ if htfFvgTfAValid and not na(htfFvgAnchorTimeA) and (htfFvgAnchorTimeA != lastHt
 if not na(htfFvgBullTopA) and (na(lastBullTopA) or htfFvgBullTopA != lastBullTopA or htfFvgBullBottomA != lastBullBottomA)
     lastBullTopA := htfFvgBullTopA
     lastBullBottomA := htfFvgBullBottomA
-    f_registerHtfFvg(f_getTFLabel(htfFvgTfA), true, htfFvgBullTopA, htfFvgBullBottomA, bar_index)
+    f_registerHtfFvg(f_getHtfCompactLabel(htfFvgTfA), true, htfFvgBullTopA, htfFvgBullBottomA, bar_index)
 if not na(htfFvgBearTopA) and (na(lastBearTopA) or htfFvgBearTopA != lastBearTopA or htfFvgBearBottomA != lastBearBottomA)
     lastBearTopA := htfFvgBearTopA
     lastBearBottomA := htfFvgBearBottomA
-    f_registerHtfFvg(f_getTFLabel(htfFvgTfA), false, htfFvgBearTopA, htfFvgBearBottomA, bar_index)
+    f_registerHtfFvg(f_getHtfCompactLabel(htfFvgTfA), false, htfFvgBearTopA, htfFvgBearBottomA, bar_index)
 
 // Slot B
 if htfFvgTfBValid and not na(htfFvgAnchorTimeB) and (htfFvgAnchorTimeB != lastHtfFvgAnchorTimeB or (na(lastHtfFvgAnchorTimeB) and not na(htfFvgAnchorTimeB)))
@@ -977,11 +997,11 @@ if htfFvgTfBValid and not na(htfFvgAnchorTimeB) and (htfFvgAnchorTimeB != lastHt
 if not na(htfFvgBullTopB) and (na(lastBullTopB) or htfFvgBullTopB != lastBullTopB or htfFvgBullBottomB != lastBullBottomB)
     lastBullTopB := htfFvgBullTopB
     lastBullBottomB := htfFvgBullBottomB
-    f_registerHtfFvg(f_getTFLabel(htfFvgTfB), true, htfFvgBullTopB, htfFvgBullBottomB, bar_index)
+    f_registerHtfFvg(f_getHtfCompactLabel(htfFvgTfB), true, htfFvgBullTopB, htfFvgBullBottomB, bar_index)
 if not na(htfFvgBearTopB) and (na(lastBearTopB) or htfFvgBearTopB != lastBearTopB or htfFvgBearBottomB != lastBearBottomB)
     lastBearTopB := htfFvgBearTopB
     lastBearBottomB := htfFvgBearBottomB
-    f_registerHtfFvg(f_getTFLabel(htfFvgTfB), false, htfFvgBearTopB, htfFvgBearBottomB, bar_index)
+    f_registerHtfFvg(f_getHtfCompactLabel(htfFvgTfB), false, htfFvgBearTopB, htfFvgBearBottomB, bar_index)
 
 // Slot C
 if htfFvgTfCValid and not na(htfFvgAnchorTimeC) and (htfFvgAnchorTimeC != lastHtfFvgAnchorTimeC or (na(lastHtfFvgAnchorTimeC) and not na(htfFvgAnchorTimeC)))
@@ -997,11 +1017,11 @@ if htfFvgTfCValid and not na(htfFvgAnchorTimeC) and (htfFvgAnchorTimeC != lastHt
 if not na(htfFvgBullTopC) and (na(lastBullTopC) or htfFvgBullTopC != lastBullTopC or htfFvgBullBottomC != lastBullBottomC)
     lastBullTopC := htfFvgBullTopC
     lastBullBottomC := htfFvgBullBottomC
-    f_registerHtfFvg(f_getTFLabel(htfFvgTfC), true, htfFvgBullTopC, htfFvgBullBottomC, bar_index)
+    f_registerHtfFvg(f_getHtfCompactLabel(htfFvgTfC), true, htfFvgBullTopC, htfFvgBullBottomC, bar_index)
 if not na(htfFvgBearTopC) and (na(lastBearTopC) or htfFvgBearTopC != lastBearTopC or htfFvgBearBottomC != lastBearBottomC)
     lastBearTopC := htfFvgBearTopC
     lastBearBottomC := htfFvgBearBottomC
-    f_registerHtfFvg(f_getTFLabel(htfFvgTfC), false, htfFvgBearTopC, htfFvgBearBottomC, bar_index)
+    f_registerHtfFvg(f_getHtfCompactLabel(htfFvgTfC), false, htfFvgBearTopC, htfFvgBearBottomC, bar_index)
 
 // Slot D
 if htfFvgTfDValid and not na(htfFvgAnchorTimeD) and (htfFvgAnchorTimeD != lastHtfFvgAnchorTimeD or (na(lastHtfFvgAnchorTimeD) and not na(htfFvgAnchorTimeD)))
@@ -1017,11 +1037,11 @@ if htfFvgTfDValid and not na(htfFvgAnchorTimeD) and (htfFvgAnchorTimeD != lastHt
 if not na(htfFvgBullTopD) and (na(lastBullTopD) or htfFvgBullTopD != lastBullTopD or htfFvgBullBottomD != lastBullBottomD)
     lastBullTopD := htfFvgBullTopD
     lastBullBottomD := htfFvgBullBottomD
-    f_registerHtfFvg(f_getTFLabel(htfFvgTfD), true, htfFvgBullTopD, htfFvgBullBottomD, bar_index)
+    f_registerHtfFvg(f_getHtfCompactLabel(htfFvgTfD), true, htfFvgBullTopD, htfFvgBullBottomD, bar_index)
 if not na(htfFvgBearTopD) and (na(lastBearTopD) or htfFvgBearTopD != lastBearTopD or htfFvgBearBottomD != lastBearBottomD)
     lastBearTopD := htfFvgBearTopD
     lastBearBottomD := htfFvgBearBottomD
-    f_registerHtfFvg(f_getTFLabel(htfFvgTfD), false, htfFvgBearTopD, htfFvgBearBottomD, bar_index)
+    f_registerHtfFvg(f_getHtfCompactLabel(htfFvgTfD), false, htfFvgBearTopD, htfFvgBearBottomD, bar_index)
 
 // ========================================
 // MAIN EXECUTION STATE MACHINE (Level update & sweep check)
@@ -1163,6 +1183,7 @@ if not na(pendingBullSweepIdx)
                              levelLabel = na,
                              breakerBox = na,
                              fvgBox = na,
+                             htfFvgOriginBox = na,
                              targetLines = array.new_line(),
                              targetLabels = array.new_label(),
                              setupLabel = na
@@ -1211,6 +1232,21 @@ if not na(pendingBullSweepIdx)
                                  bgcolor = bullFvgColor,
                                  xloc = xloc.bar_index
                                  )
+
+                        // HTF FVG Context: highlight only the specific HTF FVG this setup delivered
+                        // from (if any). Static box, fixed at the confirmation bar — does not extend.
+                        if showClosestHtfFvg
+                            [foundHtfOrigin, htfOriginTop, htfOriginBottom, htfOriginStart] = f_getTappedHtfFvgOrigin(true)
+                            if foundHtfOrigin
+                                newBull.htfFvgOriginBox := box.new(
+                                     left = htfOriginStart,
+                                     top = htfOriginTop,
+                                     right = bar_index,
+                                     bottom = htfOriginBottom,
+                                     border_color = htfFvgBullBorderColor,
+                                     bgcolor = htfFvgBullFillColor,
+                                     xloc = xloc.bar_index
+                                     )
 
                         labelText = hasFvg ? "+Unicorn" : "+Breaker"
                         tooltipText = "Setup: " + (hasFvg ? "Bullish Unicorn" : "Bullish Breaker") + "\n" +
@@ -1333,6 +1369,7 @@ if not na(pendingBearSweepIdx)
                              levelLabel = na,
                              breakerBox = na,
                              fvgBox = na,
+                             htfFvgOriginBox = na,
                              targetLines = array.new_line(),
                              targetLabels = array.new_label(),
                              setupLabel = na
@@ -1381,6 +1418,21 @@ if not na(pendingBearSweepIdx)
                                  bgcolor = bearFvgColor,
                                  xloc = xloc.bar_index
                                  )
+
+                        // HTF FVG Context: highlight only the specific HTF FVG this setup delivered
+                        // from (if any). Static box, fixed at the confirmation bar — does not extend.
+                        if showClosestHtfFvg
+                            [foundHtfOrigin, htfOriginTop, htfOriginBottom, htfOriginStart] = f_getTappedHtfFvgOrigin(false)
+                            if foundHtfOrigin
+                                newBear.htfFvgOriginBox := box.new(
+                                     left = htfOriginStart,
+                                     top = htfOriginTop,
+                                     right = bar_index,
+                                     bottom = htfOriginBottom,
+                                     border_color = htfFvgBearBorderColor,
+                                     bgcolor = htfFvgBearFillColor,
+                                     xloc = xloc.bar_index
+                                     )
 
                         labelText = hasFvg ? "-Unicorn" : "-Breaker"
                         tooltipText = "Setup: " + (hasFvg ? "Bearish Unicorn" : "Bearish Breaker") + "\n" +
@@ -1488,6 +1540,8 @@ if array.size(activeSetups) > 0
                     box.delete(setup.breakerBox)
                     if not na(setup.fvgBox)
                         box.delete(setup.fvgBox)
+                    if not na(setup.htfFvgOriginBox)
+                        box.delete(setup.htfFvgOriginBox)
                     label.delete(setup.setupLabel)
                     for l in setup.targetLines
                         line.delete(l)
@@ -1500,6 +1554,8 @@ if array.size(activeSetups) > 0
                     box.set_bgcolor(setup.breakerBox, setup.dir == "BULL" ? bullColorInactive : bearColorInactive)
                     if not na(setup.fvgBox)
                         box.set_bgcolor(setup.fvgBox, setup.dir == "BULL" ? bullColorInactive : bearColorInactive)
+                    if not na(setup.htfFvgOriginBox)
+                        box.set_bgcolor(setup.htfFvgOriginBox, setup.dir == "BULL" ? bullColorInactive : bearColorInactive)
                     label.set_textcolor(setup.setupLabel, setup.dir == "BULL" ? bullColorInactive : bearColorInactive)
 
                     for l in setup.targetLines
@@ -1551,48 +1607,14 @@ while array.size(activeSetups) > historyCount
     box.delete(oldSetup.breakerBox)
     if not na(oldSetup.fvgBox)
         box.delete(oldSetup.fvgBox)
+    if not na(oldSetup.htfFvgOriginBox)
+        box.delete(oldSetup.htfFvgOriginBox)
     label.delete(oldSetup.setupLabel)
     for l in oldSetup.targetLines
         line.delete(l)
     for lb in oldSetup.targetLabels
         label.delete(lb)
 
-// ========================================
-// HTF FVG CONTEXT — CLOSEST FVG VISUAL (PURELY COSMETIC, NEVER GATES SIGNALS)
-// ========================================
-if showClosestHtfFvg
-    [foundBullHtfFvg, topBullHtfFvg, botBullHtfFvg, startBullHtfFvg] = f_getNearestUnmitigatedHtfFvg(true)
-    if foundBullHtfFvg
-        if na(closestBullHtfFvgBox)
-            closestBullHtfFvgBox := box.new(left=startBullHtfFvg, top=topBullHtfFvg, right=bar_index, bottom=botBullHtfFvg, border_color=htfFvgBullBorderColor, bgcolor=htfFvgBullFillColor, xloc=xloc.bar_index)
-        else if box.get_top(closestBullHtfFvgBox) != topBullHtfFvg or box.get_bottom(closestBullHtfFvgBox) != botBullHtfFvg
-            box.delete(closestBullHtfFvgBox)
-            closestBullHtfFvgBox := box.new(left=startBullHtfFvg, top=topBullHtfFvg, right=bar_index, bottom=botBullHtfFvg, border_color=htfFvgBullBorderColor, bgcolor=htfFvgBullFillColor, xloc=xloc.bar_index)
-        else
-            box.set_right(closestBullHtfFvgBox, bar_index)
-    else if not na(closestBullHtfFvgBox)
-        box.delete(closestBullHtfFvgBox)
-        closestBullHtfFvgBox := na
-
-    [foundBearHtfFvg, topBearHtfFvg, botBearHtfFvg, startBearHtfFvg] = f_getNearestUnmitigatedHtfFvg(false)
-    if foundBearHtfFvg
-        if na(closestBearHtfFvgBox)
-            closestBearHtfFvgBox := box.new(left=startBearHtfFvg, top=topBearHtfFvg, right=bar_index, bottom=botBearHtfFvg, border_color=htfFvgBearBorderColor, bgcolor=htfFvgBearFillColor, xloc=xloc.bar_index)
-        else if box.get_top(closestBearHtfFvgBox) != topBearHtfFvg or box.get_bottom(closestBearHtfFvgBox) != botBearHtfFvg
-            box.delete(closestBearHtfFvgBox)
-            closestBearHtfFvgBox := box.new(left=startBearHtfFvg, top=topBearHtfFvg, right=bar_index, bottom=botBearHtfFvg, border_color=htfFvgBearBorderColor, bgcolor=htfFvgBearFillColor, xloc=xloc.bar_index)
-        else
-            box.set_right(closestBearHtfFvgBox, bar_index)
-    else if not na(closestBearHtfFvgBox)
-        box.delete(closestBearHtfFvgBox)
-        closestBearHtfFvgBox := na
-else
-    if not na(closestBullHtfFvgBox)
-        box.delete(closestBullHtfFvgBox)
-        closestBullHtfFvgBox := na
-    if not na(closestBearHtfFvgBox)
-        box.delete(closestBearHtfFvgBox)
-        closestBearHtfFvgBox := na
 
 // ========================================
 // POTENTIAL BREAKER ALERT (ON UNCONFIRMED BAR)
@@ -1737,24 +1759,13 @@ if barstate.islast and showDashboard
     // HTF FVG Context row
     htfFvgActiveSlots = ""
     if useHtfFvgA
-        htfFvgActiveSlots := htfFvgActiveSlots + f_getTFLabel(htfFvgTfA) + " "
+        htfFvgActiveSlots := htfFvgActiveSlots + f_getHtfCompactLabel(htfFvgTfA) + " "
     if useHtfFvgB
-        htfFvgActiveSlots := htfFvgActiveSlots + f_getTFLabel(htfFvgTfB) + " "
+        htfFvgActiveSlots := htfFvgActiveSlots + f_getHtfCompactLabel(htfFvgTfB) + " "
     if useHtfFvgC
-        htfFvgActiveSlots := htfFvgActiveSlots + f_getTFLabel(htfFvgTfC) + " "
+        htfFvgActiveSlots := htfFvgActiveSlots + f_getHtfCompactLabel(htfFvgTfC) + " "
     if useHtfFvgD
-        htfFvgActiveSlots := htfFvgActiveSlots + f_getTFLabel(htfFvgTfD) + " "
-    // Live gap/tap counts, mainly for diagnosing whether HTF FVGs are being detected at all.
-    int htfFvgTrackedCount = array.size(activeHtfFvgs)
-    int htfFvgTappedCount = 0
-    if htfFvgTrackedCount > 0
-        for i = 0 to htfFvgTrackedCount - 1
-            if array.get(activeHtfFvgs, i).tapped
-                htfFvgTappedCount += 1
-    // Raw accumulated-HTF-bar counts per slot - if these stay at 0, the anchor-change detection
-    // itself never fired (accumulation problem). If these grow but tracked/tapped stay 0, the
-    // scan or registration is the problem instead. Diagnostic only.
-    int htfFvgRawBarsTotal = array.size(htfFvgHighsA) + array.size(htfFvgHighsB) + array.size(htfFvgHighsC) + array.size(htfFvgHighsD)
+        htfFvgActiveSlots := htfFvgActiveSlots + f_getHtfCompactLabel(htfFvgTfD) + " "
     table.cell(dashboardTable, 0, 13, "HTF FVG Context:", text_color=tableTextColor, text_size=tSize, text_halign=text.align_left, text_font_family=font.family_monospace)
-    table.cell(dashboardTable, 1, 13, (requireHtfFvgContext ? "REQUIRED" : "OFF") + " (" + str.tostring(htfFvgRawBarsTotal) + "b)", text_color=requireHtfFvgContext ? color.green : color.gray, text_size=tSize, text_font_family=font.family_monospace)
-    table.cell(dashboardTable, 2, 13, htfFvgActiveSlots + "(" + str.tostring(htfFvgTappedCount) + "/" + str.tostring(htfFvgTrackedCount) + " tapped)", text_color=color.gray, text_size=tSize, text_font_family=font.family_monospace)
+    table.cell(dashboardTable, 1, 13, requireHtfFvgContext ? "REQUIRED" : "OFF", text_color=requireHtfFvgContext ? color.green : color.gray, text_size=tSize, text_font_family=font.family_monospace)
+    table.cell(dashboardTable, 2, 13, htfFvgActiveSlots, text_color=color.gray, text_size=tSize, text_font_family=font.family_monospace)
