@@ -35,9 +35,14 @@ type Setup
     box breakerBox            // Box drawing for breaker
     box fvgBox                // Box drawing for FVG
     box htfFvgOriginBox       // Box drawing for the HTF FVG this setup delivered from (static, not extended)
+    label htfFvgOriginLabel   // Small edge label on the HTF FVG origin box, e.g. "H1 FVG"
     line[] targetLines        // Array of lines for target projections
     label[] targetLabels      // Array of labels for targets
     label setupLabel          // Monospaced text label (+Unicorn / -Breaker)
+    bool gradeHtfFvg          // Setup Grade: did this setup deliver from a tapped HTF FVG?
+    bool gradeLtfFvg          // Setup Grade: same as hasFvg — true "Unicorn" vs plain "Breaker"
+    bool gradeVolume          // Setup Grade: breaker's avg volume >= volumeMult x recent average?
+    bool gradeSmt             // Setup Grade: did the comparison symbol fail to sweep its own extreme?
 
 // HTF FVG Context: a single higher-timeframe Fair Value Gap. Stays in activeHtfFvgs even after
 // becoming mitigated (fully broken through) as long as it was tapped — a liquidity-sweep leg
@@ -370,6 +375,32 @@ f_getSeriesRange(startOffset, endOffset) =>
         minL := na(minL) ? low[i] : math.min(minL, low[i])
     [maxH, minL]
 
+// Setup Grade: average per-candle volume across the breaker candle series (Volume criterion)
+f_getSeriesAvgVolume(startOffset, endOffset) =>
+    float totalVol = 0.0
+    int count = 0
+    for i = startOffset to endOffset
+        totalVol += volume[i]
+        count += 1
+    count > 0 ? totalVol / count : na
+
+// Setup Grade: percentage-of-criteria-passed to letter grade
+f_computeGrade(int passed, int total) =>
+    string grade = "F"
+    if total > 0
+        float pct = passed / total
+        if pct >= 1.0
+            grade := "A"
+        else if pct >= 0.75
+            grade := "B"
+        else if pct >= 0.5
+            grade := "C"
+        else if pct >= 0.25
+            grade := "D"
+        else
+            grade := "F"
+    grade
+
 // FVG Overlap Finders
 f_findBullishFVG(breakerT, breakerB, startIdx, enableFvgAtrFilter, fvgAtrMult) =>
     float fvgT = na
@@ -451,6 +482,7 @@ f_getTappedHtfFvgOrigin(bool isBull) =>
     float bestTop = na
     float bestBottom = na
     int bestStart = na
+    string bestTfLabel = ""
     float bestDist = na
     if array.size(activeHtfFvgs) > 0
         for i = array.size(activeHtfFvgs) - 1 to 0
@@ -462,7 +494,8 @@ f_getTappedHtfFvgOrigin(bool isBull) =>
                     bestTop := fvg.top
                     bestBottom := fvg.bottom
                     bestStart := fvg.startBar
-    [not na(bestTop), bestTop, bestBottom, bestStart]
+                    bestTfLabel := fvg.tfLabel
+    [not na(bestTop), bestTop, bestBottom, bestStart, bestTfLabel]
 
 // HTF FVG Context: compact ICT-style timeframe label (e.g. "M5", "M15", "H1", "H4", "D1"),
 // letter-prefix instead of f_getTFLabel's number-suffix style ("5m", "1H") — used only for HTF
@@ -690,11 +723,24 @@ htfFvgTfD = input.timeframe("240", "", inline="htf_fvg_d", tooltip="Timeframe fo
 requireHtfFvgContext = input.bool(true, "Require HTF FVG Context", tooltip="Only confirm signals when price has tapped (wicked into) an unmitigated HTF Fair Value Gap (from any enabled HTF above) in the setup's direction. Price does not need to still be inside the gap when the setup confirms.", group=GRP_HTF_FVG)
 showClosestHtfFvg = input.bool(true, "Show Closest HTF FVG", tooltip="Purely visual — when a setup confirms, draws a single static box around the specific HTF Fair Value Gap it delivered from. Fixed at the confirmation bar; does not extend with price. Does not affect signals.", group=GRP_HTF_FVG)
 
-htfFvgBullFillColor = input.color(color.new(#2962ff, 80), "Bull HTF FVG", inline="htf_fvg_bull_col", tooltip="Fill color for a bullish setup's origin HTF FVG box.", group=GRP_HTF_FVG)
-htfFvgBullBorderColor = input.color(color.new(#2962ff, 40), "", inline="htf_fvg_bull_col", tooltip="Border color for a bullish setup's origin HTF FVG box.", group=GRP_HTF_FVG)
+htfFvgBullFillColor = input.color(color.new(color.gray, 85), "Bull HTF FVG", inline="htf_fvg_bull_col", tooltip="Fill color for a bullish setup's origin HTF FVG box. Muted gray by default to stay clean/minimal.", group=GRP_HTF_FVG)
+htfFvgBullBorderColor = input.color(color.new(color.gray, 70), "", inline="htf_fvg_bull_col", tooltip="Border color for a bullish setup's origin HTF FVG box.", group=GRP_HTF_FVG)
 
-htfFvgBearFillColor = input.color(color.new(#ff6d00, 80), "Bear HTF FVG", inline="htf_fvg_bear_col", tooltip="Fill color for a bearish setup's origin HTF FVG box.", group=GRP_HTF_FVG)
-htfFvgBearBorderColor = input.color(color.new(#ff6d00, 40), "", inline="htf_fvg_bear_col", tooltip="Border color for a bearish setup's origin HTF FVG box.", group=GRP_HTF_FVG)
+htfFvgBearFillColor = input.color(color.new(color.gray, 85), "Bear HTF FVG", inline="htf_fvg_bear_col", tooltip="Fill color for a bearish setup's origin HTF FVG box. Muted gray by default to stay clean/minimal.", group=GRP_HTF_FVG)
+htfFvgBearBorderColor = input.color(color.new(color.gray, 70), "", inline="htf_fvg_bear_col", tooltip="Border color for a bearish setup's origin HTF FVG box.", group=GRP_HTF_FVG)
+
+// ========================================
+// INPUTS - Group 3.6: Setup Grade
+// ========================================
+string GRP_GRADE = "Setup Grade"
+showSetupGrade = input.bool(true, "Show Setup Grade", tooltip="Adds a scored checklist (Liquidity Sweep, HTF FVG Delivery, LTF FVG, Volume, SMT Divergence) for the latest active setup to the dashboard.", group=GRP_GRADE)
+
+volumeAvgLen = input.int(20, "Volume Avg Length", minval=1, inline="grade_vol", tooltip="Lookback length for the average-volume comparison used by the Volume criterion.", group=GRP_GRADE)
+volumeMult = input.float(1.2, "x", minval=0.1, step=0.1, inline="grade_vol", tooltip="The breaker's average volume must be at least this multiple of the recent average to pass.", group=GRP_GRADE)
+
+enableSmtGrade = input.bool(false, "SMT Divergence", inline="grade_smt", tooltip="Compare against a correlated symbol to check whether it failed to sweep its own equivalent recent extreme at the same bar (Smart Money Divergence). Off by default.", group=GRP_GRADE)
+smtSymbol = input.symbol("SPY", "", inline="grade_smt", tooltip="Correlated symbol for the SMT Divergence check.", group=GRP_GRADE, active=enableSmtGrade)
+smtLookback = input.int(20, "SMT Lookback", minval=2, tooltip="Bars used to determine the comparison symbol's own recent extreme.", group=GRP_GRADE, active=enableSmtGrade)
 
 // ========================================
 // INPUTS - Group 4: Target Projections (Separate, No Inlines)
@@ -1044,6 +1090,12 @@ if not na(htfFvgBearTopD) and (na(lastBearTopD) or htfFvgBearTopD != lastBearTop
     f_registerHtfFvg(f_getHtfCompactLabel(htfFvgTfD), false, htfFvgBearTopD, htfFvgBearBottomD, bar_index)
 
 // ========================================
+// SETUP GRADE — DATA FETCH (unconditional, cheap; only consumed at confirmation time)
+// ========================================
+htfVolumeAvg = ta.sma(volume, volumeAvgLen)
+[smtLow, smtHigh] = request.security(smtSymbol, timeframe.period, [low, high], barmerge.gaps_off, barmerge.lookahead_off)
+
+// ========================================
 // MAIN EXECUTION STATE MACHINE (Level update & sweep check)
 // ========================================
 bool sweptBull = false
@@ -1163,6 +1215,21 @@ if not na(pendingBullSweepIdx)
                     float riskRange = close - invPrice
 
                     if riskRange > 0
+                        // Setup Grade: computed here so it's available regardless of whether
+                        // requireHtfFvgContext/showClosestHtfFvg are on — purely informational.
+                        [foundHtfOrigin, htfOriginTop, htfOriginBottom, htfOriginStart, htfOriginTfLabel] = f_getTappedHtfFvgOrigin(true)
+
+                        avgBreakerVolBull = f_getSeriesAvgVolume(startOffset, endOffset)
+                        gradeVolumeBull = not na(avgBreakerVolBull) and not na(htfVolumeAvg) and avgBreakerVolBull >= htfVolumeAvg * volumeMult
+
+                        bool gradeSmtBull = false
+                        if enableSmtGrade
+                            int smtOffsetBull = bar_index - pendingBullFirstSweepBar
+                            float smtLowAtSweep = smtLow[smtOffsetBull]
+                            float smtPriorLow = ta.lowest(smtLow, smtLookback)[smtOffsetBull + 1]
+                            if not na(smtLowAtSweep) and not na(smtPriorLow)
+                                gradeSmtBull := smtLowAtSweep > smtPriorLow
+
                         Setup newBull = Setup.new(
                              dir = "BULL",
                              sweepIndex = pendingBullFirstSweepBar,
@@ -1184,9 +1251,14 @@ if not na(pendingBullSweepIdx)
                              breakerBox = na,
                              fvgBox = na,
                              htfFvgOriginBox = na,
+                             htfFvgOriginLabel = na,
                              targetLines = array.new_line(),
                              targetLabels = array.new_label(),
-                             setupLabel = na
+                             setupLabel = na,
+                             gradeHtfFvg = foundHtfOrigin,
+                             gradeLtfFvg = hasFvg,
+                             gradeVolume = gradeVolumeBull,
+                             gradeSmt = gradeSmtBull
                              )
 
                         // Setup-linked level line (starts at exact extreme index, ends at sweepIndex)
@@ -1234,19 +1306,28 @@ if not na(pendingBullSweepIdx)
                                  )
 
                         // HTF FVG Context: highlight only the specific HTF FVG this setup delivered
-                        // from (if any). Static box, fixed at the confirmation bar — does not extend.
-                        if showClosestHtfFvg
-                            [foundHtfOrigin, htfOriginTop, htfOriginBottom, htfOriginStart] = f_getTappedHtfFvgOrigin(true)
-                            if foundHtfOrigin
-                                newBull.htfFvgOriginBox := box.new(
-                                     left = htfOriginStart,
-                                     top = htfOriginTop,
-                                     right = bar_index,
-                                     bottom = htfOriginBottom,
-                                     border_color = htfFvgBullBorderColor,
-                                     bgcolor = htfFvgBullFillColor,
-                                     xloc = xloc.bar_index
-                                     )
+                        // from (if any) — muted, minimal band + small edge label, fixed at the
+                        // confirmation bar (does not extend with price).
+                        if showClosestHtfFvg and foundHtfOrigin
+                            newBull.htfFvgOriginBox := box.new(
+                                 left = htfOriginStart,
+                                 top = htfOriginTop,
+                                 right = bar_index,
+                                 bottom = htfOriginBottom,
+                                 border_color = htfFvgBullBorderColor,
+                                 bgcolor = htfFvgBullFillColor,
+                                 xloc = xloc.bar_index
+                                 )
+                            newBull.htfFvgOriginLabel := label.new(
+                                 x = bar_index,
+                                 y = (htfOriginTop + htfOriginBottom) / 2.0,
+                                 text = htfOriginTfLabel + " FVG",
+                                 color = color.new(na, na),
+                                 textcolor = labelTextColor,
+                                 style = label.style_label_left,
+                                 size = f_getLabelSize(labelSizeStr),
+                                 text_font_family = font.family_monospace
+                                 )
 
                         labelText = hasFvg ? "+Unicorn" : "+Breaker"
                         tooltipText = "Setup: " + (hasFvg ? "Bullish Unicorn" : "Bullish Breaker") + "\n" +
@@ -1349,6 +1430,21 @@ if not na(pendingBearSweepIdx)
                     float riskRange = invPrice - close
 
                     if riskRange > 0
+                        // Setup Grade: computed here so it's available regardless of whether
+                        // requireHtfFvgContext/showClosestHtfFvg are on — purely informational.
+                        [foundHtfOrigin, htfOriginTop, htfOriginBottom, htfOriginStart, htfOriginTfLabel] = f_getTappedHtfFvgOrigin(false)
+
+                        avgBreakerVolBear = f_getSeriesAvgVolume(startOffset, endOffset)
+                        gradeVolumeBear = not na(avgBreakerVolBear) and not na(htfVolumeAvg) and avgBreakerVolBear >= htfVolumeAvg * volumeMult
+
+                        bool gradeSmtBear = false
+                        if enableSmtGrade
+                            int smtOffsetBear = bar_index - pendingBearFirstSweepBar
+                            float smtHighAtSweep = smtHigh[smtOffsetBear]
+                            float smtPriorHigh = ta.highest(smtHigh, smtLookback)[smtOffsetBear + 1]
+                            if not na(smtHighAtSweep) and not na(smtPriorHigh)
+                                gradeSmtBear := smtHighAtSweep < smtPriorHigh
+
                         Setup newBear = Setup.new(
                              dir = "BEAR",
                              sweepIndex = pendingBearFirstSweepBar,
@@ -1370,9 +1466,14 @@ if not na(pendingBearSweepIdx)
                              breakerBox = na,
                              fvgBox = na,
                              htfFvgOriginBox = na,
+                             htfFvgOriginLabel = na,
                              targetLines = array.new_line(),
                              targetLabels = array.new_label(),
-                             setupLabel = na
+                             setupLabel = na,
+                             gradeHtfFvg = foundHtfOrigin,
+                             gradeLtfFvg = hasFvg,
+                             gradeVolume = gradeVolumeBear,
+                             gradeSmt = gradeSmtBear
                              )
 
                         // Setup-linked level line (starts at exact extreme index, ends at sweepIndex)
@@ -1420,19 +1521,28 @@ if not na(pendingBearSweepIdx)
                                  )
 
                         // HTF FVG Context: highlight only the specific HTF FVG this setup delivered
-                        // from (if any). Static box, fixed at the confirmation bar — does not extend.
-                        if showClosestHtfFvg
-                            [foundHtfOrigin, htfOriginTop, htfOriginBottom, htfOriginStart] = f_getTappedHtfFvgOrigin(false)
-                            if foundHtfOrigin
-                                newBear.htfFvgOriginBox := box.new(
-                                     left = htfOriginStart,
-                                     top = htfOriginTop,
-                                     right = bar_index,
-                                     bottom = htfOriginBottom,
-                                     border_color = htfFvgBearBorderColor,
-                                     bgcolor = htfFvgBearFillColor,
-                                     xloc = xloc.bar_index
-                                     )
+                        // from (if any) — muted, minimal band + small edge label, fixed at the
+                        // confirmation bar (does not extend with price).
+                        if showClosestHtfFvg and foundHtfOrigin
+                            newBear.htfFvgOriginBox := box.new(
+                                 left = htfOriginStart,
+                                 top = htfOriginTop,
+                                 right = bar_index,
+                                 bottom = htfOriginBottom,
+                                 border_color = htfFvgBearBorderColor,
+                                 bgcolor = htfFvgBearFillColor,
+                                 xloc = xloc.bar_index
+                                 )
+                            newBear.htfFvgOriginLabel := label.new(
+                                 x = bar_index,
+                                 y = (htfOriginTop + htfOriginBottom) / 2.0,
+                                 text = htfOriginTfLabel + " FVG",
+                                 color = color.new(na, na),
+                                 textcolor = labelTextColor,
+                                 style = label.style_label_left,
+                                 size = f_getLabelSize(labelSizeStr),
+                                 text_font_family = font.family_monospace
+                                 )
 
                         labelText = hasFvg ? "-Unicorn" : "-Breaker"
                         tooltipText = "Setup: " + (hasFvg ? "Bearish Unicorn" : "Bearish Breaker") + "\n" +
@@ -1542,6 +1652,8 @@ if array.size(activeSetups) > 0
                         box.delete(setup.fvgBox)
                     if not na(setup.htfFvgOriginBox)
                         box.delete(setup.htfFvgOriginBox)
+                    if not na(setup.htfFvgOriginLabel)
+                        label.delete(setup.htfFvgOriginLabel)
                     label.delete(setup.setupLabel)
                     for l in setup.targetLines
                         line.delete(l)
@@ -1556,6 +1668,8 @@ if array.size(activeSetups) > 0
                         box.set_bgcolor(setup.fvgBox, setup.dir == "BULL" ? bullColorInactive : bearColorInactive)
                     if not na(setup.htfFvgOriginBox)
                         box.set_bgcolor(setup.htfFvgOriginBox, setup.dir == "BULL" ? bullColorInactive : bearColorInactive)
+                    if not na(setup.htfFvgOriginLabel)
+                        label.set_textcolor(setup.htfFvgOriginLabel, setup.dir == "BULL" ? bullColorInactive : bearColorInactive)
                     label.set_textcolor(setup.setupLabel, setup.dir == "BULL" ? bullColorInactive : bearColorInactive)
 
                     for l in setup.targetLines
@@ -1609,6 +1723,8 @@ while array.size(activeSetups) > historyCount
         box.delete(oldSetup.fvgBox)
     if not na(oldSetup.htfFvgOriginBox)
         box.delete(oldSetup.htfFvgOriginBox)
+    if not na(oldSetup.htfFvgOriginLabel)
+        label.delete(oldSetup.htfFvgOriginLabel)
     label.delete(oldSetup.setupLabel)
     for l in oldSetup.targetLines
         line.delete(l)
@@ -1650,6 +1766,10 @@ float showInvalidationPrice = na
 float showTargetPrice = na
 float showRiskUsd = na
 float showPositionSizeVal = na
+bool showGradeHtfFvg = false
+bool showGradeLtfFvg = false
+bool showGradeVolume = false
+bool showGradeSmt = false
 
 if array.size(activeSetups) > 0
     for i = array.size(activeSetups) - 1 to 0
@@ -1665,12 +1785,16 @@ if array.size(activeSetups) > 0
 
             showRiskUsd := riskType == "Percentage" ? (accountBalance * riskAmount / 100.0) : riskAmount
             showPositionSizeVal := calculatePositionSize(showEntryPrice, showInvalidationPrice, showRiskUsd)
+            showGradeHtfFvg := s.gradeHtfFvg
+            showGradeLtfFvg := s.gradeLtfFvg
+            showGradeVolume := s.gradeVolume
+            showGradeSmt := s.gradeSmt
             break
 
 var table dashboardTable = table.new(
      position = f_getTablePosition(dashboardPosition),
      columns = 3,
-     rows = 14,
+     rows = 21,
      bgcolor = tableBgColor,
      border_width = tableBorderWidth,
      border_color = tableBorderColor,
@@ -1769,3 +1893,44 @@ if barstate.islast and showDashboard
     table.cell(dashboardTable, 0, 13, "HTF FVG Context:", text_color=tableTextColor, text_size=tSize, text_halign=text.align_left, text_font_family=font.family_monospace)
     table.cell(dashboardTable, 1, 13, requireHtfFvgContext ? "REQUIRED" : "OFF", text_color=requireHtfFvgContext ? color.green : color.gray, text_size=tSize, text_font_family=font.family_monospace)
     table.cell(dashboardTable, 2, 13, htfFvgActiveSlots, text_color=color.gray, text_size=tSize, text_font_family=font.family_monospace)
+
+    // Setup Grade section
+    if showSetupGrade
+        table.cell(dashboardTable, 0, 14, "── SETUP GRADE ──", bgcolor=tableHeaderBgColor, text_color=tableHeaderTextColor, text_size=tSize, text_font_family=font.family_monospace)
+        table.merge_cells(dashboardTable, 0, 14, 2, 14)
+
+        if showSetupDir != "NONE"
+            int gradePassed = 1 + (showGradeHtfFvg ? 1 : 0) + (showGradeLtfFvg ? 1 : 0) + (showGradeVolume ? 1 : 0) + (enableSmtGrade and showGradeSmt ? 1 : 0)
+            int gradeTotal = 4 + (enableSmtGrade ? 1 : 0)
+            string gradeLetter = f_computeGrade(gradePassed, gradeTotal)
+            color gradeColor = gradeLetter == "A" ? color.lime : gradeLetter == "B" ? color.green : gradeLetter == "C" ? color.orange : gradeLetter == "D" ? color.red : color.maroon
+
+            table.cell(dashboardTable, 0, 15, "Grade:", text_color=tableTextColor, text_size=tSize, text_halign=text.align_left, text_font_family=font.family_monospace)
+            table.cell(dashboardTable, 1, 15, gradeLetter, text_color=gradeColor, text_size=tSize, text_font_family=font.family_monospace)
+            table.cell(dashboardTable, 2, 15, str.tostring(gradePassed) + "/" + str.tostring(gradeTotal), text_color=color.gray, text_size=tSize, text_font_family=font.family_monospace)
+
+            table.cell(dashboardTable, 0, 16, "Liquidity Sweep", text_color=tableTextColor, text_size=tSize, text_halign=text.align_left, text_font_family=font.family_monospace)
+            table.cell(dashboardTable, 1, 16, "✓", text_color=color.green, text_size=tSize, text_font_family=font.family_monospace)
+            table.cell(dashboardTable, 2, 16, "", text_size=tSize)
+
+            table.cell(dashboardTable, 0, 17, "HTF FVG Delivery", text_color=tableTextColor, text_size=tSize, text_halign=text.align_left, text_font_family=font.family_monospace)
+            table.cell(dashboardTable, 1, 17, showGradeHtfFvg ? "✓" : "✗", text_color=showGradeHtfFvg ? color.green : color.gray, text_size=tSize, text_font_family=font.family_monospace)
+            table.cell(dashboardTable, 2, 17, "", text_size=tSize)
+
+            table.cell(dashboardTable, 0, 18, "LTF FVG (Unicorn)", text_color=tableTextColor, text_size=tSize, text_halign=text.align_left, text_font_family=font.family_monospace)
+            table.cell(dashboardTable, 1, 18, showGradeLtfFvg ? "✓" : "✗", text_color=showGradeLtfFvg ? color.green : color.gray, text_size=tSize, text_font_family=font.family_monospace)
+            table.cell(dashboardTable, 2, 18, "", text_size=tSize)
+
+            table.cell(dashboardTable, 0, 19, "Volume", text_color=tableTextColor, text_size=tSize, text_halign=text.align_left, text_font_family=font.family_monospace)
+            table.cell(dashboardTable, 1, 19, showGradeVolume ? "✓" : "✗", text_color=showGradeVolume ? color.green : color.gray, text_size=tSize, text_font_family=font.family_monospace)
+            table.cell(dashboardTable, 2, 19, "", text_size=tSize)
+
+            table.cell(dashboardTable, 0, 20, "SMT Divergence", text_color=tableTextColor, text_size=tSize, text_halign=text.align_left, text_font_family=font.family_monospace)
+            table.cell(dashboardTable, 1, 20, enableSmtGrade ? (showGradeSmt ? "✓" : "✗") : "—", text_color=enableSmtGrade ? (showGradeSmt ? color.green : color.gray) : color.gray, text_size=tSize, text_font_family=font.family_monospace)
+            table.cell(dashboardTable, 2, 20, "", text_size=tSize)
+        else
+            table.cell(dashboardTable, 0, 15, "No active setups detected.", text_color=color.gray, text_size=tSize, text_font_family=font.family_monospace)
+            table.merge_cells(dashboardTable, 0, 15, 2, 15)
+            for r = 16 to 20
+                table.cell(dashboardTable, 0, r, "", text_size=tSize)
+                table.merge_cells(dashboardTable, 0, r, 2, r)
