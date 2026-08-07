@@ -45,6 +45,7 @@ type HTFFvg
     float top
     float bottom
     int startBar      // Chart bar_index at time of registration (visual anchor only)
+    bool tapped        // Has price ever wicked into this gap? Set once, never cleared while active.
 
 // ========================================
 // GLOBAL STATE ARRAYS (Defined before functions)
@@ -340,14 +341,16 @@ f_findBearishFVG(breakerT, breakerB, startIdx, enableFvgAtrFilter, fvgAtrMult) =
                         break
     [fvgT, fvgB, fvgIdx, fvgRightIdx]
 
-// HTF FVG Context: does price currently sit inside an unmitigated HTF FVG of the given direction?
-// This is the "price is delivering from a higher timeframe FVG" gate.
-f_isPriceInHtfFvg(bool isBull) =>
+// HTF FVG Context: has price ever tapped (wicked into) an unmitigated HTF FVG of the given
+// direction? This is the "price is delivering from a higher timeframe FVG" gate — price does
+// NOT need to still be inside the gap right now, only to have traded into it at some point
+// while it was active.
+f_hasTappedHtfFvg(bool isBull) =>
     bool result = false
     if array.size(activeHtfFvgs) > 0
         for i = array.size(activeHtfFvgs) - 1 to 0
             fvg = array.get(activeHtfFvgs, i)
-            if fvg.isBull == isBull and close <= fvg.top and close >= fvg.bottom
+            if fvg.isBull == isBull and fvg.tapped
                 result := true
     result
 
@@ -445,7 +448,7 @@ f_registerLevel(string tfLabel, string lvlType, bool isHigh, float priceVal) =>
 
 // HTF FVG Context: register a newly detected HTF FVG (called at most once per closed HTF bar per slot)
 f_registerHtfFvg(string tfLabel, bool isBull, float topVal, float bottomVal, int startBarIdx) =>
-    array.push(activeHtfFvgs, HTFFvg.new(tfLabel, isBull, topVal, bottomVal, startBarIdx))
+    array.push(activeHtfFvgs, HTFFvg.new(tfLabel, isBull, topVal, bottomVal, startBarIdx, false))
     while array.size(activeHtfFvgs) > 50
         array.shift(activeHtfFvgs)
 
@@ -573,7 +576,7 @@ htfFvgTfC = input.timeframe("60", "", inline="htf_fvg_c", tooltip="Timeframe for
 useHtfFvgD = input.bool(true, "HTF FVG D", inline="htf_fvg_d", tooltip="Enable this higher timeframe for HTF Fair Value Gap context.", group=GRP_HTF_FVG)
 htfFvgTfD = input.timeframe("240", "", inline="htf_fvg_d", tooltip="Timeframe for HTF FVG D (e.g. 4H).", group=GRP_HTF_FVG, active=useHtfFvgD)
 
-requireHtfFvgContext = input.bool(true, "Require HTF FVG Context", tooltip="Only confirm signals when price is currently trading inside an unmitigated HTF Fair Value Gap (from any enabled HTF above) in the setup's direction.", group=GRP_HTF_FVG)
+requireHtfFvgContext = input.bool(true, "Require HTF FVG Context", tooltip="Only confirm signals when price has tapped (wicked into) an unmitigated HTF Fair Value Gap (from any enabled HTF above) in the setup's direction. Price does not need to still be inside the gap when the setup confirms.", group=GRP_HTF_FVG)
 showClosestHtfFvg = input.bool(true, "Show Closest HTF FVG", tooltip="Purely visual — draws a box around the nearest unmitigated bullish and bearish HTF Fair Value Gap. Does not affect signals.", group=GRP_HTF_FVG)
 
 htfFvgBullFillColor = input.color(color.new(#2962ff, 80), "Bull HTF FVG", inline="htf_fvg_bull_col", tooltip="Fill color for the closest bullish HTF FVG box.", group=GRP_HTF_FVG)
@@ -932,11 +935,17 @@ if array.size(activeHTFLevels) > 0
 while array.size(activeHTFLevels) > 100
     array.shift(activeHTFLevels)
 
-// HTF FVG Context: mitigation sweep — remove any HTF FVG price has fully traded through.
-// Uses the same full-breach mitigation rule as f_findBullishFVG/f_findBearishFVG.
+// HTF FVG Context: mark taps (price wicking into the zone — does not require staying inside it)
+// and sweep out any HTF FVG price has fully traded through. Uses the same full-breach
+// mitigation rule as f_findBullishFVG/f_findBearishFVG. Tap detection runs first so a bar that
+// both taps and fully mitigates the same gap still records the tap before it's removed.
 if array.size(activeHtfFvgs) > 0
     for i = array.size(activeHtfFvgs) - 1 to 0
         fvg = array.get(activeHtfFvgs, i)
+        if not fvg.tapped
+            bool htfFvgEntered = fvg.isBull ? low <= fvg.top : high >= fvg.bottom
+            if htfFvgEntered
+                fvg.tapped := true
         bool htfFvgMitigated = fvg.isBull ? low < fvg.bottom : high > fvg.top
         if htfFvgMitigated
             array.remove(activeHtfFvgs, i)
@@ -980,7 +989,7 @@ if not na(pendingBullSweepIdx)
                 breakerStartBar = bar_index - endOffset
                 [fvgT, fvgB, fvgIdx, fvgRightIdx] = f_findBullishFVG(breakerT, breakerB, breakerStartBar, enableFvgAtrFilter, fvgAtrMult)
                 hasFvg = not na(fvgIdx)
-                htfFvgOkBull = not requireHtfFvgContext or f_isPriceInHtfFvg(true)
+                htfFvgOkBull = not requireHtfFvgContext or f_hasTappedHtfFvg(true)
 
                 if (not unicornMode or (unicornMode and hasFvg)) and htfFvgOkBull
                     float invPrice = useSwingInvalidation ? pendingBullSweepExtreme : breakerB
@@ -1150,7 +1159,7 @@ if not na(pendingBearSweepIdx)
                 breakerStartBar = bar_index - endOffset
                 [fvgT, fvgB, fvgIdx, fvgRightIdx] = f_findBearishFVG(breakerT, breakerB, breakerStartBar, enableFvgAtrFilter, fvgAtrMult)
                 hasFvg = not na(fvgIdx)
-                htfFvgOkBear = not requireHtfFvgContext or f_isPriceInHtfFvg(false)
+                htfFvgOkBear = not requireHtfFvgContext or f_hasTappedHtfFvg(false)
 
                 if (not unicornMode or (unicornMode and hasFvg)) and htfFvgOkBear
                     float invPrice = useSwingInvalidation ? pendingBearSweepExtreme : breakerT
