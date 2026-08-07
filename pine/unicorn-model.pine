@@ -66,6 +66,17 @@ var int lastHtfFvgAnchorTimeD = na
 var box closestBullHtfFvgBox = na
 var box closestBearHtfFvgBox = na
 
+// HTF FVG Context: accumulated closed-HTF-bar highs/lows per slot, oldest-first (index n-1 is
+// the most recently closed bar). f_scanHtfFvgFromArrays reads these in the main chart context.
+var float[] htfFvgHighsA = array.new_float()
+var float[] htfFvgLowsA = array.new_float()
+var float[] htfFvgHighsB = array.new_float()
+var float[] htfFvgLowsB = array.new_float()
+var float[] htfFvgHighsC = array.new_float()
+var float[] htfFvgLowsC = array.new_float()
+var float[] htfFvgHighsD = array.new_float()
+var float[] htfFvgLowsD = array.new_float()
+
 // HTF FVG Context: last-seen scan result per slot/direction, so registration only pushes a new
 // HTFFvg when the security-side scan actually surfaces a different gap (not the same one again).
 var float lastBullTopA = na
@@ -250,51 +261,62 @@ f_getHTFData() =>
     latestSL = ta.valuewhen(isSwingLow, low, 0)
     [hPrev, lPrev, latestSH, latestSL]
 
-// HTF FVG Context: scan backward up to 100 CLOSED bars on a higher timeframe (never the forming
-// bar, same repaint discipline as f_getHTFData()) for the most recent still-unmitigated 3-candle
-// FVG in each direction. This mirrors f_findBullishFVG/f_findBearishFVG's own detection and
-// mitigation rule exactly (unmitigated = no more-recent bar has traded through the far boundary),
-// just evaluated at the HTF resolution via request.security instead of the chart resolution.
-// Returns the nearest bull/bear gap found (if any) plus how many HTF bars ago its left edge was.
-f_scanHtfFvg() =>
+// HTF FVG Context: fetch just the single most recently CLOSED HTF bar (never the forming bar,
+// same repaint discipline as f_getHTFData()). Deliberately trivial — this is the only thing
+// evaluated inside request.security() for HTF FVGs. The actual gap-scanning loop runs in the
+// main chart context (see f_scanHtfFvgFromArrays below), not inside the security() expression.
+f_getHtf1BarData() =>
+    [high[1], low[1], time[1]]
+
+// HTF FVG Context: scan an accumulated array of closed-HTF-bar highs/lows (array index n-1 =
+// most recently closed HTF bar, going backward from there) for the nearest still-unmitigated
+// 3-candle FVG in each direction. This mirrors f_findBullishFVG/f_findBearishFVG's own detection
+// and mitigation rule exactly (unmitigated = no more-recent bar has traded through the far
+// boundary) and uses the identical dynamic nested-loop technique those functions already run
+// successfully in the main context — just reading from an accumulated array (array.get) instead
+// of live historical offsets ([i]), since these values came from a different timeframe.
+f_scanHtfFvgFromArrays(float[] highs, float[] lows) =>
     float bullTop = na
     float bullBottom = na
     int bullBarsAgo = na
     float bearTop = na
     float bearBottom = na
     int bearBarsAgo = na
-    int limit = math.min(bar_index - 1, 100)
-    if limit >= 3
-        for i = 1 to limit - 2
-            if na(bullTop) and low[i] > high[i+2]
-                fTop = low[i]
-                fBtm = high[i+2]
+    int n = array.size(highs)
+    int maxK = math.min(n - 2, 100)
+    if maxK >= 1
+        for k = 1 to maxK
+            int idxK = n - k
+            int idxK2 = idxK - 2
+            if na(bullTop) and array.get(lows, idxK) > array.get(highs, idxK2)
+                fTop = array.get(lows, idxK)
+                fBtm = array.get(highs, idxK2)
                 bool unmitigated = true
-                if i > 1
-                    for j = 1 to i - 1
-                        if low[j] < fBtm
+                if k > 1
+                    for m = 1 to k - 1
+                        if array.get(lows, n - m) < fBtm
                             unmitigated := false
                             break
                 if unmitigated
                     bullTop := fTop
                     bullBottom := fBtm
-                    bullBarsAgo := i
-            if na(bearTop) and high[i] < low[i+2]
-                fTop2 = low[i+2]
-                fBtm2 = high[i]
+                    bullBarsAgo := k
+            if na(bearTop) and array.get(highs, idxK) < array.get(lows, idxK2)
+                fTop2 = array.get(lows, idxK2)
+                fBtm2 = array.get(highs, idxK)
                 bool unmitigated2 = true
-                if i > 1
-                    for j = 1 to i - 1
-                        if high[j] > fTop2
+                if k > 1
+                    for m = 1 to k - 1
+                        if array.get(highs, n - m) > fTop2
                             unmitigated2 := false
                             break
                 if unmitigated2
                     bearTop := fTop2
                     bearBottom := fBtm2
-                    bearBarsAgo := i
+                    bearBarsAgo := k
             if not na(bullTop) and not na(bearTop)
                 break
-    [bullTop, bullBottom, bullBarsAgo, bearTop, bearBottom, bearBarsAgo, time[1]]
+    [bullTop, bullBottom, bullBarsAgo, bearTop, bearBottom, bearBarsAgo]
 
 // Find opposing candle runs
 f_findDownCandlesSeries(sweepOffset) =>
@@ -820,11 +842,12 @@ htfFvgTfBValid = useHtfFvgB and timeframe.in_seconds(htfFvgTfB) > timeframe.in_s
 htfFvgTfCValid = useHtfFvgC and timeframe.in_seconds(htfFvgTfC) > timeframe.in_seconds(timeframe.period)
 htfFvgTfDValid = useHtfFvgD and timeframe.in_seconds(htfFvgTfD) > timeframe.in_seconds(timeframe.period)
 
-// HTF FVG Context: for each enabled slot, scan the HTF for the nearest unmitigated gap (see f_scanHtfFvg)
-[htfFvgBullTopA, htfFvgBullBottomA, htfFvgBullBarsAgoA, htfFvgBearTopA, htfFvgBearBottomA, htfFvgBearBarsAgoA, htfFvgAnchorTimeA] = request.security(syminfo.tickerid, htfFvgTfA, f_scanHtfFvg(), barmerge.gaps_off, barmerge.lookahead_off)
-[htfFvgBullTopB, htfFvgBullBottomB, htfFvgBullBarsAgoB, htfFvgBearTopB, htfFvgBearBottomB, htfFvgBearBarsAgoB, htfFvgAnchorTimeB] = request.security(syminfo.tickerid, htfFvgTfB, f_scanHtfFvg(), barmerge.gaps_off, barmerge.lookahead_off)
-[htfFvgBullTopC, htfFvgBullBottomC, htfFvgBullBarsAgoC, htfFvgBearTopC, htfFvgBearBottomC, htfFvgBearBarsAgoC, htfFvgAnchorTimeC] = request.security(syminfo.tickerid, htfFvgTfC, f_scanHtfFvg(), barmerge.gaps_off, barmerge.lookahead_off)
-[htfFvgBullTopD, htfFvgBullBottomD, htfFvgBullBarsAgoD, htfFvgBearTopD, htfFvgBearBottomD, htfFvgBearBarsAgoD, htfFvgAnchorTimeD] = request.security(syminfo.tickerid, htfFvgTfD, f_scanHtfFvg(), barmerge.gaps_off, barmerge.lookahead_off)
+// HTF FVG Context: fetch just the latest closed HTF bar per slot (see f_getHtf1BarData) — the
+// actual gap scan runs below, in the main context, over the accumulated htfFvgHighs*/Lows* arrays.
+[htfFvgH1A, htfFvgL1A, htfFvgAnchorTimeA] = request.security(syminfo.tickerid, htfFvgTfA, f_getHtf1BarData(), barmerge.gaps_off, barmerge.lookahead_off)
+[htfFvgH1B, htfFvgL1B, htfFvgAnchorTimeB] = request.security(syminfo.tickerid, htfFvgTfB, f_getHtf1BarData(), barmerge.gaps_off, barmerge.lookahead_off)
+[htfFvgH1C, htfFvgL1C, htfFvgAnchorTimeC] = request.security(syminfo.tickerid, htfFvgTfC, f_getHtf1BarData(), barmerge.gaps_off, barmerge.lookahead_off)
+[htfFvgH1D, htfFvgL1D, htfFvgAnchorTimeD] = request.security(syminfo.tickerid, htfFvgTfD, f_getHtf1BarData(), barmerge.gaps_off, barmerge.lookahead_off)
 
 // Track formation bar index for each liquidity level
 var float lastPrevH_A = na
@@ -916,57 +939,89 @@ if useD_resolved
             lastSl_D := sl_D
             f_registerLevel(f_getTFLabel(htfD_resolved), "Swing", false, sl_D)
 
-// HTF FVG Context: register the current nearest unmitigated gap from the backward scan whenever
-// it differs from the last one seen for that slot+direction (fires at most once per newly-closed
-// HTF bar, per slot). Comparing against the last-seen top/bottom avoids re-registering the same
-// still-valid gap on every single HTF close.
+// HTF FVG Context: on each newly-closed HTF bar per slot, append it to that slot's accumulated
+// high/low arrays (capped at 150 bars). Then, every bar, scan the accumulated arrays in the main
+// context (f_scanHtfFvgFromArrays) and register the result whenever it differs from the last one
+// seen for that slot+direction — avoids re-registering the same still-valid gap repeatedly.
 // Slot A
 if htfFvgTfAValid and not na(htfFvgAnchorTimeA) and htfFvgAnchorTimeA != lastHtfFvgAnchorTimeA
     lastHtfFvgAnchorTimeA := htfFvgAnchorTimeA
-    if not na(htfFvgBullTopA) and (na(lastBullTopA) or htfFvgBullTopA != lastBullTopA or htfFvgBullBottomA != lastBullBottomA)
-        lastBullTopA := htfFvgBullTopA
-        lastBullBottomA := htfFvgBullBottomA
-        f_registerHtfFvg(f_getTFLabel(htfFvgTfA), true, htfFvgBullTopA, htfFvgBullBottomA, bar_index - htfFvgBullBarsAgoA)
-    if not na(htfFvgBearTopA) and (na(lastBearTopA) or htfFvgBearTopA != lastBearTopA or htfFvgBearBottomA != lastBearBottomA)
-        lastBearTopA := htfFvgBearTopA
-        lastBearBottomA := htfFvgBearBottomA
-        f_registerHtfFvg(f_getTFLabel(htfFvgTfA), false, htfFvgBearTopA, htfFvgBearBottomA, bar_index - htfFvgBearBarsAgoA)
+    if not na(htfFvgH1A) and not na(htfFvgL1A)
+        array.push(htfFvgHighsA, htfFvgH1A)
+        array.push(htfFvgLowsA, htfFvgL1A)
+        while array.size(htfFvgHighsA) > 150
+            array.shift(htfFvgHighsA)
+        while array.size(htfFvgLowsA) > 150
+            array.shift(htfFvgLowsA)
+[htfFvgBullTopA, htfFvgBullBottomA, htfFvgBullBarsAgoA, htfFvgBearTopA, htfFvgBearBottomA, htfFvgBearBarsAgoA] = f_scanHtfFvgFromArrays(htfFvgHighsA, htfFvgLowsA)
+if not na(htfFvgBullTopA) and (na(lastBullTopA) or htfFvgBullTopA != lastBullTopA or htfFvgBullBottomA != lastBullBottomA)
+    lastBullTopA := htfFvgBullTopA
+    lastBullBottomA := htfFvgBullBottomA
+    f_registerHtfFvg(f_getTFLabel(htfFvgTfA), true, htfFvgBullTopA, htfFvgBullBottomA, bar_index)
+if not na(htfFvgBearTopA) and (na(lastBearTopA) or htfFvgBearTopA != lastBearTopA or htfFvgBearBottomA != lastBearBottomA)
+    lastBearTopA := htfFvgBearTopA
+    lastBearBottomA := htfFvgBearBottomA
+    f_registerHtfFvg(f_getTFLabel(htfFvgTfA), false, htfFvgBearTopA, htfFvgBearBottomA, bar_index)
 
 // Slot B
 if htfFvgTfBValid and not na(htfFvgAnchorTimeB) and htfFvgAnchorTimeB != lastHtfFvgAnchorTimeB
     lastHtfFvgAnchorTimeB := htfFvgAnchorTimeB
-    if not na(htfFvgBullTopB) and (na(lastBullTopB) or htfFvgBullTopB != lastBullTopB or htfFvgBullBottomB != lastBullBottomB)
-        lastBullTopB := htfFvgBullTopB
-        lastBullBottomB := htfFvgBullBottomB
-        f_registerHtfFvg(f_getTFLabel(htfFvgTfB), true, htfFvgBullTopB, htfFvgBullBottomB, bar_index - htfFvgBullBarsAgoB)
-    if not na(htfFvgBearTopB) and (na(lastBearTopB) or htfFvgBearTopB != lastBearTopB or htfFvgBearBottomB != lastBearBottomB)
-        lastBearTopB := htfFvgBearTopB
-        lastBearBottomB := htfFvgBearBottomB
-        f_registerHtfFvg(f_getTFLabel(htfFvgTfB), false, htfFvgBearTopB, htfFvgBearBottomB, bar_index - htfFvgBearBarsAgoB)
+    if not na(htfFvgH1B) and not na(htfFvgL1B)
+        array.push(htfFvgHighsB, htfFvgH1B)
+        array.push(htfFvgLowsB, htfFvgL1B)
+        while array.size(htfFvgHighsB) > 150
+            array.shift(htfFvgHighsB)
+        while array.size(htfFvgLowsB) > 150
+            array.shift(htfFvgLowsB)
+[htfFvgBullTopB, htfFvgBullBottomB, htfFvgBullBarsAgoB, htfFvgBearTopB, htfFvgBearBottomB, htfFvgBearBarsAgoB] = f_scanHtfFvgFromArrays(htfFvgHighsB, htfFvgLowsB)
+if not na(htfFvgBullTopB) and (na(lastBullTopB) or htfFvgBullTopB != lastBullTopB or htfFvgBullBottomB != lastBullBottomB)
+    lastBullTopB := htfFvgBullTopB
+    lastBullBottomB := htfFvgBullBottomB
+    f_registerHtfFvg(f_getTFLabel(htfFvgTfB), true, htfFvgBullTopB, htfFvgBullBottomB, bar_index)
+if not na(htfFvgBearTopB) and (na(lastBearTopB) or htfFvgBearTopB != lastBearTopB or htfFvgBearBottomB != lastBearBottomB)
+    lastBearTopB := htfFvgBearTopB
+    lastBearBottomB := htfFvgBearBottomB
+    f_registerHtfFvg(f_getTFLabel(htfFvgTfB), false, htfFvgBearTopB, htfFvgBearBottomB, bar_index)
 
 // Slot C
 if htfFvgTfCValid and not na(htfFvgAnchorTimeC) and htfFvgAnchorTimeC != lastHtfFvgAnchorTimeC
     lastHtfFvgAnchorTimeC := htfFvgAnchorTimeC
-    if not na(htfFvgBullTopC) and (na(lastBullTopC) or htfFvgBullTopC != lastBullTopC or htfFvgBullBottomC != lastBullBottomC)
-        lastBullTopC := htfFvgBullTopC
-        lastBullBottomC := htfFvgBullBottomC
-        f_registerHtfFvg(f_getTFLabel(htfFvgTfC), true, htfFvgBullTopC, htfFvgBullBottomC, bar_index - htfFvgBullBarsAgoC)
-    if not na(htfFvgBearTopC) and (na(lastBearTopC) or htfFvgBearTopC != lastBearTopC or htfFvgBearBottomC != lastBearBottomC)
-        lastBearTopC := htfFvgBearTopC
-        lastBearBottomC := htfFvgBearBottomC
-        f_registerHtfFvg(f_getTFLabel(htfFvgTfC), false, htfFvgBearTopC, htfFvgBearBottomC, bar_index - htfFvgBearBarsAgoC)
+    if not na(htfFvgH1C) and not na(htfFvgL1C)
+        array.push(htfFvgHighsC, htfFvgH1C)
+        array.push(htfFvgLowsC, htfFvgL1C)
+        while array.size(htfFvgHighsC) > 150
+            array.shift(htfFvgHighsC)
+        while array.size(htfFvgLowsC) > 150
+            array.shift(htfFvgLowsC)
+[htfFvgBullTopC, htfFvgBullBottomC, htfFvgBullBarsAgoC, htfFvgBearTopC, htfFvgBearBottomC, htfFvgBearBarsAgoC] = f_scanHtfFvgFromArrays(htfFvgHighsC, htfFvgLowsC)
+if not na(htfFvgBullTopC) and (na(lastBullTopC) or htfFvgBullTopC != lastBullTopC or htfFvgBullBottomC != lastBullBottomC)
+    lastBullTopC := htfFvgBullTopC
+    lastBullBottomC := htfFvgBullBottomC
+    f_registerHtfFvg(f_getTFLabel(htfFvgTfC), true, htfFvgBullTopC, htfFvgBullBottomC, bar_index)
+if not na(htfFvgBearTopC) and (na(lastBearTopC) or htfFvgBearTopC != lastBearTopC or htfFvgBearBottomC != lastBearBottomC)
+    lastBearTopC := htfFvgBearTopC
+    lastBearBottomC := htfFvgBearBottomC
+    f_registerHtfFvg(f_getTFLabel(htfFvgTfC), false, htfFvgBearTopC, htfFvgBearBottomC, bar_index)
 
 // Slot D
 if htfFvgTfDValid and not na(htfFvgAnchorTimeD) and htfFvgAnchorTimeD != lastHtfFvgAnchorTimeD
     lastHtfFvgAnchorTimeD := htfFvgAnchorTimeD
-    if not na(htfFvgBullTopD) and (na(lastBullTopD) or htfFvgBullTopD != lastBullTopD or htfFvgBullBottomD != lastBullBottomD)
-        lastBullTopD := htfFvgBullTopD
-        lastBullBottomD := htfFvgBullBottomD
-        f_registerHtfFvg(f_getTFLabel(htfFvgTfD), true, htfFvgBullTopD, htfFvgBullBottomD, bar_index - htfFvgBullBarsAgoD)
-    if not na(htfFvgBearTopD) and (na(lastBearTopD) or htfFvgBearTopD != lastBearTopD or htfFvgBearBottomD != lastBearBottomD)
-        lastBearTopD := htfFvgBearTopD
-        lastBearBottomD := htfFvgBearBottomD
-        f_registerHtfFvg(f_getTFLabel(htfFvgTfD), false, htfFvgBearTopD, htfFvgBearBottomD, bar_index - htfFvgBearBarsAgoD)
+    if not na(htfFvgH1D) and not na(htfFvgL1D)
+        array.push(htfFvgHighsD, htfFvgH1D)
+        array.push(htfFvgLowsD, htfFvgL1D)
+        while array.size(htfFvgHighsD) > 150
+            array.shift(htfFvgHighsD)
+        while array.size(htfFvgLowsD) > 150
+            array.shift(htfFvgLowsD)
+[htfFvgBullTopD, htfFvgBullBottomD, htfFvgBullBarsAgoD, htfFvgBearTopD, htfFvgBearBottomD, htfFvgBearBarsAgoD] = f_scanHtfFvgFromArrays(htfFvgHighsD, htfFvgLowsD)
+if not na(htfFvgBullTopD) and (na(lastBullTopD) or htfFvgBullTopD != lastBullTopD or htfFvgBullBottomD != lastBullBottomD)
+    lastBullTopD := htfFvgBullTopD
+    lastBullBottomD := htfFvgBullBottomD
+    f_registerHtfFvg(f_getTFLabel(htfFvgTfD), true, htfFvgBullTopD, htfFvgBullBottomD, bar_index)
+if not na(htfFvgBearTopD) and (na(lastBearTopD) or htfFvgBearTopD != lastBearTopD or htfFvgBearBottomD != lastBearBottomD)
+    lastBearTopD := htfFvgBearTopD
+    lastBearBottomD := htfFvgBearBottomD
+    f_registerHtfFvg(f_getTFLabel(htfFvgTfD), false, htfFvgBearTopD, htfFvgBearBottomD, bar_index)
 
 // ========================================
 // MAIN EXECUTION STATE MACHINE (Level update & sweep check)
