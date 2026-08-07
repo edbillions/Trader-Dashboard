@@ -38,14 +38,18 @@ type Setup
     label[] targetLabels      // Array of labels for targets
     label setupLabel          // Monospaced text label (+Unicorn / -Breaker)
 
-// HTF FVG Context: a single higher-timeframe Fair Value Gap, unmitigated until removed.
+// HTF FVG Context: a single higher-timeframe Fair Value Gap. Stays in activeHtfFvgs even after
+// becoming mitigated (fully broken through) as long as it was tapped — a liquidity-sweep leg
+// commonly blows straight through a gap on its way to the sweep, and that tap should still count
+// as "delivering from" the HTF FVG. Only untapped, never-touched gaps get pruned on mitigation.
 type HTFFvg
     string tfLabel    // Friendly label of the HTF it was found on, e.g. "15m", "1H"
     bool isBull       // true = bullish (discount) gap, false = bearish (premium) gap
     float top
     float bottom
     int startBar      // Chart bar_index at time of registration (visual anchor only)
-    bool tapped        // Has price ever wicked into this gap? Set once, never cleared while active.
+    bool tapped        // Has price ever wicked into this gap? Set once, never cleared.
+    bool mitigated      // Has price fully broken through it? Set once, never cleared.
 
 // ========================================
 // GLOBAL STATE ARRAYS (Defined before functions)
@@ -355,7 +359,9 @@ f_hasTappedHtfFvg(bool isBull) =>
     result
 
 // HTF FVG Context: nearest unmitigated HTF FVG of the given direction (by distance to price).
-// Purely for the "Show Closest HTF FVG" visual — does not gate signals.
+// Purely for the "Show Closest HTF FVG" visual — does not gate signals. Explicitly excludes
+// mitigated gaps since activeHtfFvgs can now retain tapped-but-mitigated entries (see the sweep
+// loop above) purely so the "Require HTF FVG Context" gate can still see they were tapped.
 f_getNearestUnmitigatedHtfFvg(bool isBull) =>
     float bestTop = na
     float bestBottom = na
@@ -364,7 +370,7 @@ f_getNearestUnmitigatedHtfFvg(bool isBull) =>
     if array.size(activeHtfFvgs) > 0
         for i = array.size(activeHtfFvgs) - 1 to 0
             fvg = array.get(activeHtfFvgs, i)
-            if fvg.isBull == isBull
+            if fvg.isBull == isBull and not fvg.mitigated
                 dist = close > fvg.top ? close - fvg.top : (close < fvg.bottom ? fvg.bottom - close : 0.0)
                 if na(bestDist) or dist < bestDist
                     bestDist := dist
@@ -448,7 +454,7 @@ f_registerLevel(string tfLabel, string lvlType, bool isHigh, float priceVal) =>
 
 // HTF FVG Context: register a newly detected HTF FVG (called at most once per closed HTF bar per slot)
 f_registerHtfFvg(string tfLabel, bool isBull, float topVal, float bottomVal, int startBarIdx) =>
-    array.push(activeHtfFvgs, HTFFvg.new(tfLabel, isBull, topVal, bottomVal, startBarIdx, false))
+    array.push(activeHtfFvgs, HTFFvg.new(tfLabel, isBull, topVal, bottomVal, startBarIdx, false, false))
     while array.size(activeHtfFvgs) > 50
         array.shift(activeHtfFvgs)
 
@@ -936,9 +942,13 @@ while array.size(activeHTFLevels) > 100
     array.shift(activeHTFLevels)
 
 // HTF FVG Context: mark taps (price wicking into the zone — does not require staying inside it)
-// and sweep out any HTF FVG price has fully traded through. Uses the same full-breach
-// mitigation rule as f_findBullishFVG/f_findBearishFVG. Tap detection runs first so a bar that
-// both taps and fully mitigates the same gap still records the tap before it's removed.
+// and flag full mitigation (price fully breaking through it), using the same full-breach rule as
+// f_findBullishFVG/f_findBearishFVG. A tapped gap is NOT removed just because it later becomes
+// mitigated — a sweep leg commonly blows straight through a gap on its way to the sweep extreme,
+// and that tap should still count toward "Require HTF FVG Context" once the setup confirms a few
+// bars later. Only gaps that were NEVER tapped are pruned once mitigated (dead weight - they can
+// never satisfy the gate and are no longer shown by the closest-FVG visual). Tapped+mitigated
+// gaps are pruned once stale (> 1500 bars old) purely to bound array growth over a long session.
 if array.size(activeHtfFvgs) > 0
     for i = array.size(activeHtfFvgs) - 1 to 0
         fvg = array.get(activeHtfFvgs, i)
@@ -946,8 +956,12 @@ if array.size(activeHtfFvgs) > 0
             bool htfFvgEntered = fvg.isBull ? low <= fvg.top : high >= fvg.bottom
             if htfFvgEntered
                 fvg.tapped := true
-        bool htfFvgMitigated = fvg.isBull ? low < fvg.bottom : high > fvg.top
-        if htfFvgMitigated
+        if not fvg.mitigated
+            bool htfFvgMitigated = fvg.isBull ? low < fvg.bottom : high > fvg.top
+            if htfFvgMitigated
+                fvg.mitigated := true
+        bool htfFvgStale = fvg.mitigated and (bar_index - fvg.startBar > 1500)
+        if (fvg.mitigated and not fvg.tapped) or htfFvgStale
             array.remove(activeHtfFvgs, i)
 
 // 2. Process & Track Sweeps (Corrected: updates on new sweep event OR extreme extension)
