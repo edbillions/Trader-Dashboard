@@ -35,6 +35,7 @@ type Setup
     box breakerBox            // Box drawing for breaker
     box fvgBox                // Box drawing for FVG
     box htfFvgOriginBox       // Box drawing for the HTF FVG this setup delivered from (static, not extended)
+    line htfFvgOriginMidline  // Consequent-encroachment (50%) line through the HTF FVG origin box
     label htfFvgOriginLabel   // Small edge label on the HTF FVG origin box, e.g. "H1 FVG"
     line[] targetLines        // Array of lines for target projections
     label[] targetLabels      // Array of labels for targets
@@ -732,11 +733,11 @@ htfFvgTfD = input.timeframe("240", "", inline="htf_fvg_d", tooltip="Timeframe fo
 requireHtfFvgContext = input.bool(true, "Require HTF FVG Context", tooltip="Only confirm signals when price has tapped (wicked into) an unmitigated HTF Fair Value Gap (from any enabled HTF above) in the setup's direction. Price does not need to still be inside the gap when the setup confirms.", group=GRP_HTF_FVG)
 showClosestHtfFvg = input.bool(true, "Show Closest HTF FVG", tooltip="Purely visual — when a setup confirms, draws a single static box around the specific HTF Fair Value Gap it delivered from. Fixed at the confirmation bar; does not extend with price. Does not affect signals.", group=GRP_HTF_FVG)
 
-htfFvgBullFillColor = input.color(color.new(#4a6fa5, 85), "Bull HTF FVG", inline="htf_fvg_bull_col", tooltip="Fill color for a bullish setup's origin HTF FVG box. Muted slate-blue by default — subtle, but still visually distinct from bearish so you can confirm a bullish setup tagged a bullish gap at a glance.", group=GRP_HTF_FVG)
-htfFvgBullBorderColor = input.color(color.new(#4a6fa5, 70), "", inline="htf_fvg_bull_col", tooltip="Border color for a bullish setup's origin HTF FVG box.", group=GRP_HTF_FVG)
+htfFvgBullFillColor = input.color(color.new(#1a1a1a, 84), "Bull HTF FVG", inline="htf_fvg_bull_col", tooltip="Fill color for a bullish setup's origin HTF FVG box. Minimal near-black by default — the box label already states the direction, so color doesn't need to carry it too.", group=GRP_HTF_FVG)
+htfFvgBullBorderColor = input.color(color.new(#1a1a1a, 55), "", inline="htf_fvg_bull_col", tooltip="Border/midline color for a bullish setup's origin HTF FVG box.", group=GRP_HTF_FVG)
 
-htfFvgBearFillColor = input.color(color.new(#a54a4a, 85), "Bear HTF FVG", inline="htf_fvg_bear_col", tooltip="Fill color for a bearish setup's origin HTF FVG box. Muted brick-red by default — subtle, but still visually distinct from bullish so you can confirm a bearish setup tagged a bearish gap at a glance.", group=GRP_HTF_FVG)
-htfFvgBearBorderColor = input.color(color.new(#a54a4a, 70), "", inline="htf_fvg_bear_col", tooltip="Border color for a bearish setup's origin HTF FVG box.", group=GRP_HTF_FVG)
+htfFvgBearFillColor = input.color(color.new(#1a1a1a, 84), "Bear HTF FVG", inline="htf_fvg_bear_col", tooltip="Fill color for a bearish setup's origin HTF FVG box. Minimal near-black by default — the box label already states the direction, so color doesn't need to carry it too.", group=GRP_HTF_FVG)
+htfFvgBearBorderColor = input.color(color.new(#1a1a1a, 55), "", inline="htf_fvg_bear_col", tooltip="Border/midline color for a bearish setup's origin HTF FVG box.", group=GRP_HTF_FVG)
 
 // ========================================
 // INPUTS - Group 3.6: Setup Grade
@@ -1273,6 +1274,7 @@ if not na(pendingBullSweepIdx)
                              breakerBox = na,
                              fvgBox = na,
                              htfFvgOriginBox = na,
+                             htfFvgOriginMidline = na,
                              htfFvgOriginLabel = na,
                              targetLines = array.new_line(),
                              targetLabels = array.new_label(),
@@ -1341,13 +1343,22 @@ if not na(pendingBullSweepIdx)
                                  bgcolor = htfFvgBullFillColor,
                                  xloc = xloc.bar_index
                                  )
+                            newBull.htfFvgOriginMidline := line.new(
+                                 x1 = htfOriginStart,
+                                 y1 = (htfOriginTop + htfOriginBottom) / 2.0,
+                                 x2 = bar_index,
+                                 y2 = (htfOriginTop + htfOriginBottom) / 2.0,
+                                 color = htfFvgBullBorderColor,
+                                 style = line.style_dotted,
+                                 width = 1
+                                 )
                             newBull.htfFvgOriginLabel := label.new(
                                  x = bar_index,
                                  y = (htfOriginTop + htfOriginBottom) / 2.0,
                                  text = htfOriginTfLabel + " Bull FVG",
                                  color = color.new(na, na),
                                  textcolor = labelTextColor,
-                                 style = label.style_label_left,
+                                 style = label.style_label_right,
                                  size = f_getLabelSize(labelSizeStr),
                                  text_font_family = font.family_monospace
                                  )
@@ -1489,6 +1500,7 @@ if not na(pendingBearSweepIdx)
                              breakerBox = na,
                              fvgBox = na,
                              htfFvgOriginBox = na,
+                             htfFvgOriginMidline = na,
                              htfFvgOriginLabel = na,
                              targetLines = array.new_line(),
                              targetLabels = array.new_label(),
@@ -1557,13 +1569,22 @@ if not na(pendingBearSweepIdx)
                                  bgcolor = htfFvgBearFillColor,
                                  xloc = xloc.bar_index
                                  )
+                            newBear.htfFvgOriginMidline := line.new(
+                                 x1 = htfOriginStart,
+                                 y1 = (htfOriginTop + htfOriginBottom) / 2.0,
+                                 x2 = bar_index,
+                                 y2 = (htfOriginTop + htfOriginBottom) / 2.0,
+                                 color = htfFvgBearBorderColor,
+                                 style = line.style_dotted,
+                                 width = 1
+                                 )
                             newBear.htfFvgOriginLabel := label.new(
                                  x = bar_index,
                                  y = (htfOriginTop + htfOriginBottom) / 2.0,
                                  text = htfOriginTfLabel + " Bear FVG",
                                  color = color.new(na, na),
                                  textcolor = labelTextColor,
-                                 style = label.style_label_left,
+                                 style = label.style_label_right,
                                  size = f_getLabelSize(labelSizeStr),
                                  text_font_family = font.family_monospace
                                  )
@@ -1676,6 +1697,8 @@ if array.size(activeSetups) > 0
                         box.delete(setup.fvgBox)
                     if not na(setup.htfFvgOriginBox)
                         box.delete(setup.htfFvgOriginBox)
+                    if not na(setup.htfFvgOriginMidline)
+                        line.delete(setup.htfFvgOriginMidline)
                     if not na(setup.htfFvgOriginLabel)
                         label.delete(setup.htfFvgOriginLabel)
                     label.delete(setup.setupLabel)
@@ -1747,6 +1770,8 @@ while array.size(activeSetups) > historyCount
         box.delete(oldSetup.fvgBox)
     if not na(oldSetup.htfFvgOriginBox)
         box.delete(oldSetup.htfFvgOriginBox)
+    if not na(oldSetup.htfFvgOriginMidline)
+        line.delete(oldSetup.htfFvgOriginMidline)
     if not na(oldSetup.htfFvgOriginLabel)
         label.delete(oldSetup.htfFvgOriginLabel)
     label.delete(oldSetup.setupLabel)
