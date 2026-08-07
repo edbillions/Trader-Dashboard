@@ -1307,11 +1307,12 @@ if not na(pendingBullSweepIdx)
                                  )
 
                         // HTF FVG Context: highlight only the specific HTF FVG this setup delivered
-                        // from (if any) — muted, minimal band + small edge label. Fixed 15-bar
-                        // width ending at the confirmation bar (does not extend with price).
+                        // from (if any) — spans left from where the gap actually formed
+                        // (htfOriginStart) to the confirmation bar; static after that, doesn't
+                        // extend further right as price moves on.
                         if showClosestHtfFvg and foundHtfOrigin
                             newBull.htfFvgOriginBox := box.new(
-                                 left = bar_index - 15,
+                                 left = htfOriginStart,
                                  top = htfOriginTop,
                                  right = bar_index,
                                  bottom = htfOriginBottom,
@@ -1522,11 +1523,12 @@ if not na(pendingBearSweepIdx)
                                  )
 
                         // HTF FVG Context: highlight only the specific HTF FVG this setup delivered
-                        // from (if any) — muted, minimal band + small edge label. Fixed 15-bar
-                        // width ending at the confirmation bar (does not extend with price).
+                        // from (if any) — spans left from where the gap actually formed
+                        // (htfOriginStart) to the confirmation bar; static after that, doesn't
+                        // extend further right as price moves on.
                         if showClosestHtfFvg and foundHtfOrigin
                             newBear.htfFvgOriginBox := box.new(
-                                 left = bar_index - 15,
+                                 left = htfOriginStart,
                                  top = htfOriginTop,
                                  right = bar_index,
                                  bottom = htfOriginBottom,
