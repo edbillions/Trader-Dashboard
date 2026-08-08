@@ -90,6 +90,9 @@ type Fvg
     bool   bull
     bool   entered
     string tfLabel
+    // Left edge of the gap, kept on the object so a zone can still be drawn
+    // later from a gap that was never drawn when it formed.
+    int    leftTime
 
 var array<Fvg> fvgs      = array.new<Fvg>()
 // Left-edge time of the most recent gap drawn per slot — guards against redrawing
@@ -728,7 +731,7 @@ qualifyBear = input.bool(true, "Qualify Bearish Unicorns?", tooltip="A bearish U
 onlyQualifiedSetups = input.bool(true, "Only Show Qualified Setups?", tooltip="ON: a confirmed setup that did not follow a same-direction HTF FVG tap is removed from the chart along with its drawings, so only qualified Unicorns remain. OFF: every setup the Unicorn Model confirms stays on the chart exactly as it does today, and qualified ones are merely marked. Either way the Unicorn engine's own decisions are unchanged — this only controls what is displayed. Note that the engine's 'Activation' alert still fires for setups hidden by this mode; use the 'Qualified Bullish/Bearish Unicorn' alerts instead when filtering.", group=GRP_QUAL, active=enableHtfFvg)
 showQualifiedMarkers = input.bool(true, "Show Qualified Markers?", tooltip="Draw a diamond at the confirmation bar of every qualified Unicorn. The original Unicorn label, boxes and targets are unaffected either way.", group=GRP_QUAL, active=enableHtfFvg)
 showTapMarkers = input.bool(false, "Show HTF FVG Tap Markers?", tooltip="Mark the bar on which price first traded into a HTF FVG.", group=GRP_QUAL, active=enableHtfFvg)
-showFvgZones = input.bool(true, "Show HTF FVG Zones?", tooltip="Draw the HTF FVG boxes and labels. Turn off to keep the qualification logic while leaving the chart clean: gaps are still tracked, only the drawing is skipped, which also keeps the shared 500-box budget free for the Unicorn's own drawings.", group=GRP_QUAL, active=enableHtfFvg)
+fvgZoneMode = input.string("Qualifying Only", "HTF FVG Zones", options=["Qualifying Only", "All", "Hidden"], tooltip="Which HTF FVG zones to draw. 'Qualifying Only': just the gap whose tap actually qualified a Unicorn, drawn at qualification and stretched from the gap to the setup it produced. 'All': every gap the engine finds, as the standalone FVG indicator does. 'Hidden': none. Gaps are tracked identically in all three modes, so qualification is unaffected — and the two quieter modes leave the shared 500-box budget to the Unicorn's own drawings.", group=GRP_QUAL, active=enableHtfFvg)
 alertFvgTap = input.bool(false, "Alert on HTF FVG Tap?", tooltip="Fire the HTF FVG engine's own 'price entered FVG' alert() call. Off by default so that an 'Any alert() function call' alert keeps delivering exactly the Unicorn Model's own alerts.", group=GRP_QUAL, active=enableHtfFvg)
 
 // ========================================
@@ -780,13 +783,12 @@ createFvg(bool bull, float top, float bot, int leftTime, string tfLabel, int tfM
     // Never narrower than the three source candles that formed the gap, so a
     // high-timeframe box stays visible on a much lower chart timeframe.
     int   rightTime = leftTime + int(math.max(boxLength * chartMs, 2 * tfMs))
-    // Drawing is optional (showFvgZones): the gap is tracked either way, so
-    // qualification is unaffected by hiding the zones. Keeping the drawings
-    // optional also leaves the 500-box budget — shared with the Unicorn's
-    // breaker and FVG boxes — free when the zones are not wanted.
+    // Drawing here is only for "All" mode. The gap is tracked either way, so
+    // qualification is unaffected; in "Qualifying Only" mode the zone is drawn
+    // later, by the qualification hook, from the geometry stored on this object.
     box   bx = na
     label lb = na
-    if showFvgZones
+    if fvgZoneMode == "All"
         bx := box.new(leftTime, top, rightTime, bot, xloc = xloc.bar_time,
                  bgcolor      = bull ? bullBoxColor : bearBoxColor,
                  border_color = bull ? bullBorderColor : bearBorderColor,
@@ -798,7 +800,7 @@ createFvg(bool bull, float top, float bot, int leftTime, string tfLabel, int tfM
                  size      = labelSizeOf())
     int id = array.get(idSeq, 0) + 1
     array.set(idSeq, 0, id)
-    Fvg f = Fvg.new(id = id, bx = bx, lb = lb, top = top, bot = bot, bull = bull, entered = false, tfLabel = tfLabel)
+    Fvg f = Fvg.new(id = id, bx = bx, lb = lb, top = top, bot = bot, bull = bull, entered = false, tfLabel = tfLabel, leftTime = leftTime)
     array.push(fvgs, f)
     f
 
@@ -817,7 +819,7 @@ dropById(int id) =>
         for i = array.size(fvgs) - 1 to 0
             Fvg f = array.get(fvgs, i)
             if f.id == id
-                // Guarded: with showFvgZones off there is nothing drawn to delete.
+                // Guarded: outside "All" zone mode there is nothing drawn to delete.
                 if not na(f.bx)
                     box.delete(f.bx)
                     label.delete(f.lb)
@@ -849,7 +851,7 @@ processSlot(int slot, bool enabled, string tfStr, string tfLabel, bool bullC, bo
                 if has
                     p.top := top
                     p.bot := bot
-                    // Guarded: with showFvgZones off there is no drawing to move,
+                    // Guarded: outside "All" zone mode there is no drawing to move,
                     // but the gap's bounds are still tracked above.
                     if not na(p.bx)
                         box.set_top(p.bx, top)
@@ -951,6 +953,35 @@ useD_resolved = useD
 // ========================================
 // QUALIFICATION HELPERS (NEW)
 // ========================================
+// Zones drawn by "Qualifying Only" mode. Held separately from the FVG tracking
+// array because the gap that produced them may already have been filled and
+// dropped — the drawing outlives the gap, staying attached to the setup instead.
+var array<box>   qualBoxes  = array.new<box>()
+var array<label> qualLabels = array.new<label>()
+
+// Draws the one gap whose tap qualified a Unicorn, stretched from where the gap
+// formed to the bar the setup confirmed on, so the cause and the setup read as a
+// single object. Styled with the FVG engine's own colour and label inputs.
+// Trimmed to the Unicorn's own History setting so zones age out with setups.
+f_drawQualifyingFvg(bool bull, float top, float bot, int leftTime, int rightTime, string tfLabel) =>
+    if not na(top) and not na(bot) and not na(leftTime)
+        box bx = box.new(leftTime, top, rightTime, bot, xloc = xloc.bar_time,
+                 bgcolor      = bull ? bullBoxColor : bearBoxColor,
+                 border_color = bull ? bullBorderColor : bearBorderColor,
+                 border_width = borderWidth,
+                 border_style = borderStyleOf())
+        label lb = label.new(labelX(leftTime, rightTime), math.avg(top, bot), tfLabel, xloc = xloc.bar_time,
+                 style     = label.style_none,
+                 textcolor = bull ? bullLabelColor : bearLabelColor,
+                 size      = labelSizeOf())
+        array.push(qualBoxes, bx)
+        array.push(qualLabels, lb)
+        while array.size(qualBoxes) > historyCount
+            box   oldBx = array.shift(qualBoxes)
+            label oldLb = array.shift(qualLabels)
+            box.delete(oldBx)
+            label.delete(oldLb)
+
 // Removes the setup that was just pushed, together with every drawing attached
 // to it — the same cleanup the Unicorn's own history-limit and
 // discard-invalidated paths perform. Called only from the qualification hooks,
@@ -989,6 +1020,16 @@ var int    lastBullTapBar = na
 var int    lastBearTapBar = na
 var string lastBullTapTf  = ""
 var string lastBearTapTf  = ""
+
+// Geometry of the tapped gap, captured at tap time. Stored rather than looked
+// up later because the gap may well have been filled and dropped from the
+// tracking array by the time a Unicorn confirms.
+var float  lastBullTapTop  = na
+var float  lastBullTapBot  = na
+var int    lastBullTapLeft = na
+var float  lastBearTapTop  = na
+var float  lastBearTapBot  = na
+var int    lastBearTapLeft = na
 
 // The most recently qualified Unicorn, recorded at its confirmation bar. Keeping
 // this here rather than adding fields to the Setup type leaves the Unicorn
@@ -1031,12 +1072,18 @@ if enableHtfFvg and array.size(fvgs) > 0
                 // Unicorn, not of a gap, so a Unicorn can never qualify twice
                 // no matter how many gaps were tapped.
                 if nz(lastBullTapBar, -1) != bar_index
-                    lastBullTapTf := f.tfLabel
+                    lastBullTapTf   := f.tfLabel
+                    lastBullTapTop  := f.top
+                    lastBullTapBot  := f.bot
+                    lastBullTapLeft := f.leftTime
                 lastBullTapBar := bar_index
             else
                 bearEnter := true
                 if nz(lastBearTapBar, -1) != bar_index
-                    lastBearTapTf := f.tfLabel
+                    lastBearTapTf   := f.tfLabel
+                    lastBearTapTop  := f.top
+                    lastBearTapBot  := f.bot
+                    lastBearTapLeft := f.leftTime
                 lastBearTapBar := bar_index
             if alertFvgTap
                 alert(syminfo.ticker + ": price entered " + (f.bull ? "bullish" : "bearish") + " FVG (" + f.tfLabel + ") " +
@@ -1410,6 +1457,8 @@ if not na(pendingBullSweepIdx)
                             lastQualBar := bar_index
                             lastQualDir := "BULL"
                             lastQualTf  := lastBullTapTf
+                            if fvgZoneMode == "Qualifying Only"
+                                f_drawQualifyingFvg(true, lastBullTapTop, lastBullTapBot, lastBullTapLeft, time, lastBullTapTf)
                             if enableAlerts
                                 alert("Qualified Bullish Unicorn on " + syminfo.ticker + " at " + str.tostring(close) + " — " + lastBullTapTf + " HTF FVG tapped " + str.tostring(bar_index - lastBullTapBar) + " bar(s) ago", alert.freq_once_per_bar_close)
                         else if onlyQualifiedSetups
@@ -1598,6 +1647,8 @@ if not na(pendingBearSweepIdx)
                             lastQualBar := bar_index
                             lastQualDir := "BEAR"
                             lastQualTf  := lastBearTapTf
+                            if fvgZoneMode == "Qualifying Only"
+                                f_drawQualifyingFvg(false, lastBearTapTop, lastBearTapBot, lastBearTapLeft, time, lastBearTapTf)
                             if enableAlerts
                                 alert("Qualified Bearish Unicorn on " + syminfo.ticker + " at " + str.tostring(close) + " — " + lastBearTapTf + " HTF FVG tapped " + str.tostring(bar_index - lastBearTapBar) + " bar(s) ago", alert.freq_once_per_bar_close)
                         else if onlyQualifiedSetups

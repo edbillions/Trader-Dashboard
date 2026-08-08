@@ -41,7 +41,7 @@ conditionally — but they can never fire while the layer is off.)
 | `Enable HTF FVG Context?` | Master switch. Off = original Unicorn Model. |
 | `Only Show Qualified Setups?` | **On by default.** A confirmed setup with no same-direction HTF FVG tap behind it is removed from the chart along with its drawings. Turn off for the purely additive behaviour: every setup stays visible and qualified ones are merely marked. |
 | `Interaction Window (bars)` | Chart bars a tap keeps qualifying for. `0` = same bar only. |
-| `Show HTF FVG Zones?` | Off keeps qualification working with no boxes drawn — useful for a clean chart and it leaves the shared 500-box budget to the Unicorn. |
+| `HTF FVG Zones` | **`Qualifying Only` by default** — draws just the gap whose tap qualified a Unicorn, stretched from the gap to the setup it produced. `All` behaves like the standalone FVG indicator; `Hidden` draws none. Gaps are tracked identically in all three, so qualification is unaffected. |
 | `Wait for candle close to identify FVG ?` | Leave **on**. Off is the FVG engine's live mode, which repaints by design and would make qualification repaint with it. |
 | `Max bars back to find FVGs ?` | Qualification cannot reach further back than this, because no gaps are built beyond it. |
 
@@ -49,7 +49,13 @@ Multiple active FVGs are supported: any tracked gap can supply the tap, and the
 qualifying state is one slot per direction. Qualification is a property of the
 Unicorn rather than of a gap, so a Unicorn can never be qualified twice however
 many gaps were tapped. When several gaps are tapped on the same bar, the newest
-one's timeframe is the one reported on the dashboard.
+one is the one recorded — its timeframe is what the dashboard reports, and its
+geometry is what `Qualifying Only` draws.
+
+That geometry is captured at tap time rather than looked up at qualification,
+because a gap can be filled and dropped from tracking during the interaction
+window. The drawn zone therefore outlives the gap and stays attached to the
+setup, ageing out with the Unicorn's own `History` setting.
 
 ### Non-repainting
 
@@ -73,7 +79,7 @@ awk 'NR==FNR{a[$0]=1;next} !($0 in a) && $0 !~ /^[[:space:]]*$/' \
 
 # FVG lines missing from the merged file — expect only the indicator() line,
 # the five renamed input-group labels, and the handful of lines re-indented by
-# the enableHtfFvg / showFvgZones / alertFvgTap guards
+# the enableHtfFvg / fvgZoneMode / alertFvgTap guards
 awk 'NR==FNR{a[$0]=1;next} !($0 in a) && $0 !~ /^[[:space:]]*$/' \
   pine/Unicorn_Model_HTF_FVG.pine pine/reference/FVG_MultiTimeframe_original.pine
 ```
