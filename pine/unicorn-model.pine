@@ -694,6 +694,7 @@ biasSelect = input.string("Neutral", "Bias", options=["Neutral", "Bullish", "Bea
 unicornMode = input.bool(true, "Unicorn Mode?", tooltip="When enabled, filters out breaker blocks that do not overlap with a Fair Value Gap (FVG) at the time of confirmation.", group=GRP_GEN)
 useSwingInvalidation = input.bool(false, "Use Swing as Invalidation?", tooltip="When enabled, invalidation occurs at the extreme high/low of the sweep leg. When disabled, invalidation occurs at the opposite extreme of the breaker block.", group=GRP_GEN)
 discardInvalidated = input.bool(false, "Discard Invalidated from History?", tooltip="When enabled, completely deletes invalidated setups from the chart. When disabled, retains them but changes their color to grey.", group=GRP_GEN)
+setupConfirmMode = input.string("Real-Time", "Setup Detection", options=["Real-Time", "Bar Close"], tooltip="Real-Time: a setup prints the moment its conditions are met inside the forming bar, so you catch it live. Because the bar is still moving, a setup can appear and then disappear if price pulls back before the bar closes. Bar Close: a setup is only created from a closed bar — it can never appear then vanish, but you see it up to one full bar later.", group=GRP_GEN)
 enableFvgAtrFilter = input.bool(false, "Enable FVG ATR Filter", tooltip="If enabled, FVGs must be larger than a multiplier of ATR to be considered valid.", group=GRP_GEN)
 fvgAtrMult = input.float(0.5, "FVG ATR Multiplier", minval=0.0, step=0.1, tooltip="ATR multiplier for minimum FVG height.", group=GRP_GEN, active=enableFvgAtrFilter)
 
@@ -891,6 +892,13 @@ max_bars_back(open, 1000)
 // ========================================
 // SYSTEM VARIABLES & TIME RESOLUTION
 // ========================================
+
+// Setup detection timing (see the "Setup Detection" input). In Real-Time mode this is always
+// true, so the state machine and setup confirmation evaluate on every tick of the forming bar and
+// a setup prints the instant it qualifies. In Bar Close mode it is barstate.isconfirmed, so
+// nothing is created from an unfinished bar and a printed setup can never later vanish.
+// Historical bars are always confirmed, so this only affects live behaviour.
+bool setupEvalOk = setupConfirmMode == "Bar Close" ? barstate.isconfirmed : true
 
 // Pending Setup State Variables
 var int pendingBullSweepIdx = na
@@ -1110,7 +1118,7 @@ else if inSessLiqD[1] and not na(sessLiqHighD)
 // register the result whenever it differs from the last one
 // seen for that slot+direction — avoids re-registering the same still-valid gap repeatedly.
 // Slot A
-if barstate.isconfirmed and htfFvgTfAValid and not na(htfFvgAnchorTimeA) and (htfFvgAnchorTimeA != lastHtfFvgAnchorTimeA or (na(lastHtfFvgAnchorTimeA) and not na(htfFvgAnchorTimeA)))
+if setupEvalOk and htfFvgTfAValid and not na(htfFvgAnchorTimeA) and (htfFvgAnchorTimeA != lastHtfFvgAnchorTimeA or (na(lastHtfFvgAnchorTimeA) and not na(htfFvgAnchorTimeA)))
     lastHtfFvgAnchorTimeA := htfFvgAnchorTimeA
     if not na(htfFvgH1A) and not na(htfFvgL1A)
         array.push(htfFvgHighsA, htfFvgH1A)
@@ -1133,7 +1141,7 @@ if not na(htfFvgBearTopA) and (na(lastBearTopA) or htfFvgBearTopA != lastBearTop
     f_registerHtfFvg(f_getHtfCompactLabel(htfFvgTfA), false, htfFvgBearTopA, htfFvgBearBottomA, htfFvgBearOriginBarA)
 
 // Slot B
-if barstate.isconfirmed and htfFvgTfBValid and not na(htfFvgAnchorTimeB) and (htfFvgAnchorTimeB != lastHtfFvgAnchorTimeB or (na(lastHtfFvgAnchorTimeB) and not na(htfFvgAnchorTimeB)))
+if setupEvalOk and htfFvgTfBValid and not na(htfFvgAnchorTimeB) and (htfFvgAnchorTimeB != lastHtfFvgAnchorTimeB or (na(lastHtfFvgAnchorTimeB) and not na(htfFvgAnchorTimeB)))
     lastHtfFvgAnchorTimeB := htfFvgAnchorTimeB
     if not na(htfFvgH1B) and not na(htfFvgL1B)
         array.push(htfFvgHighsB, htfFvgH1B)
@@ -1156,7 +1164,7 @@ if not na(htfFvgBearTopB) and (na(lastBearTopB) or htfFvgBearTopB != lastBearTop
     f_registerHtfFvg(f_getHtfCompactLabel(htfFvgTfB), false, htfFvgBearTopB, htfFvgBearBottomB, htfFvgBearOriginBarB)
 
 // Slot C
-if barstate.isconfirmed and htfFvgTfCValid and not na(htfFvgAnchorTimeC) and (htfFvgAnchorTimeC != lastHtfFvgAnchorTimeC or (na(lastHtfFvgAnchorTimeC) and not na(htfFvgAnchorTimeC)))
+if setupEvalOk and htfFvgTfCValid and not na(htfFvgAnchorTimeC) and (htfFvgAnchorTimeC != lastHtfFvgAnchorTimeC or (na(lastHtfFvgAnchorTimeC) and not na(htfFvgAnchorTimeC)))
     lastHtfFvgAnchorTimeC := htfFvgAnchorTimeC
     if not na(htfFvgH1C) and not na(htfFvgL1C)
         array.push(htfFvgHighsC, htfFvgH1C)
@@ -1179,7 +1187,7 @@ if not na(htfFvgBearTopC) and (na(lastBearTopC) or htfFvgBearTopC != lastBearTop
     f_registerHtfFvg(f_getHtfCompactLabel(htfFvgTfC), false, htfFvgBearTopC, htfFvgBearBottomC, htfFvgBearOriginBarC)
 
 // Slot D
-if barstate.isconfirmed and htfFvgTfDValid and not na(htfFvgAnchorTimeD) and (htfFvgAnchorTimeD != lastHtfFvgAnchorTimeD or (na(lastHtfFvgAnchorTimeD) and not na(htfFvgAnchorTimeD)))
+if setupEvalOk and htfFvgTfDValid and not na(htfFvgAnchorTimeD) and (htfFvgAnchorTimeD != lastHtfFvgAnchorTimeD or (na(lastHtfFvgAnchorTimeD) and not na(htfFvgAnchorTimeD)))
     lastHtfFvgAnchorTimeD := htfFvgAnchorTimeD
     if not na(htfFvgH1D) and not na(htfFvgL1D)
         array.push(htfFvgHighsD, htfFvgH1D)
@@ -1263,9 +1271,9 @@ while array.size(activeHTFLevels) > 100
 // FILLED (traded fully through), using the same full-breach rule as f_findBullishFVG /
 // f_findBearishFVG. A filled gap is dead context: removing it here is what stops an
 // already-closed-through gap from satisfying the gate or being drawn as a setup's origin.
-// Also gated on barstate.isconfirmed so tap/fill state advances exactly once per CLOSED bar,
-// keeping this state machine identical between the live run and any later recalculation.
-if array.size(activeHtfFvgs) > 0 and barstate.isconfirmed
+// Follows the same "Setup Detection" mode as setup confirmation, so tap/fill state and the
+// setups that depend on it always advance on the same cadence.
+if array.size(activeHtfFvgs) > 0 and setupEvalOk
     for i = array.size(activeHtfFvgs) - 1 to 0
         fvg = array.get(activeHtfFvgs, i)
         if not fvg.tapped
@@ -1302,13 +1310,13 @@ else if not na(pendingBearSweepIdx) and high > pendingBearSweepExtreme
 // 3. Track & Confirm Pending Setups
 
 // Track Bullish setups
-// Gated on barstate.isconfirmed so a setup is only ever created from a CLOSED bar. Without this
-// the block evaluates on every realtime tick against a still-forming close/open — the breaker
-// series (f_findUpCandlesSeries reads close[i] vs open[i], including the live bar) and the
-// `close > breakerT` trigger can both flip mid-bar, so what appears live is not what ends up
-// committed at bar close. That mismatch is the repaint. Historical bars are always confirmed,
-// so this changes nothing there; live, the setup now prints at bar close and then stays put.
-if not na(pendingBullSweepIdx) and barstate.isconfirmed
+// setupEvalOk carries the "Setup Detection" mode. In Real-Time it is always true, so this block
+// evaluates on every tick of the forming bar and the setup prints the instant it qualifies —
+// note the breaker series (f_findUpCandlesSeries reads close[i] vs open[i], including the live
+// bar) and the `close > breakerT` trigger can both still flip before that bar closes, which is
+// why a live setup can retract. In Bar Close it is barstate.isconfirmed, which removes that
+// possibility at the cost of seeing the setup up to a bar later.
+if not na(pendingBullSweepIdx) and setupEvalOk
     sweepOffset = bar_index - pendingBullSweepIdx
     [startOffset, endOffset] = f_findUpCandlesSeries(sweepOffset)
 
@@ -1535,8 +1543,8 @@ if not na(pendingBullSweepIdx) and barstate.isconfirmed
                         pendingBullSweepIdx := na
                         pendingBullFirstSweepBar := na
 
-// Track Bearish setups (mirrors the bullish block's bar-close gate — see note above)
-if not na(pendingBearSweepIdx) and barstate.isconfirmed
+// Track Bearish setups (mirrors the bullish block's detection-mode gate — see note above)
+if not na(pendingBearSweepIdx) and setupEvalOk
     sweepOffset = bar_index - pendingBearSweepIdx
     [startOffset, endOffset] = f_findDownCandlesSeries(sweepOffset)
 
@@ -1977,7 +1985,7 @@ if barstate.islast and showDashboard
 
     table.cell(dashboardTable, 0, 2, "Unicorn Mode:", text_color=tableTextColor, text_size=tSize, text_halign=text.align_left, text_font_family=font.family_monospace)
     table.cell(dashboardTable, 1, 2, unicornMode ? "ENABLED" : "DISABLED", text_color=unicornMode ? color.green : color.gray, text_size=tSize, text_font_family=font.family_monospace)
-    table.cell(dashboardTable, 2, 2, "", text_size=tSize)
+    table.cell(dashboardTable, 2, 2, "(" + setupConfirmMode + ")", text_color=setupConfirmMode == "Real-Time" ? color.orange : color.gray, text_size=tSize, text_font_family=font.family_monospace)
 
     table.cell(dashboardTable, 0, 3, "Liquidity Source:", text_color=tableTextColor, text_size=tSize, text_halign=text.align_left, text_font_family=font.family_monospace)
     activeSrcs = ""
@@ -2044,11 +2052,17 @@ if barstate.islast and showDashboard
             table.cell(dashboardTable, 1, 12, "", text_size=tSize)
             table.cell(dashboardTable, 2, 12, "", text_size=tSize)
     else
-        table.cell(dashboardTable, 0, 8, "No active setups detected.", text_color=color.gray, text_size=tSize, text_font_family=font.family_monospace)
-        table.merge_cells(dashboardTable, 0, 8, 2, 8)
+        // NOTE: deliberately no merge_cells here. table.merge_cells is permanent for the life of
+        // the table — merging these rows once (e.g. while stepping a Replay before the first
+        // setup exists) permanently swallows every later write to columns 1 and 2, which shows up
+        // as rows that have their label but no value. Write all three columns plainly instead.
+        table.cell(dashboardTable, 0, 8, "No active setups", text_color=color.gray, text_size=tSize, text_halign=text.align_left, text_font_family=font.family_monospace)
+        table.cell(dashboardTable, 1, 8, "", text_size=tSize)
+        table.cell(dashboardTable, 2, 8, "", text_size=tSize)
         for r = 9 to 12
             table.cell(dashboardTable, 0, r, "", text_size=tSize)
-            table.merge_cells(dashboardTable, 0, r, 2, r)
+            table.cell(dashboardTable, 1, r, "", text_size=tSize)
+            table.cell(dashboardTable, 2, r, "", text_size=tSize)
 
     // HTF FVG Context row
     htfFvgActiveSlots = ""
@@ -2112,8 +2126,12 @@ if barstate.islast and showSetupGrade
         table.cell(gradeTable, 1, 6, enableSmtGrade ? (showGradeSmt ? "✓" : "✗") : "—", text_color=enableSmtGrade ? (showGradeSmt ? color.green : color.gray) : color.gray, text_size=gTSize, text_font_family=font.family_monospace)
         table.cell(gradeTable, 2, 6, "", text_size=gTSize)
     else
-        table.cell(gradeTable, 0, 1, "No active setups detected.", text_color=color.gray, text_size=gTSize, text_font_family=font.family_monospace)
-        table.merge_cells(gradeTable, 0, 1, 2, 1)
+        // No merge_cells here — see the note in the dashboard's matching branch. Merging is
+        // permanent and would blank out columns 1-2 for every later render of this table.
+        table.cell(gradeTable, 0, 1, "No active setups", text_color=color.gray, text_size=gTSize, text_halign=text.align_left, text_font_family=font.family_monospace)
+        table.cell(gradeTable, 1, 1, "", text_size=gTSize)
+        table.cell(gradeTable, 2, 1, "", text_size=gTSize)
         for r = 2 to 6
             table.cell(gradeTable, 0, r, "", text_size=gTSize)
-            table.merge_cells(gradeTable, 0, r, 2, r)
+            table.cell(gradeTable, 1, r, "", text_size=gTSize)
+            table.cell(gradeTable, 2, r, "", text_size=gTSize)
