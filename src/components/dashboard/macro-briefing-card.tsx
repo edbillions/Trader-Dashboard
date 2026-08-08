@@ -173,11 +173,11 @@ export function MacroBriefingCard({
             </div>
           </div>
 
-          {briefing.trumpAppearancesToday.length > 0 && (
-            <div>
-              <p className="mb-2 text-xs font-semibold uppercase tracking-wide text-accent">
-                Trump watch — today
-              </p>
+          <div>
+            <p className="mb-2 text-xs font-semibold uppercase tracking-wide text-accent">
+              Trump watch — today
+            </p>
+            {briefing.trumpAppearancesToday.length > 0 ? (
               <div className="flex flex-col gap-2">
                 {briefing.trumpAppearancesToday.map((appearance, i) => (
                   <div
@@ -200,8 +200,15 @@ export function MacroBriefingCard({
                   </div>
                 ))}
               </div>
-            </div>
-          )}
+            ) : (
+              // Shown explicitly rather than hiding the section — confirms a
+              // dedicated search actually ran that day rather than looking
+              // like the section was silently skipped.
+              <p className="text-sm text-muted">
+                No confirmed Trump appearances found for today.
+              </p>
+            )}
+          </div>
 
           {briefing.economicCalendarToday.length > 0 && (
             <div>
