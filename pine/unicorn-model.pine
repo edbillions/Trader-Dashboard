@@ -1960,10 +1960,74 @@ if array.size(activeSetups) > 0
     showGradeVolume := sel.gradeVolume
     showGradeSmt := sel.gradeSmt
 
+// ========================================
+// SIGNAL DIAGNOSTIC — why is a pending sweep not confirming yet?
+// ========================================
+// Re-runs the confirmation gates in the SAME ORDER as the setup blocks and reports the first one
+// that fails, so a "why was this late / why did it never fire" question can be answered by
+// reading the chart instead of guessing. Display only — it creates nothing and mutates nothing.
+// Evaluated on the last bar only to keep the extra FVG scans cheap.
+string signalStatus = "No pending sweep"
+color signalStatusColor = color.gray
+
+if barstate.islast and showDashboard
+    if not na(pendingBullSweepIdx)
+        int dSweepOff = bar_index - pendingBullSweepIdx
+        [dStart, dEnd] = f_findUpCandlesSeries(dSweepOff)
+        if na(dStart)
+            signalStatus := "BULL: no breaker run"
+        else
+            [dTop, dBtm] = f_getSeriesRange(dStart, dEnd)
+            if close <= dTop
+                signalStatus := "BULL: close < breaker top"
+            else if dBtm < pendingBullSweepExtreme
+                signalStatus := "BULL: breaker under sweep"
+            else if not f_isInSession()
+                signalStatus := "BULL: outside session"
+            else if not f_checkSizeFilter(dTop, dBtm, sizeFilterMode, minBreakerSize, maxBreakerSize, breakerSizeUnit)
+                signalStatus := "BULL: size filter"
+            else
+                [dFt, dFb, dFi, dFr] = f_findBullishFVG(dTop, dBtm, bar_index - dEnd, enableFvgAtrFilter, fvgAtrMult)
+                if unicornMode and na(dFi)
+                    signalStatus := "BULL: no LTF FVG"
+                else if requireHtfFvgContext and not f_hasTappedHtfFvg(true)
+                    signalStatus := "BULL: no HTF FVG tap"
+                else if close - (useSwingInvalidation ? pendingBullSweepExtreme : dBtm) <= 0
+                    signalStatus := "BULL: risk <= 0"
+                else
+                    signalStatus := "BULL: ready"
+                    signalStatusColor := color.green
+    else if not na(pendingBearSweepIdx)
+        int dSweepOff = bar_index - pendingBearSweepIdx
+        [dStart, dEnd] = f_findDownCandlesSeries(dSweepOff)
+        if na(dStart)
+            signalStatus := "BEAR: no breaker run"
+        else
+            [dTop, dBtm] = f_getSeriesRange(dStart, dEnd)
+            if close >= dBtm
+                signalStatus := "BEAR: close > breaker btm"
+            else if dTop > pendingBearSweepExtreme
+                signalStatus := "BEAR: breaker over sweep"
+            else if not f_isInSession()
+                signalStatus := "BEAR: outside session"
+            else if not f_checkSizeFilter(dTop, dBtm, sizeFilterMode, minBreakerSize, maxBreakerSize, breakerSizeUnit)
+                signalStatus := "BEAR: size filter"
+            else
+                [dFt, dFb, dFi, dFr] = f_findBearishFVG(dTop, dBtm, bar_index - dEnd, enableFvgAtrFilter, fvgAtrMult)
+                if unicornMode and na(dFi)
+                    signalStatus := "BEAR: no LTF FVG"
+                else if requireHtfFvgContext and not f_hasTappedHtfFvg(false)
+                    signalStatus := "BEAR: no HTF FVG tap"
+                else if (useSwingInvalidation ? pendingBearSweepExtreme : dTop) - close <= 0
+                    signalStatus := "BEAR: risk <= 0"
+                else
+                    signalStatus := "BEAR: ready"
+                    signalStatusColor := color.green
+
 var table dashboardTable = table.new(
      position = f_getTablePosition(dashboardPosition),
      columns = 3,
-     rows = 14,
+     rows = 15,
      bgcolor = tableBgColor,
      border_width = tableBorderWidth,
      border_color = tableBorderColor,
@@ -2077,6 +2141,12 @@ if barstate.islast and showDashboard
     table.cell(dashboardTable, 0, 13, "HTF FVG Context:", text_color=tableTextColor, text_size=tSize, text_halign=text.align_left, text_font_family=font.family_monospace)
     table.cell(dashboardTable, 1, 13, requireHtfFvgContext ? "REQUIRED" : "OFF", text_color=requireHtfFvgContext ? color.green : color.gray, text_size=tSize, text_font_family=font.family_monospace)
     table.cell(dashboardTable, 2, 13, htfFvgActiveSlots, text_color=color.gray, text_size=tSize, text_font_family=font.family_monospace)
+
+    // Signal diagnostic row — first gate currently blocking a pending sweep from confirming
+    table.cell(dashboardTable, 0, 14, "Signal:", text_color=tableTextColor, text_size=tSize, text_halign=text.align_left, text_font_family=font.family_monospace)
+    table.cell(dashboardTable, 1, 14, signalStatus, text_color=signalStatusColor, text_size=tSize, text_font_family=font.family_monospace)
+    table.cell(dashboardTable, 2, 14, "", text_size=tSize)
+    table.merge_cells(dashboardTable, 1, 14, 2, 14)
 
 // Setup Grade: separate table, independently positioned (default bottom right)
 var table gradeTable = table.new(
