@@ -585,6 +585,7 @@ biasSelect = input.string("Neutral", "Bias", options=["Neutral", "Bullish", "Bea
 unicornMode = input.bool(true, "Unicorn Mode?", tooltip="When enabled, filters out breaker blocks that do not overlap with a Fair Value Gap (FVG) at the time of confirmation.", group=GRP_GEN)
 useSwingInvalidation = input.bool(false, "Use Swing as Invalidation?", tooltip="When enabled, invalidation occurs at the extreme high/low of the sweep leg. When disabled, invalidation occurs at the opposite extreme of the breaker block.", group=GRP_GEN)
 discardInvalidated = input.bool(false, "Discard Invalidated from History?", tooltip="When enabled, completely deletes invalidated setups from the chart. When disabled, retains them but changes their color to grey.", group=GRP_GEN)
+showPotential = input.bool(true, "Show Potential Setups?", tooltip="Draw a setup as soon as liquidity is swept, a valid breaker forms and matching HTF FVG context exists - before price displaces through the breaker to confirm it. Shown dashed and faded, and replaced by the normal setup on confirmation. Uses the 'Potential Breaker?' alert toggle.", group=GRP_GEN)
 enableFvgAtrFilter = input.bool(false, "Enable FVG ATR Filter", tooltip="If enabled, FVGs must be larger than a multiplier of ATR to be considered valid.", group=GRP_GEN)
 fvgAtrMult = input.float(0.5, "FVG ATR Multiplier", minval=0.0, step=0.1, tooltip="ATR multiplier for minimum FVG height.", group=GRP_GEN, active=enableFvgAtrFilter)
 
@@ -649,6 +650,12 @@ bearFvgColor = input.color(color.new(#f23645, 70), "Bear FVG", tooltip="Highligh
 // than the breaker-internal FVG above so it reads as background context.
 htfBullFvgColor = input.color(color.new(#089981, 88), "HTF Bull FVG", tooltip="Fill color for the higher-timeframe FVG that validated a bullish setup.", group=GRP_STYLE)
 htfBearFvgColor = input.color(color.new(#f23645, 88), "HTF Bear FVG", tooltip="Fill color for the higher-timeframe FVG that validated a bearish setup.", group=GRP_STYLE)
+
+// Potential (pre-confirmation) setups: dashed border, heavily faded fill.
+potBullColor = input.color(color.new(#089981, 93), "Potential Bull", inline="pot_bull_inline", tooltip="Fill color for a forming bullish setup that has not yet confirmed.", group=GRP_STYLE)
+potBullBorder = input.color(color.new(#089981, 40), "", inline="pot_bull_inline", tooltip="Dashed border color for a forming bullish setup.", group=GRP_STYLE)
+potBearColor = input.color(color.new(#f23645, 93), "Potential Bear", inline="pot_bear_inline", tooltip="Fill color for a forming bearish setup that has not yet confirmed.", group=GRP_STYLE)
+potBearBorder = input.color(color.new(#f23645, 40), "", inline="pot_bear_inline", tooltip="Dashed border color for a forming bearish setup.", group=GRP_STYLE)
 
 // Line Styles
 sweepLineColor = input.color(color.gray, "Sweep Line", inline="sweep_line_inline", tooltip="Color of the horizontal line marking swept liquidity levels.", group=GRP_STYLE)
@@ -2313,33 +2320,149 @@ while array.size(activeSetups) > historyCount
         label.delete(lb)
 
 // ========================================
-// POTENTIAL BREAKER ALERT (ON UNCONFIRMED BAR)
+// POTENTIAL SETUP PREVIEW + ALERT
 // ========================================
-var int lastPotentialAlertBar = na
-if alertPotential and barstate.isrealtime and not barstate.isconfirmed and bar_index != lastPotentialAlertBar
-    if not na(pendingBullSweepIdx)
-        sweepOffset = bar_index - pendingBullSweepIdx
-        [startOff, endOff] = f_findUpCandlesSeries(sweepOffset)
-        if not na(startOff)
-            [bTop, bBtm] = f_getSeriesRange(startOff, endOff)
-            if close > bTop and bBtm >= pendingBullSweepExtreme
-                // HTF FVG FILTER: don't pre-announce a setup the filter would reject
-                [pOk, pTf, pBar, pTop, pBtm, pT0, pAnyF, pAnyD, pAnyI, pAnyDv] = f_htfContext(true, pendingBullSweepExtreme, bar_index)
-                if pOk
-                    alert("Potential Breaker: Potential Bullish Breaker forming on " + syminfo.ticker, alert.freq_once_per_bar)
-                    lastPotentialAlertBar := bar_index
-                
-    if not na(pendingBearSweepIdx)
-        sweepOffset = bar_index - pendingBearSweepIdx
-        [startOff, endOff] = f_findDownCandlesSeries(sweepOffset)
-        if not na(startOff)
-            [bTop, bBtm] = f_getSeriesRange(startOff, endOff)
-            if close < bBtm and bTop <= pendingBearSweepExtreme
-                // HTF FVG FILTER: don't pre-announce a setup the filter would reject
-                [pOk, pTf, pBar, pTop, pBtm, pT0, pAnyF, pAnyD, pAnyI, pAnyDv] = f_htfContext(false, pendingBearSweepExtreme, bar_index)
-                if pOk
-                    alert("Potential Breaker: Potential Bearish Breaker forming on " + syminfo.ticker, alert.freq_once_per_bar)
-                    lastPotentialAlertBar := bar_index
+// A setup with everything except the Unicorn's close-through confirmation:
+// liquidity swept, a valid breaker, size/session filters passed and matching HTF
+// FVG context - but price has not yet displaced through the breaker. Drawn dashed
+// and faded so it is visible while still forming; the tracking blocks above
+// replace it with the real setup the moment `close` displaces through.
+//
+// The breaker candidate is re-derived every bar, so one box + one label per
+// direction is reused in place rather than creating new objects each bar.
+var box potBullBox = na
+var label potBullLabel = na
+var bool potBullWas = false
+var box potBearBox = na
+var label potBearLabel = na
+var bool potBearWas = false
+
+bool potBullOn = false
+float potBullT = na
+float potBullB = na
+int potBullL = na
+
+if not na(pendingBullSweepIdx)
+    int bullOff = bar_index - pendingBullSweepIdx
+    [bullStart, bullEnd] = f_findUpCandlesSeries(bullOff)
+    if not na(bullStart)
+        [pTop, pBtm] = f_getSeriesRange(bullStart, bullEnd)
+        if close <= pTop and pBtm >= pendingBullSweepExtreme and f_isInSession()
+            if f_checkSizeFilter(pTop, pBtm, sizeFilterMode, minBreakerSize, maxBreakerSize, breakerSizeUnit)
+                [bullOk, bullTf, bullBar, bullFT, bullFB, bullT0, bullAnyF, bullAnyD, bullAnyI, bullAnyDv] = f_htfContext(true, pendingBullSweepExtreme, bar_index)
+                if bullOk
+                    potBullOn := true
+                    potBullT := pTop
+                    potBullB := pBtm
+                    potBullL := bar_index - bullEnd
+
+if showPotential and potBullOn
+    string potBullTip = "Potential bullish Unicorn: liquidity swept, breaker formed and HTF FVG context in place.\nWaiting for a close above " + str.tostring(potBullT, format.mintick) + " to confirm."
+    if na(potBullBox)
+        potBullBox := box.new(
+             left = potBullL,
+             top = potBullT,
+             right = bar_index,
+             bottom = potBullB,
+             border_color = potBullBorder,
+             border_style = line.style_dashed,
+             bgcolor = potBullColor,
+             xloc = xloc.bar_index
+             )
+        potBullLabel := label.new(
+             x = bar_index,
+             y = (potBullT + potBullB) / 2.0,
+             text = "+Potential",
+             color = color.new(na, na),
+             textcolor = labelTextColor,
+             style = label.style_label_right,
+             size = f_getLabelSize(labelSizeStr),
+             tooltip = potBullTip,
+             text_font_family = font.family_monospace
+             )
+    else
+        box.set_left(potBullBox, potBullL)
+        box.set_top(potBullBox, potBullT)
+        box.set_bottom(potBullBox, potBullB)
+        box.set_right(potBullBox, bar_index)
+        label.set_x(potBullLabel, bar_index)
+        label.set_y(potBullLabel, (potBullT + potBullB) / 2.0)
+        label.set_tooltip(potBullLabel, potBullTip)
+else
+    if not na(potBullBox)
+        box.delete(potBullBox)
+        label.delete(potBullLabel)
+        potBullBox := na
+        potBullLabel := na
+
+// Existing "Potential Breaker?" toggle, now fired when the preview appears.
+if alertPotential and potBullOn and not potBullWas
+    alert("Potential Breaker: Potential Bullish Breaker forming on " + syminfo.ticker, alert.freq_once_per_bar)
+potBullWas := potBullOn
+
+bool potBearOn = false
+float potBearT = na
+float potBearB = na
+int potBearL = na
+
+if not na(pendingBearSweepIdx)
+    int bearOff = bar_index - pendingBearSweepIdx
+    [bearStart, bearEnd] = f_findDownCandlesSeries(bearOff)
+    if not na(bearStart)
+        [pTop, pBtm] = f_getSeriesRange(bearStart, bearEnd)
+        if close >= pBtm and pTop <= pendingBearSweepExtreme and f_isInSession()
+            if f_checkSizeFilter(pTop, pBtm, sizeFilterMode, minBreakerSize, maxBreakerSize, breakerSizeUnit)
+                [bearOk, bearTf, bearBar, bearFT, bearFB, bearT0, bearAnyF, bearAnyD, bearAnyI, bearAnyDv] = f_htfContext(false, pendingBearSweepExtreme, bar_index)
+                if bearOk
+                    potBearOn := true
+                    potBearT := pTop
+                    potBearB := pBtm
+                    potBearL := bar_index - bearEnd
+
+if showPotential and potBearOn
+    string potBearTip = "Potential bearish Unicorn: liquidity swept, breaker formed and HTF FVG context in place.\nWaiting for a close below " + str.tostring(potBearB, format.mintick) + " to confirm."
+    if na(potBearBox)
+        potBearBox := box.new(
+             left = potBearL,
+             top = potBearT,
+             right = bar_index,
+             bottom = potBearB,
+             border_color = potBearBorder,
+             border_style = line.style_dashed,
+             bgcolor = potBearColor,
+             xloc = xloc.bar_index
+             )
+        potBearLabel := label.new(
+             x = bar_index,
+             y = (potBearT + potBearB) / 2.0,
+             text = "-Potential",
+             color = color.new(na, na),
+             textcolor = labelTextColor,
+             style = label.style_label_right,
+             size = f_getLabelSize(labelSizeStr),
+             tooltip = potBearTip,
+             text_font_family = font.family_monospace
+             )
+    else
+        box.set_left(potBearBox, potBearL)
+        box.set_top(potBearBox, potBearT)
+        box.set_bottom(potBearBox, potBearB)
+        box.set_right(potBearBox, bar_index)
+        label.set_x(potBearLabel, bar_index)
+        label.set_y(potBearLabel, (potBearT + potBearB) / 2.0)
+        label.set_tooltip(potBearLabel, potBearTip)
+else
+    if not na(potBearBox)
+        box.delete(potBearBox)
+        label.delete(potBearLabel)
+        potBearBox := na
+        potBearLabel := na
+
+// Existing "Potential Breaker?" toggle, now fired when the preview appears.
+if alertPotential and potBearOn and not potBearWas
+    alert("Potential Breaker: Potential Bearish Breaker forming on " + syminfo.ticker, alert.freq_once_per_bar)
+potBearWas := potBearOn
+
 
 // ========================================
 // DASHBOARD RENDERING & DYNAMIC INVAL SYNC

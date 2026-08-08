@@ -86,6 +86,7 @@ One new group, **`HTF FVG Filter`**:
 | Require Sweep Into FVG? | `true` | Association rule, above. |
 | FVG Freshness (chart bars) | `0` | Max bars from interaction to confirmation. `0` = unlimited. |
 | Consume FVG After Signal? | `false` | On ⇒ each FVG validates at most one signal. |
+| Show Potential Setups? | `true` | Draw setups before they confirm (see *Potential setups*). |
 | Show HTF FVGs | `Setup Only` | `Setup Only` draws only the FVG that validated a setup. `All` = the source indicator's full rendering. `None` = draw nothing. |
 | Show Filter Diagnostic? | `false` | Adds the diagnostic rows to the dashboard. |
 | Slot 1…6 | `2,3,4` on | Which HTF FVG timeframe slots may validate a Unicorn. Defaults = 15m / 1H / 4H. |
@@ -118,6 +119,30 @@ With the filter disabled *and* the mode left on `Setup Only`, no HTF FVGs appear
 is no association to draw. Switch to `All` if you want the plain FVG display back.
 
 Everything else is untouched: Unicorn boxes, labels, targets, colours and alerts are as they were.
+
+### Potential setups
+
+A confirmed Unicorn needs price to **close through** the breaker. That can take many bars after
+the setup is otherwise complete, so `Show Potential Setups?` (on by default) draws the setup while
+it is still forming — as soon as all of these are true and *before* the close-through:
+
+- liquidity swept
+- a valid breaker candidate exists
+- size and session filters pass
+- direction-matched HTF FVG context qualifies
+
+It is drawn as a **dashed, heavily faded box** labelled `+Potential` / `-Potential`, with a
+tooltip naming the exact price a close is needed beyond. On confirmation the tracking logic
+replaces it with the normal solid setup; if the breaker stops qualifying it simply disappears.
+
+The existing **`Potential Breaker?`** alert under *Alerts* now fires when this preview first
+appears, rather than only on unconfirmed realtime bars. The `Activation?` alert still fires
+separately on confirmation, so you get both the heads-up and the trigger.
+
+Two things to expect. The breaker candidate is re-derived every bar, so a potential box can
+move or resize as the candidate changes — that is the engine re-evaluating, not the setup
+changing its mind. And a potential is transient: only the current bar's potential is drawn, so
+scrolling back through history will not show past ones.
 
 ---
 
@@ -269,6 +294,8 @@ what prove the merge didn't disturb either engine.
 **E. Alerts**
 17. Activation alerts fire only for filtered signals, and `Potential Breaker` no longer
     pre-announces setups the filter would reject.
+18. `Potential Breaker?` fires when the dashed preview appears, ahead of the `Activation?` alert
+    on the same setup — confirm both arrive and in that order.
 
 ---
 
