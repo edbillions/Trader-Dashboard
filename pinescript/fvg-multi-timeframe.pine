@@ -1,0 +1,279 @@
+//@version=6
+// ─────────────────────────────────────────────────────────────────────────────
+//  FVG Multi-Timeframe
+//
+//  Plots Fair Value Gaps (imbalances) from up to five timeframes at once on a
+//  single chart, so higher-timeframe gaps stay visible while you execute on a
+//  lower one.
+//
+//  A bullish FVG is the gap between the high of bar 1 and the low of bar 3 when
+//  low[0] > high[2]. A bearish FVG is the gap between the low of bar 1 and the
+//  high of bar 3 when high[0] < low[2].
+// ─────────────────────────────────────────────────────────────────────────────
+indicator("FVG Multi-Timeframe", "FVG MTF", overlay = true, max_boxes_count = 500, max_labels_count = 500)
+
+// ─── Inputs: timeframes ──────────────────────────────────────────────────────
+gTF = "Timeframes"
+
+tf1 = input.timeframe("5",   "Timeframe 1", inline = "tf1", group = gTF)
+n1  = input.string("M5",     "",            inline = "tf1", group = gTF)
+e1  = input.bool(false,      "",            inline = "tf1", group = gTF, tooltip = "Enable this timeframe")
+
+tf2 = input.timeframe("60",  "Timeframe 2", inline = "tf2", group = gTF)
+n2  = input.string("H1",     "",            inline = "tf2", group = gTF)
+e2  = input.bool(true,       "",            inline = "tf2", group = gTF, tooltip = "Enable this timeframe")
+
+tf3 = input.timeframe("15",  "Timeframe 3", inline = "tf3", group = gTF)
+n3  = input.string("M15",    "",            inline = "tf3", group = gTF)
+e3  = input.bool(true,       "",            inline = "tf3", group = gTF, tooltip = "Enable this timeframe")
+
+tf4 = input.timeframe("240", "Timeframe 4", inline = "tf4", group = gTF)
+n4  = input.string("H4",     "",            inline = "tf4", group = gTF)
+e4  = input.bool(false,      "",            inline = "tf4", group = gTF, tooltip = "Enable this timeframe")
+
+tf5 = input.timeframe("20",  "Timeframe 5", inline = "tf5", group = gTF)
+n5  = input.string("M20",    "",            inline = "tf5", group = gTF)
+e5  = input.bool(false,      "",            inline = "tf5", group = gTF, tooltip = "Enable this timeframe")
+
+// ─── Inputs: FVG settings ────────────────────────────────────────────────────
+gFVG = "FVG Settings"
+
+waitForClose = input.bool(true, "Wait for candle close to identify FVG ?", group = gFVG,
+     tooltip = "On: a gap is only drawn once its third candle has closed on the source timeframe (never repaints). " +
+               "Off: the gap is drawn on the still-forming candle and updates live, so it can move or disappear.")
+
+fillType = input.string("Close", "Filled FVG Type", options = ["Close", "Wick"], group = gFVG,
+     tooltip = "Close: the gap counts as filled when a candle closes through its far edge. " +
+               "Wick: a wick touching the far edge is enough. Measured on the chart's candles.")
+
+extendBoxes = input.bool(false, "Extend Boxes ?", group = gFVG,
+     tooltip = "Keep pushing each box's right edge to the current bar until the gap is filled.")
+
+deleteAfterFill = input.bool(true, "Delete Boxes after fill ?", group = gFVG,
+     tooltip = "On: remove the box once the gap is filled. Off: leave it on the chart, frozen at the fill point.")
+
+hideLowerTf = input.bool(true, "Hide FVGs lower than enabled timeframes?", group = gFVG,
+     tooltip = "Skip any enabled timeframe shorter than the chart's own timeframe.")
+
+maxBarsBack = input.int(1000, "Max bars back to find FVGs ?", minval = 1, maxval = 5000, group = gFVG)
+
+boxLength = input.int(15, "Length of Boxes", minval = 1, group = gFVG,
+     tooltip = "Box width, measured in bars of the chart's timeframe. A box is never drawn narrower than the " +
+               "three source-timeframe candles that formed it.")
+
+// ─── Inputs: box visuals ─────────────────────────────────────────────────────
+gBox = "Box Visuals"
+bullBoxColor = input.color(color.new(#2962FF, 88), "Bullish FVG Box Color", group = gBox)
+bearBoxColor = input.color(color.new(#F23645, 88), "Bearish FVG Box Color", group = gBox)
+
+// ─── Inputs: label visuals ───────────────────────────────────────────────────
+gLbl = "Label Visuals"
+labelPosition  = input.string("Right", "Label Position", options = ["Left", "Center", "Right"], group = gLbl)
+labelSize      = input.string("Small", "Label Size", options = ["Tiny", "Small", "Normal", "Large"], group = gLbl)
+bullLabelColor = input.color(color.new(#787B86, 0), "Bullish FVG Label Color", group = gLbl)
+bearLabelColor = input.color(color.new(#787B86, 0), "Bearish FVG Label Color", group = gLbl)
+
+// ─── Inputs: border visuals ──────────────────────────────────────────────────
+gBrd = "Border Visuals"
+borderStyle     = input.string("Solid", "Border style", options = ["Solid", "Dashed", "Dotted"], group = gBrd)
+borderWidth     = input.int(1, "Border Width ?", minval = 0, maxval = 5, group = gBrd)
+bullBorderColor = input.color(color.new(#2962FF, 100), "Bullish FVG Border Color", group = gBrd)
+bearBorderColor = input.color(color.new(#F23645, 100), "Bearish FVG Border Color", group = gBrd)
+
+// ─── Types & state ───────────────────────────────────────────────────────────
+type Fvg
+    int    id
+    box    bx
+    label  lb
+    float  top
+    float  bot
+    bool   bull
+    bool   entered
+    string tfLabel
+
+var array<Fvg> fvgs      = array.new<Fvg>()
+// Left-edge time of the most recent gap drawn per slot — guards against redrawing
+// the same gap on every chart bar inside one source-timeframe bar.
+var array<int> lastLeft  = array.new_int(5, 0)
+// Id of the still-unconfirmed gap per slot (only used when waitForClose is off).
+var array<int> pendingId = array.new_int(5, -1)
+// Id counter. Held in an array because Pine functions may mutate a global object
+// but may not reassign a global variable.
+var array<int> idSeq = array.new_int(1, 0)
+
+chartSec = timeframe.in_seconds()
+chartMs  = chartSec * 1000
+
+// ─── Detection ───────────────────────────────────────────────────────────────
+// Both are evaluated in the source timeframe's context and return
+// [bullish, bearish, gap top, gap bottom, opening time of the middle candle].
+
+// Pattern ending on the candle before the context's latest one.
+detectClosed() =>
+    bool  bull = low[1]  > high[3]
+    bool  bear = high[1] < low[3]
+    float top  = bull ? low[1]  : low[3]
+    float bot  = bull ? high[3] : high[1]
+    [bull, bear, top, bot, time[2]]
+
+// Pattern ending on the context's latest candle.
+detectLive() =>
+    bool  bull = low  > high[2]
+    bool  bear = high < low[2]
+    float top  = bull ? low[0]  : low[2]
+    float bot  = bull ? high[2] : high[0]
+    [bull, bear, top, bot, time[1]]
+
+// Two requests per timeframe, because `lookahead` must be a compile-time constant:
+//   • confirmed — lookahead_on with offset 1 always resolves to the last *closed*
+//     source candle, on history and in realtime alike. This is the standard
+//     non-repainting multi-timeframe idiom; no future data is read.
+//   • live — lookahead_off with offset 0 gives the last closed candle on history
+//     and the currently forming one in realtime, which is what lets an unconfirmed
+//     gap be drawn as it forms.
+[c1b, c1r, c1t, c1o, c1l] = request.security(syminfo.tickerid, tf1, detectClosed(), lookahead = barmerge.lookahead_on)
+[l1b, l1r, l1t, l1o, l1l] = request.security(syminfo.tickerid, tf1, detectLive(), lookahead = barmerge.lookahead_off)
+[c2b, c2r, c2t, c2o, c2l] = request.security(syminfo.tickerid, tf2, detectClosed(), lookahead = barmerge.lookahead_on)
+[l2b, l2r, l2t, l2o, l2l] = request.security(syminfo.tickerid, tf2, detectLive(), lookahead = barmerge.lookahead_off)
+[c3b, c3r, c3t, c3o, c3l] = request.security(syminfo.tickerid, tf3, detectClosed(), lookahead = barmerge.lookahead_on)
+[l3b, l3r, l3t, l3o, l3l] = request.security(syminfo.tickerid, tf3, detectLive(), lookahead = barmerge.lookahead_off)
+[c4b, c4r, c4t, c4o, c4l] = request.security(syminfo.tickerid, tf4, detectClosed(), lookahead = barmerge.lookahead_on)
+[l4b, l4r, l4t, l4o, l4l] = request.security(syminfo.tickerid, tf4, detectLive(), lookahead = barmerge.lookahead_off)
+[c5b, c5r, c5t, c5o, c5l] = request.security(syminfo.tickerid, tf5, detectClosed(), lookahead = barmerge.lookahead_on)
+[l5b, l5r, l5t, l5o, l5l] = request.security(syminfo.tickerid, tf5, detectLive(), lookahead = barmerge.lookahead_off)
+
+// ─── Drawing helpers ─────────────────────────────────────────────────────────
+borderStyleOf() =>
+    switch borderStyle
+        "Dashed" => line.style_dashed
+        "Dotted" => line.style_dotted
+        => line.style_solid
+
+labelSizeOf() =>
+    switch labelSize
+        "Tiny"   => size.tiny
+        "Normal" => size.normal
+        "Large"  => size.large
+        => size.small
+
+// Keeps the tag inside the box rather than centred on its edge.
+labelX(int l, int r) =>
+    int pad = int(math.max((r - l) * 0.08, 1))
+    switch labelPosition
+        "Left"   => l + pad
+        "Center" => int(math.avg(l, r))
+        => r - pad
+
+createFvg(bool bull, float top, float bot, int leftTime, string tfLabel, int tfMs) =>
+    // Never narrower than the three source candles that formed the gap, so a
+    // high-timeframe box stays visible on a much lower chart timeframe.
+    int   rightTime = leftTime + int(math.max(boxLength * chartMs, 2 * tfMs))
+    box   bx = box.new(leftTime, top, rightTime, bot, xloc = xloc.bar_time,
+                 bgcolor      = bull ? bullBoxColor : bearBoxColor,
+                 border_color = bull ? bullBorderColor : bearBorderColor,
+                 border_width = borderWidth,
+                 border_style = borderStyleOf())
+    label lb = label.new(labelX(leftTime, rightTime), math.avg(top, bot), tfLabel, xloc = xloc.bar_time,
+                 style     = label.style_none,
+                 textcolor = bull ? bullLabelColor : bearLabelColor,
+                 size      = labelSizeOf())
+    int id = array.get(idSeq, 0) + 1
+    array.set(idSeq, 0, id)
+    Fvg f = Fvg.new(id = id, bx = bx, lb = lb, top = top, bot = bot, bull = bull, entered = false, tfLabel = tfLabel)
+    array.push(fvgs, f)
+    f
+
+findById(int id) =>
+    Fvg res = na
+    if id >= 0 and array.size(fvgs) > 0
+        for i = 0 to array.size(fvgs) - 1
+            Fvg f = array.get(fvgs, i)
+            if f.id == id
+                res := f
+                break
+    res
+
+dropById(int id) =>
+    if id >= 0 and array.size(fvgs) > 0
+        for i = array.size(fvgs) - 1 to 0
+            Fvg f = array.get(fvgs, i)
+            if f.id == id
+                box.delete(f.bx)
+                label.delete(f.lb)
+                array.remove(fvgs, i)
+                break
+
+// ─── Per-timeframe processing ────────────────────────────────────────────────
+processSlot(int slot, bool enabled, string tfStr, string tfLabel, bool bullC, bool bearC, float topC, float botC, int leftC, bool bullL, bool bearL, float topL, float botL, int leftL) =>
+    int tfSec = timeframe.in_seconds(tfStr)
+    if enabled and not (hideLowerTf and tfSec < chartSec) and bar_index > last_bar_index - maxBarsBack
+        bool  bull = waitForClose ? bullC : bullL
+        bool  bear = waitForClose ? bearC : bearL
+        float top  = waitForClose ? topC  : topL
+        float bot  = waitForClose ? botC  : botL
+        int   left = waitForClose ? leftC : leftL
+
+        bool has  = bull or bear
+        int  prev = array.get(lastLeft, slot)
+
+        if has and not na(left) and left != prev
+            Fvg f = createFvg(bull, top, bot, left, tfLabel, tfSec * 1000)
+            array.set(lastLeft, slot, left)
+            if not waitForClose
+                array.set(pendingId, slot, f.id)
+        else if not waitForClose and left == prev
+            // Still inside the candle that produced this gap: track it as it develops.
+            Fvg p = findById(array.get(pendingId, slot))
+            if not na(p)
+                if has
+                    p.top := top
+                    p.bot := bot
+                    box.set_top(p.bx, top)
+                    box.set_bottom(p.bx, bot)
+                    label.set_y(p.lb, math.avg(top, bot))
+                else
+                    // The gap closed before the candle did — it never existed.
+                    dropById(p.id)
+                    array.set(pendingId, slot, -1)
+                    array.set(lastLeft, slot, 0)
+
+processSlot(0, e1, tf1, n1, c1b, c1r, c1t, c1o, c1l, l1b, l1r, l1t, l1o, l1l)
+processSlot(1, e2, tf2, n2, c2b, c2r, c2t, c2o, c2l, l2b, l2r, l2t, l2o, l2l)
+processSlot(2, e3, tf3, n3, c3b, c3r, c3t, c3o, c3l, l3b, l3r, l3t, l3o, l3l)
+processSlot(3, e4, tf4, n4, c4b, c4r, c4t, c4o, c4l, l4b, l4r, l4t, l4o, l4l)
+processSlot(4, e5, tf5, n5, c5b, c5r, c5t, c5o, c5l, l5b, l5r, l5t, l5o, l5l)
+
+// ─── Maintenance: extend, entry alerts, fill ─────────────────────────────────
+bool bullEnter = false
+bool bearEnter = false
+
+if array.size(fvgs) > 0
+    for i = array.size(fvgs) - 1 to 0
+        Fvg f = array.get(fvgs, i)
+
+        bool filled = f.bull ? (fillType == "Close" ? close <= f.bot : low  <= f.bot)
+                             : (fillType == "Close" ? close >= f.top : high >= f.top)
+
+        // Price trading anywhere inside the gap, fired once per gap.
+        if not f.entered and low <= f.top and high >= f.bot
+            f.entered := true
+            if f.bull
+                bullEnter := true
+            else
+                bearEnter := true
+            alert(syminfo.ticker + ": price entered " + (f.bull ? "bullish" : "bearish") + " FVG (" + f.tfLabel + ") " +
+                  str.tostring(f.bot, format.mintick) + " - " + str.tostring(f.top, format.mintick), alert.freq_once_per_bar)
+
+        if extendBoxes
+            box.set_right(f.bx, time)
+            label.set_x(f.lb, labelX(box.get_left(f.bx), time))
+
+        if filled
+            if deleteAfterFill
+                box.delete(f.bx)
+                label.delete(f.lb)
+            // Filled gaps stop being tracked either way: no more extending, no more alerts.
+            array.remove(fvgs, i)
+
+alertcondition(bullEnter, "Price entered Bullish FVG", "{{ticker}} ({{interval}}): price entered a bullish FVG")
+alertcondition(bearEnter, "Price entered Bearish FVG", "{{ticker}} ({{interval}}): price entered a bearish FVG")
