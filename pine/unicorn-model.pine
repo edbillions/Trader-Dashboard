@@ -889,6 +889,20 @@ max_bars_back(high, 1000)
 max_bars_back(low, 1000)
 max_bars_back(close, 1000)
 max_bars_back(open, 1000)
+max_bars_back(volume, 1000)
+
+// A pending sweep is read back at [sweepOffset], and the breaker search reaches up to
+// sweepOffset + 60 beyond it (outer run scan +40, inner run extension +20). Reading past the
+// 1000-bar buffer above is a RUNTIME ERROR that kills the whole script — every drawing and
+// table vanishes from the chart. Sweeps are expired well inside the buffer so that can't happen.
+// A sweep this old is long dead as a trade idea anyway.
+int SWEEP_MAX_AGE = 900
+
+// Live setups are exempt from the History limit (they are open trades), but the chart's drawing
+// pools are finite and shared with HTF levels and FVG boxes. If TradingView auto-evicts a drawing
+// this script still holds a handle to, the next line/box call on it is another script-killing
+// runtime error. This is the ceiling past which even a live setup gets retired.
+int SETUP_HARD_CAP = 50
 
 // ========================================
 // SYSTEM VARIABLES & TIME RESOLUTION
@@ -1307,6 +1321,23 @@ if sweptBull and (biasSelect == "Neutral" or biasSelect == "Bearish")
 else if not na(pendingBearSweepIdx) and high > pendingBearSweepExtreme
     pendingBearSweepExtreme := high
     pendingBearSweepIdx := bar_index
+
+// 2b. Expire stale pending sweeps
+// A pending sweep is only cleared when a setup confirms off it. When no setup ever confirms —
+// the breaker, FVG or HTF gates never all line up — it used to sit forever while sweepOffset
+// grew by one every bar. Once it passed the historical buffer the breaker search read beyond
+// [1000] and threw a runtime error, which makes TradingView drop the ENTIRE indicator: boxes,
+// levels, dashboard and grade table all disappear until enough new bars shift the offset back
+// into range. On a 1-minute chart 1000 bars is only ~17 hours, so a sweep left unresolved
+// overnight would take the script out the following session.
+// Expiring the sweep here fixes it at the source: every downstream consumer already guards on
+// na(pendingSweepIdx), so clearing it is enough to make all of them safe.
+if not na(pendingBullSweepIdx) and (bar_index - pendingBullSweepIdx) > SWEEP_MAX_AGE
+    pendingBullSweepIdx := na
+    pendingBullFirstSweepBar := na
+if not na(pendingBearSweepIdx) and (bar_index - pendingBearSweepIdx) > SWEEP_MAX_AGE
+    pendingBearSweepIdx := na
+    pendingBearFirstSweepBar := na
 
 // 3. Track & Confirm Pending Setups
 
@@ -1891,8 +1922,14 @@ while array.size(activeSetups) > historyCount
         if candidate.isInvalidated or candidate.isTargetHit
             retireIdx := i
             break
+    // Nothing has finished. Normally that means we stop and let the count exceed the cap, but
+    // past SETUP_HARD_CAP the drawing pools are at risk, so retire the oldest live setup rather
+    // than let a runtime error take the whole indicator down.
     if retireIdx < 0
-        break
+        if array.size(activeSetups) > SETUP_HARD_CAP
+            retireIdx := 0
+        else
+            break
     oldSetup = array.remove(activeSetups, retireIdx)
     line.delete(oldSetup.levelLine)
     label.delete(oldSetup.levelLabel)
