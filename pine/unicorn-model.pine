@@ -733,10 +733,10 @@ htfFvgTfD = input.timeframe("240", "", inline="htf_fvg_d", tooltip="Timeframe fo
 requireHtfFvgContext = input.bool(true, "Require HTF FVG Context", tooltip="Only confirm signals when price has tapped (wicked into) an unmitigated HTF Fair Value Gap (from any enabled HTF above) in the setup's direction. Price does not need to still be inside the gap when the setup confirms.", group=GRP_HTF_FVG)
 showClosestHtfFvg = input.bool(true, "Show Closest HTF FVG", tooltip="Purely visual — when a setup confirms, draws a single static box around the specific HTF Fair Value Gap it delivered from. Fixed at the confirmation bar; does not extend with price. Does not affect signals.", group=GRP_HTF_FVG)
 
-htfFvgBullFillColor = input.color(color.new(#1a1a1a, 84), "Bull HTF FVG", inline="htf_fvg_bull_col", tooltip="Fill color for a bullish setup's origin HTF FVG box. Minimal near-black by default — the box label already states the direction, so color doesn't need to carry it too.", group=GRP_HTF_FVG)
+htfFvgBullFillColor = input.color(color.new(#1a1a1a, 70), "Bull HTF FVG", inline="htf_fvg_bull_col", tooltip="Fill color for a bullish setup's origin HTF FVG box (~30% opaque by default). Minimal near-black by default — the box label already states the direction, so color doesn't need to carry it too.", group=GRP_HTF_FVG)
 htfFvgBullBorderColor = input.color(color.new(#1a1a1a, 55), "", inline="htf_fvg_bull_col", tooltip="Border/midline color for a bullish setup's origin HTF FVG box.", group=GRP_HTF_FVG)
 
-htfFvgBearFillColor = input.color(color.new(#1a1a1a, 84), "Bear HTF FVG", inline="htf_fvg_bear_col", tooltip="Fill color for a bearish setup's origin HTF FVG box. Minimal near-black by default — the box label already states the direction, so color doesn't need to carry it too.", group=GRP_HTF_FVG)
+htfFvgBearFillColor = input.color(color.new(#1a1a1a, 70), "Bear HTF FVG", inline="htf_fvg_bear_col", tooltip="Fill color for a bearish setup's origin HTF FVG box (~30% opaque by default). Minimal near-black by default — the box label already states the direction, so color doesn't need to carry it too.", group=GRP_HTF_FVG)
 htfFvgBearBorderColor = input.color(color.new(#1a1a1a, 55), "", inline="htf_fvg_bear_col", tooltip="Border/midline color for a bearish setup's origin HTF FVG box.", group=GRP_HTF_FVG)
 
 // ========================================
