@@ -735,6 +735,18 @@ fvgZoneMode = input.string("Qualifying Only", "HTF FVG Zones", options=["Qualify
 alertFvgTap = input.bool(false, "Alert on HTF FVG Tap?", tooltip="Fire the HTF FVG engine's own 'price entered FVG' alert() call. Off by default so that an 'Any alert() function call' alert keeps delivering exactly the Unicorn Model's own alerts.", group=GRP_QUAL, active=enableHtfFvg)
 
 // ========================================
+// INPUTS - Group 11: Diagnostics (NEW)
+// ========================================
+// Read-only instrumentation. Nothing here participates in a decision: every
+// value it reports is recomputed from state the engine has already settled, and
+// every label is drawn from an else-branch of a condition the engine had already
+// evaluated. With it off the script is byte-for-byte the same engine.
+string GRP_DBG = "Diagnostics"
+debugMode = input.bool(false, "Show Rejection Diagnostics?", tooltip="Label every bar on which the Unicorn Model had a live sweep leg but did NOT confirm a setup, stating which gate rejected it and with what numbers. Use this to find out why a setup you expected on a given bar arrived later — the label on that bar names the gate.", group=GRP_DBG)
+debugBars = input.int(100, "Diagnostics Lookback (bars)", minval=1, maxval=500, tooltip="Only label the most recent N bars. Labels share the 500-label budget with the Unicorn's own drawings, so keep this tight.", group=GRP_DBG, active=debugMode)
+debugNoSweep = input.bool(false, "Also Label Bars With No Sweep Leg?", tooltip="Include bars where no liquidity sweep is pending at all, so 'nothing happened here' is distinguishable from 'a gate rejected it'. Noisy — usually only needed when a setup never appears at all.", group=GRP_DBG, active=debugMode)
+
+// ========================================
 // HTF FVG ENGINE - DETECTION & DRAWING HELPERS
 // ========================================
 // ─── Detection ───────────────────────────────────────────────────────────────
@@ -1003,6 +1015,21 @@ f_discardLastSetup() =>
             line.delete(l)
         for lb in s.targetLabels
             label.delete(lb)
+
+// Diagnostics label. Anchored to the bar it describes, off the candle so it does
+// not sit on top of the Unicorn's own markers.
+f_dbg(bool bull, string txt) =>
+    if debugMode and bar_index > last_bar_index - debugBars
+        label.new(
+             x = bar_index,
+             y = bull ? low : high,
+             text = txt,
+             style = bull ? label.style_label_up : label.style_label_down,
+             color = color.new(color.orange, 75),
+             textcolor = labelTextColor,
+             size = size.tiny,
+             text_font_family = font.family_monospace
+             )
 
 // ========================================
 // HTF FVG INTERACTION STATE (NEW)
@@ -1294,7 +1321,13 @@ if not na(pendingBullSweepIdx)
         [breakerT, breakerB] = f_getSeriesRange(startOffset, endOffset)
 
         // Validation: Breaker bottom must not be below (more extreme than) the sweep low extreme
-        if close > breakerT and breakerB >= pendingBullSweepExtreme and f_isInSession()
+        // Hoisted into named bools purely so the diagnostics can name the gate
+        // that rejected the bar. The conjunction below is the original condition.
+        bool gateBreakBull = close > breakerT
+        bool gateSweepBull = breakerB >= pendingBullSweepExtreme
+        bool gateSessBull  = f_isInSession()
+
+        if gateBreakBull and gateSweepBull and gateSessBull
             if f_checkSizeFilter(breakerT, breakerB, sizeFilterMode, minBreakerSize, maxBreakerSize, breakerSizeUnit)
                 breakerStartBar = bar_index - endOffset
                 [fvgT, fvgB, fvgIdx, fvgRightIdx] = f_findBullishFVG(breakerT, breakerB, breakerStartBar, enableFvgAtrFilter, fvgAtrMult)
@@ -1474,6 +1507,18 @@ if not na(pendingBullSweepIdx)
 
                         pendingBullSweepIdx := na
                         pendingBullFirstSweepBar := na
+                    else if debugMode
+                        f_dbg(true, "BULL rejected: risk<=0\nclose=" + str.tostring(close, format.mintick) + " inval=" + str.tostring(invPrice, format.mintick))
+                else if debugMode
+                    f_dbg(true, "BULL rejected: no FVG\nUnicorn Mode is ON and no unmitigated bullish FVG overlaps the breaker on this bar.\nbreaker=" + str.tostring(breakerB, format.mintick) + "-" + str.tostring(breakerT, format.mintick) + "\nscanned " + str.tostring(math.min(endOffset, 100)) + " bars back")
+            else if debugMode
+                f_dbg(true, "BULL rejected: size filter\nsize=" + str.tostring(breakerT - breakerB, format.mintick) + " pts (" + str.tostring(minBreakerSize) + "-" + str.tostring(maxBreakerSize) + " " + breakerSizeUnit + ")")
+        else if debugMode and (gateBreakBull or debugNoSweep)
+            f_dbg(true, "BULL rejected: gate\nclose>breakerTop=" + (gateBreakBull ? "Y" : "N") + " (close=" + str.tostring(close, format.mintick) + " top=" + str.tostring(breakerT, format.mintick) + ")\nbreakerBot>=sweepLow=" + (gateSweepBull ? "Y" : "N") + " (bot=" + str.tostring(breakerB, format.mintick) + " low=" + str.tostring(pendingBullSweepExtreme, format.mintick) + ")\ninSession=" + (gateSessBull ? "Y" : "N"))
+    else if debugMode and debugNoSweep
+        f_dbg(true, "BULL rejected: no breaker\nNo run of 2+ consecutive up candles found within 40 bars back from the sweep bar.")
+else if debugMode and debugNoSweep
+    f_dbg(true, "BULL: no pending sweep leg")
 
 // Track Bearish setups
 if not na(pendingBearSweepIdx)
@@ -1484,7 +1529,13 @@ if not na(pendingBearSweepIdx)
         [breakerT, breakerB] = f_getSeriesRange(startOffset, endOffset)
 
         // Validation: Breaker top must not be above (more extreme than) the sweep high extreme
-        if close < breakerB and breakerT <= pendingBearSweepExtreme and f_isInSession()
+        // Hoisted into named bools purely so the diagnostics can name the gate
+        // that rejected the bar. The conjunction below is the original condition.
+        bool gateBreakBear = close < breakerB
+        bool gateSweepBear = breakerT <= pendingBearSweepExtreme
+        bool gateSessBear  = f_isInSession()
+
+        if gateBreakBear and gateSweepBear and gateSessBear
             if f_checkSizeFilter(breakerT, breakerB, sizeFilterMode, minBreakerSize, maxBreakerSize, breakerSizeUnit)
                 breakerStartBar = bar_index - endOffset
                 [fvgT, fvgB, fvgIdx, fvgRightIdx] = f_findBearishFVG(breakerT, breakerB, breakerStartBar, enableFvgAtrFilter, fvgAtrMult)
@@ -1664,6 +1715,18 @@ if not na(pendingBearSweepIdx)
 
                         pendingBearSweepIdx := na
                         pendingBearFirstSweepBar := na
+                    else if debugMode
+                        f_dbg(false, "BEAR rejected: risk<=0\nclose=" + str.tostring(close, format.mintick) + " inval=" + str.tostring(invPrice, format.mintick))
+                else if debugMode
+                    f_dbg(false, "BEAR rejected: no FVG\nUnicorn Mode is ON and no unmitigated bearish FVG overlaps the breaker on this bar.\nbreaker=" + str.tostring(breakerB, format.mintick) + "-" + str.tostring(breakerT, format.mintick) + "\nscanned " + str.tostring(math.min(endOffset, 100)) + " bars back")
+            else if debugMode
+                f_dbg(false, "BEAR rejected: size filter\nsize=" + str.tostring(breakerT - breakerB, format.mintick) + " pts (" + str.tostring(minBreakerSize) + "-" + str.tostring(maxBreakerSize) + " " + breakerSizeUnit + ")")
+        else if debugMode and (gateBreakBear or debugNoSweep)
+            f_dbg(false, "BEAR rejected: gate\nclose<breakerBot=" + (gateBreakBear ? "Y" : "N") + " (close=" + str.tostring(close, format.mintick) + " bot=" + str.tostring(breakerB, format.mintick) + ")\nbreakerTop<=sweepHigh=" + (gateSweepBear ? "Y" : "N") + " (top=" + str.tostring(breakerT, format.mintick) + " high=" + str.tostring(pendingBearSweepExtreme, format.mintick) + ")\ninSession=" + (gateSessBear ? "Y" : "N"))
+    else if debugMode and debugNoSweep
+        f_dbg(false, "BEAR rejected: no breaker\nNo run of 2+ consecutive down candles found within 40 bars back from the sweep bar.")
+else if debugMode and debugNoSweep
+    f_dbg(false, "BEAR: no pending sweep leg")
 
 // 4. Update Existing Active Setups
 if array.size(activeSetups) > 0
