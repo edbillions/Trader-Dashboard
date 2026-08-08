@@ -689,7 +689,7 @@ alertInvalidation = input.bool(true, "Invalidation Hit?", tooltip="Trigger an al
 // INPUTS - Group 2: General Settings
 // ========================================
 string GRP_GEN = "General Settings"
-historyCount = input.int(1, "History", minval=1, maxval=100, tooltip="The number of setups to retain on the chart. 1 shows only the latest; higher values display older setups as well.", group=GRP_GEN)
+historyCount = input.int(1, "History", minval=1, maxval=100, tooltip="How many FINISHED setups to keep on the chart. 1 shows only the most recent; higher values keep older ones too.\n\nOnly setups that have resolved — invalidated, or target hit — are ever removed. An active setup is a live trade and is always kept on the chart, even if that means more setups are shown than this limit.", group=GRP_GEN)
 biasSelect = input.string("Neutral", "Bias", options=["Neutral", "Bullish", "Bearish"], tooltip="Filter setups directionally: Neutral (show both), Bullish (show only longs), Bearish (show only shorts).", group=GRP_GEN)
 unicornMode = input.bool(true, "Unicorn Mode?", tooltip="When enabled, filters out breaker blocks that do not overlap with a Fair Value Gap (FVG) at the time of confirmation.", group=GRP_GEN)
 useSwingInvalidation = input.bool(false, "Use Swing as Invalidation?", tooltip="When enabled, invalidation occurs at the extreme high/low of the sweep leg. When disabled, invalidation occurs at the opposite extreme of the breaker block.", group=GRP_GEN)
@@ -1877,8 +1877,23 @@ if array.size(activeSetups) > 0
 
 
 // 5. Handle Setup History Limit
+// Only FINISHED setups (invalidated, or primary target hit) may be retired. An active
+// setup is a live trade — its stop has not been touched and its target has not been
+// reached — so it must never be erased just because a newer setup appeared. This loop
+// used to array.shift() the oldest entry blindly, which with the default History = 1
+// deleted a winning in-progress setup the instant the next one formed.
+// If nothing is finished the cap is allowed to be exceeded; live setups are held until
+// price resolves them.
 while array.size(activeSetups) > historyCount
-    oldSetup = array.shift(activeSetups)
+    int retireIdx = -1
+    for i = 0 to array.size(activeSetups) - 1
+        candidate = array.get(activeSetups, i)
+        if candidate.isInvalidated or candidate.isTargetHit
+            retireIdx := i
+            break
+    if retireIdx < 0
+        break
+    oldSetup = array.remove(activeSetups, retireIdx)
     line.delete(oldSetup.levelLine)
     label.delete(oldSetup.levelLabel)
     box.delete(oldSetup.breakerBox)
