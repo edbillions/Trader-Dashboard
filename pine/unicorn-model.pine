@@ -1907,8 +1907,12 @@ if alertPotential and barstate.isrealtime and not barstate.isconfirmed and bar_i
 // DASHBOARD RENDERING & DYNAMIC INVAL SYNC
 // ========================================
 
-// Extract latest active (non-invalidated, non-target hit) setup details dynamically
+// Extract the setup to display. Prefers the latest still-running setup, but falls back to the
+// most recent one whatever its state, so the panels keep showing the last setup (with its status
+// spelled out) instead of going blank the moment it is invalidated or its target is reached.
+// Without the fallback, History = 1 means a single target hit empties both panels entirely.
 string showSetupDir = "NONE"
+string showSetupStatus = ""
 float showEntryPrice = na
 float showInvalidationPrice = na
 float showTargetPrice = na
@@ -1920,24 +1924,33 @@ bool showGradeVolume = false
 bool showGradeSmt = false
 
 if array.size(activeSetups) > 0
+    int chosenIdx = na
+    // Pass 1: newest setup that is still running.
     for i = array.size(activeSetups) - 1 to 0
         s = array.get(activeSetups, i)
         if not s.isInvalidated and not s.isTargetHit
-            showSetupDir := s.dir == "BULL" ? "BULLISH" : "BEARISH"
-            showEntryPrice := s.entryPrice
-            showInvalidationPrice := s.invalidationPrice
-            if array.size(s.targetLines) > 0
-                showTargetPrice := line.get_y1(array.get(s.targetLines, 0))
-            else
-                showTargetPrice := s.entryPrice + (s.dir == "BULL" ? 1 : -1) * rrRatio * math.abs(s.entryPrice - s.invalidationPrice)
-
-            showRiskUsd := riskType == "Percentage" ? (accountBalance * riskAmount / 100.0) : riskAmount
-            showPositionSizeVal := calculatePositionSize(showEntryPrice, showInvalidationPrice, showRiskUsd)
-            showGradeHtfFvg := s.gradeHtfFvg
-            showGradeLtfFvg := s.gradeLtfFvg
-            showGradeVolume := s.gradeVolume
-            showGradeSmt := s.gradeSmt
+            chosenIdx := i
             break
+    // Pass 2: nothing running — fall back to the newest setup regardless of state.
+    if na(chosenIdx)
+        chosenIdx := array.size(activeSetups) - 1
+
+    sel = array.get(activeSetups, chosenIdx)
+    showSetupDir := sel.dir == "BULL" ? "BULLISH" : "BEARISH"
+    showSetupStatus := sel.isInvalidated ? "INVALIDATED" : (sel.isTargetHit ? "TARGET HIT" : "ACTIVE")
+    showEntryPrice := sel.entryPrice
+    showInvalidationPrice := sel.invalidationPrice
+    if array.size(sel.targetLines) > 0
+        showTargetPrice := line.get_y1(array.get(sel.targetLines, 0))
+    else
+        showTargetPrice := sel.entryPrice + (sel.dir == "BULL" ? 1 : -1) * rrRatio * math.abs(sel.entryPrice - sel.invalidationPrice)
+
+    showRiskUsd := riskType == "Percentage" ? (accountBalance * riskAmount / 100.0) : riskAmount
+    showPositionSizeVal := calculatePositionSize(showEntryPrice, showInvalidationPrice, showRiskUsd)
+    showGradeHtfFvg := sel.gradeHtfFvg
+    showGradeLtfFvg := sel.gradeLtfFvg
+    showGradeVolume := sel.gradeVolume
+    showGradeSmt := sel.gradeSmt
 
 var table dashboardTable = table.new(
      position = f_getTablePosition(dashboardPosition),
@@ -2008,7 +2021,7 @@ if barstate.islast and showDashboard
     if showSetupDir != "NONE"
         table.cell(dashboardTable, 0, 8, "Direction:", text_color=tableTextColor, text_size=tSize, text_halign=text.align_left, text_font_family=font.family_monospace)
         table.cell(dashboardTable, 1, 8, showSetupDir, text_color=showSetupDir == "BULLISH" ? color.green : color.red, text_size=tSize, text_font_family=font.family_monospace)
-        table.cell(dashboardTable, 2, 8, "", text_size=tSize)
+        table.cell(dashboardTable, 2, 8, showSetupStatus, text_color=showSetupStatus == "ACTIVE" ? color.green : color.gray, text_size=tSize, text_font_family=font.family_monospace)
 
         table.cell(dashboardTable, 0, 9, "Entry Price:", text_color=tableTextColor, text_size=tSize, text_halign=text.align_left, text_font_family=font.family_monospace)
         table.cell(dashboardTable, 1, 9, str.tostring(showEntryPrice, format.mintick), text_color=tableTextColor, text_size=tSize, text_font_family=font.family_monospace)
@@ -2075,7 +2088,7 @@ if barstate.islast and showSetupGrade
         string gradeLetter = f_computeGrade(gradePassed, gradeTotal)
         color gradeColor = gradeLetter == "A" ? color.lime : gradeLetter == "B" ? color.green : gradeLetter == "C" ? color.orange : gradeLetter == "D" ? color.red : color.maroon
 
-        table.cell(gradeTable, 0, 1, "Grade:", text_color=tableTextColor, text_size=gTSize, text_halign=text.align_left, text_font_family=font.family_monospace)
+        table.cell(gradeTable, 0, 1, showSetupStatus == "ACTIVE" ? "Grade:" : "Grade (" + showSetupStatus + "):", text_color=tableTextColor, text_size=gTSize, text_halign=text.align_left, text_font_family=font.family_monospace)
         table.cell(gradeTable, 1, 1, gradeLetter, text_color=gradeColor, text_size=gTSize, text_font_family=font.family_monospace)
         table.cell(gradeTable, 2, 1, str.tostring(gradePassed) + "/" + str.tostring(gradeTotal), text_color=color.gray, text_size=gTSize, text_font_family=font.family_monospace)
 
