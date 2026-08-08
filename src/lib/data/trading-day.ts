@@ -58,6 +58,7 @@ export async function listTradingDays(limit = 30) {
       netPnl: cumulative,
       planAdherenceGrade: day.planAdherenceGrade,
       series,
+      hasRecap: day.sessionEndedAt != null,
     };
   });
 }

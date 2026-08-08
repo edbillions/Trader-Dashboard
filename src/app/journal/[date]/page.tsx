@@ -72,6 +72,14 @@ export default async function JournalDayPage({
         }
         actions={
           <div className="flex items-center gap-2">
+            {day.sessionEndedAt && (
+              <Link
+                href={`/live-session/recap/${date}`}
+                className="rounded-lg border border-accent/40 px-4 py-2 text-sm font-medium text-accent hover:bg-accent/10"
+              >
+                View Daily Recap
+              </Link>
+            )}
             <Link
               href={`/journal/new?date=${date}`}
               className="rounded-lg border border-border px-4 py-2 text-sm font-medium text-foreground hover:bg-surface-raised"

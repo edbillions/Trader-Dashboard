@@ -42,6 +42,7 @@ export default async function JournalPage() {
                 <th className="px-4 py-3">Trades</th>
                 <th className="px-4 py-3">Net P&L</th>
                 <th className="px-4 py-3">Plan adherence</th>
+                <th className="px-4 py-3">Recap</th>
               </tr>
             </thead>
             <tbody>
@@ -75,6 +76,18 @@ export default async function JournalPage() {
                   </td>
                   <td className="px-4 py-3 text-muted">
                     {day.planAdherenceGrade ?? "—"}
+                  </td>
+                  <td className="px-4 py-3">
+                    {day.hasRecap ? (
+                      <Link
+                        href={`/live-session/recap/${day.date}`}
+                        className="text-xs font-medium text-accent hover:underline"
+                      >
+                        View recap →
+                      </Link>
+                    ) : (
+                      <span className="text-xs text-muted">—</span>
+                    )}
                   </td>
                 </tr>
               ))}
