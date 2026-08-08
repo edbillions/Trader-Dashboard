@@ -743,7 +743,8 @@ htfFvgBearBorderColor = input.color(color.new(#1a1a1a, 55), "", inline="htf_fvg_
 // INPUTS - Group 3.6: Setup Grade
 // ========================================
 string GRP_GRADE = "Setup Grade"
-showSetupGrade = input.bool(true, "Show Setup Grade", tooltip="Adds a scored checklist (Liquidity Sweep, HTF FVG Delivery, LTF FVG, Volume, SMT Divergence) for the latest active setup to the dashboard.", group=GRP_GRADE)
+showSetupGrade = input.bool(true, "Show Setup Grade", tooltip="Adds a scored checklist (Liquidity Sweep, HTF FVG Delivery, LTF FVG, Volume, SMT Divergence) for the latest active setup, shown in its own separate table.", group=GRP_GRADE)
+gradeTablePosition = input.string("Bottom Right", "Grade Table Position", options=["Top Left", "Top Center", "Top Right", "Middle Left", "Middle Center", "Middle Right", "Bottom Left", "Bottom Center", "Bottom Right"], tooltip="Anchor position of the Setup Grade table — independent of the main dashboard's position.", group=GRP_GRADE)
 
 volumeAvgLen = input.int(20, "Volume Avg Length", minval=1, inline="grade_vol", tooltip="Lookback length for the average-volume comparison used by the Volume criterion.", group=GRP_GRADE)
 volumeMult = input.float(1.2, "x", minval=0.1, step=0.1, inline="grade_vol", tooltip="The breaker's average volume must be at least this multiple of the recent average to pass.", group=GRP_GRADE)
@@ -1843,7 +1844,7 @@ if array.size(activeSetups) > 0
 var table dashboardTable = table.new(
      position = f_getTablePosition(dashboardPosition),
      columns = 3,
-     rows = 21,
+     rows = 14,
      bgcolor = tableBgColor,
      border_width = tableBorderWidth,
      border_color = tableBorderColor,
@@ -1943,43 +1944,56 @@ if barstate.islast and showDashboard
     table.cell(dashboardTable, 1, 13, requireHtfFvgContext ? "REQUIRED" : "OFF", text_color=requireHtfFvgContext ? color.green : color.gray, text_size=tSize, text_font_family=font.family_monospace)
     table.cell(dashboardTable, 2, 13, htfFvgActiveSlots, text_color=color.gray, text_size=tSize, text_font_family=font.family_monospace)
 
-    // Setup Grade section
-    if showSetupGrade
-        table.cell(dashboardTable, 0, 14, "── SETUP GRADE ──", bgcolor=tableHeaderBgColor, text_color=tableHeaderTextColor, text_size=tSize, text_font_family=font.family_monospace)
-        table.merge_cells(dashboardTable, 0, 14, 2, 14)
+// Setup Grade: separate table, independently positioned (default bottom right)
+var table gradeTable = table.new(
+     position = f_getTablePosition(gradeTablePosition),
+     columns = 3,
+     rows = 7,
+     bgcolor = tableBgColor,
+     border_width = tableBorderWidth,
+     border_color = tableBorderColor,
+     frame_color = tableFrameColor,
+     frame_width = tableFrameWidth
+     )
 
-        if showSetupDir != "NONE"
-            int gradePassed = 1 + (showGradeHtfFvg ? 1 : 0) + (showGradeLtfFvg ? 1 : 0) + (showGradeVolume ? 1 : 0) + (enableSmtGrade and showGradeSmt ? 1 : 0)
-            int gradeTotal = 4 + (enableSmtGrade ? 1 : 0)
-            string gradeLetter = f_computeGrade(gradePassed, gradeTotal)
-            color gradeColor = gradeLetter == "A" ? color.lime : gradeLetter == "B" ? color.green : gradeLetter == "C" ? color.orange : gradeLetter == "D" ? color.red : color.maroon
+if barstate.islast and showSetupGrade
+    gTSize = f_getTableTextSize(dashboardSize)
 
-            table.cell(dashboardTable, 0, 15, "Grade:", text_color=tableTextColor, text_size=tSize, text_halign=text.align_left, text_font_family=font.family_monospace)
-            table.cell(dashboardTable, 1, 15, gradeLetter, text_color=gradeColor, text_size=tSize, text_font_family=font.family_monospace)
-            table.cell(dashboardTable, 2, 15, str.tostring(gradePassed) + "/" + str.tostring(gradeTotal), text_color=color.gray, text_size=tSize, text_font_family=font.family_monospace)
+    table.cell(gradeTable, 0, 0, "── SETUP GRADE ──", bgcolor=tableHeaderBgColor, text_color=tableHeaderTextColor, text_size=gTSize, text_font_family=font.family_monospace)
+    table.merge_cells(gradeTable, 0, 0, 2, 0)
 
-            table.cell(dashboardTable, 0, 16, "Liquidity Sweep", text_color=tableTextColor, text_size=tSize, text_halign=text.align_left, text_font_family=font.family_monospace)
-            table.cell(dashboardTable, 1, 16, "✓", text_color=color.green, text_size=tSize, text_font_family=font.family_monospace)
-            table.cell(dashboardTable, 2, 16, "", text_size=tSize)
+    if showSetupDir != "NONE"
+        int gradePassed = 1 + (showGradeHtfFvg ? 1 : 0) + (showGradeLtfFvg ? 1 : 0) + (showGradeVolume ? 1 : 0) + (enableSmtGrade and showGradeSmt ? 1 : 0)
+        int gradeTotal = 4 + (enableSmtGrade ? 1 : 0)
+        string gradeLetter = f_computeGrade(gradePassed, gradeTotal)
+        color gradeColor = gradeLetter == "A" ? color.lime : gradeLetter == "B" ? color.green : gradeLetter == "C" ? color.orange : gradeLetter == "D" ? color.red : color.maroon
 
-            table.cell(dashboardTable, 0, 17, "HTF FVG Delivery", text_color=tableTextColor, text_size=tSize, text_halign=text.align_left, text_font_family=font.family_monospace)
-            table.cell(dashboardTable, 1, 17, showGradeHtfFvg ? "✓" : "✗", text_color=showGradeHtfFvg ? color.green : color.gray, text_size=tSize, text_font_family=font.family_monospace)
-            table.cell(dashboardTable, 2, 17, "", text_size=tSize)
+        table.cell(gradeTable, 0, 1, "Grade:", text_color=tableTextColor, text_size=gTSize, text_halign=text.align_left, text_font_family=font.family_monospace)
+        table.cell(gradeTable, 1, 1, gradeLetter, text_color=gradeColor, text_size=gTSize, text_font_family=font.family_monospace)
+        table.cell(gradeTable, 2, 1, str.tostring(gradePassed) + "/" + str.tostring(gradeTotal), text_color=color.gray, text_size=gTSize, text_font_family=font.family_monospace)
 
-            table.cell(dashboardTable, 0, 18, "LTF FVG (Unicorn)", text_color=tableTextColor, text_size=tSize, text_halign=text.align_left, text_font_family=font.family_monospace)
-            table.cell(dashboardTable, 1, 18, showGradeLtfFvg ? "✓" : "✗", text_color=showGradeLtfFvg ? color.green : color.gray, text_size=tSize, text_font_family=font.family_monospace)
-            table.cell(dashboardTable, 2, 18, "", text_size=tSize)
+        table.cell(gradeTable, 0, 2, "Liquidity Sweep", text_color=tableTextColor, text_size=gTSize, text_halign=text.align_left, text_font_family=font.family_monospace)
+        table.cell(gradeTable, 1, 2, "✓", text_color=color.green, text_size=gTSize, text_font_family=font.family_monospace)
+        table.cell(gradeTable, 2, 2, "", text_size=gTSize)
 
-            table.cell(dashboardTable, 0, 19, "Volume", text_color=tableTextColor, text_size=tSize, text_halign=text.align_left, text_font_family=font.family_monospace)
-            table.cell(dashboardTable, 1, 19, showGradeVolume ? "✓" : "✗", text_color=showGradeVolume ? color.green : color.gray, text_size=tSize, text_font_family=font.family_monospace)
-            table.cell(dashboardTable, 2, 19, "", text_size=tSize)
+        table.cell(gradeTable, 0, 3, "HTF FVG Delivery", text_color=tableTextColor, text_size=gTSize, text_halign=text.align_left, text_font_family=font.family_monospace)
+        table.cell(gradeTable, 1, 3, showGradeHtfFvg ? "✓" : "✗", text_color=showGradeHtfFvg ? color.green : color.gray, text_size=gTSize, text_font_family=font.family_monospace)
+        table.cell(gradeTable, 2, 3, "", text_size=gTSize)
 
-            table.cell(dashboardTable, 0, 20, "SMT Divergence", text_color=tableTextColor, text_size=tSize, text_halign=text.align_left, text_font_family=font.family_monospace)
-            table.cell(dashboardTable, 1, 20, enableSmtGrade ? (showGradeSmt ? "✓" : "✗") : "—", text_color=enableSmtGrade ? (showGradeSmt ? color.green : color.gray) : color.gray, text_size=tSize, text_font_family=font.family_monospace)
-            table.cell(dashboardTable, 2, 20, "", text_size=tSize)
-        else
-            table.cell(dashboardTable, 0, 15, "No active setups detected.", text_color=color.gray, text_size=tSize, text_font_family=font.family_monospace)
-            table.merge_cells(dashboardTable, 0, 15, 2, 15)
-            for r = 16 to 20
-                table.cell(dashboardTable, 0, r, "", text_size=tSize)
-                table.merge_cells(dashboardTable, 0, r, 2, r)
+        table.cell(gradeTable, 0, 4, "LTF FVG (Unicorn)", text_color=tableTextColor, text_size=gTSize, text_halign=text.align_left, text_font_family=font.family_monospace)
+        table.cell(gradeTable, 1, 4, showGradeLtfFvg ? "✓" : "✗", text_color=showGradeLtfFvg ? color.green : color.gray, text_size=gTSize, text_font_family=font.family_monospace)
+        table.cell(gradeTable, 2, 4, "", text_size=gTSize)
+
+        table.cell(gradeTable, 0, 5, "Volume", text_color=tableTextColor, text_size=gTSize, text_halign=text.align_left, text_font_family=font.family_monospace)
+        table.cell(gradeTable, 1, 5, showGradeVolume ? "✓" : "✗", text_color=showGradeVolume ? color.green : color.gray, text_size=gTSize, text_font_family=font.family_monospace)
+        table.cell(gradeTable, 2, 5, "", text_size=gTSize)
+
+        table.cell(gradeTable, 0, 6, "SMT Divergence", text_color=tableTextColor, text_size=gTSize, text_halign=text.align_left, text_font_family=font.family_monospace)
+        table.cell(gradeTable, 1, 6, enableSmtGrade ? (showGradeSmt ? "✓" : "✗") : "—", text_color=enableSmtGrade ? (showGradeSmt ? color.green : color.gray) : color.gray, text_size=gTSize, text_font_family=font.family_monospace)
+        table.cell(gradeTable, 2, 6, "", text_size=gTSize)
+    else
+        table.cell(gradeTable, 0, 1, "No active setups detected.", text_color=color.gray, text_size=gTSize, text_font_family=font.family_monospace)
+        table.merge_cells(gradeTable, 0, 1, 2, 1)
+        for r = 2 to 6
+            table.cell(gradeTable, 0, r, "", text_size=gTSize)
+            table.merge_cells(gradeTable, 0, r, 2, r)
