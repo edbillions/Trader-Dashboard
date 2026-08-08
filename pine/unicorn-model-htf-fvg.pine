@@ -835,7 +835,7 @@ settings.atrfactor := input.int(10, 'Range should be within X candles', minval =
 string GRP_HTF_FLT = "HTF FVG Filter"
 enableHtfFvgFilter = input.bool(true, "Require HTF FVG Context?", tooltip="When enabled, a Unicorn only fires if a direction-matched HTF FVG exists, price has interacted with it, and the delivery condition is met. When disabled the Unicorn engine behaves exactly as it did before the merge.", group=GRP_HTF_FLT)
 htfRequireDelivery = input.bool(true, "Require Delivery?", tooltip="Interaction (price entering the gap) and delivery (price being delivered back out of it) are separate conditions. Disable to accept a bare interaction.", group=GRP_HTF_FLT, active=enableHtfFvgFilter)
-htfDeliveryMode = input.string("Close Outside FVG", "Delivery Definition", options=["Close Outside FVG", "Close Beyond CE"], tooltip="Close Outside FVG: a confirmed bar closes back beyond the far boundary (bull = above FVG top). Close Beyond CE: the looser variant, using the consequent encroachment (midpoint).", group=GRP_HTF_FLT, active=enableHtfFvgFilter and htfRequireDelivery)
+htfDeliveryMode = input.string("Tap", "Delivery Definition", options=["Tap", "Close Outside FVG", "Close Beyond CE"], tooltip="Tap (default): delivering from the PD array means price reaching the HTF FVG, so the tap itself is the delivery. Close Outside FVG: stricter - a confirmed bar must close back beyond the far boundary. Close Beyond CE: a confirmed close back beyond the midpoint.", group=GRP_HTF_FLT, active=enableHtfFvgFilter and htfRequireDelivery)
 htfRequireSweepInto = input.bool(true, "Require Sweep Into FVG?", tooltip="Associates a Unicorn with a specific FVG: the liquidity sweep that armed this setup must itself have reached into the gap. Prevents an unrelated older FVG from validating a new Unicorn.", group=GRP_HTF_FLT, active=enableHtfFvgFilter)
 htfFreshnessBars = input.int(0, "FVG Freshness (chart bars, 0 = unlimited)", minval=0, tooltip="Maximum number of chart bars between the FVG interaction and Unicorn confirmation. 0 leaves it unbounded (the per-slot FVG count is then the practical ceiling).", group=GRP_HTF_FLT, active=enableHtfFvgFilter)
 htfConsumeAfterSignal = input.bool(false, "Consume FVG After Signal?", tooltip="When enabled an HTF FVG can validate only one Unicorn signal. Off by default: an HTF FVG is context and may host several setups until it is invalidated.", group=GRP_HTF_FLT, active=enableHtfFvgFilter)
@@ -1335,13 +1335,20 @@ method UpdateFilterState(ImbalanceStructure IS) =>
                 if (imb.isbullish ? low < fTop : high > fBtm)
                     imb.fltInteracted := true
                     imb.fltInteractBar := bar_index
+                    // DELIVERY, "Tap" mode (default): delivering from the PD array
+                    // means price reaching the FVG, so the tap IS the delivery.
+                    // high/low only widen within a bar, so this is safe to set live.
+                    if htfDeliveryMode == "Tap"
+                        imb.fltDelivered := true
+                        imb.fltDeliverBar := bar_index
 
-            // DELIVERY / INVALIDATION - confirmed bars only.
+            // INVALIDATION, and the stricter delivery modes, read close - which does
+            // move intrabar - so both are gated on confirmed bars.
             if barstate.isconfirmed
                 if not imb.fltInvalidated
                     if (imb.isbullish ? close < fBtm : close > fTop)
                         imb.fltInvalidated := true
-                if imb.fltInteracted and not imb.fltDelivered and not imb.fltInvalidated
+                if htfDeliveryMode != "Tap" and imb.fltInteracted and not imb.fltDelivered and not imb.fltInvalidated
                     float dLvl = htfDeliveryMode == "Close Beyond CE" ? imb.middle : (imb.isbullish ? fTop : fBtm)
                     if (imb.isbullish ? close > dLvl : close < dLvl)
                         imb.fltDelivered := true

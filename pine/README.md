@@ -14,12 +14,11 @@ signal. Everything the merge added is marked `HTF FVG FILTER` in the source.
 
 ## The signal
 
-A Unicorn fires only when **all four** conditions hold:
+A Unicorn fires only when all of these hold:
 
 ```
   direction-matched HTF FVG exists
-+ price has interacted with it
-+ delivery condition satisfied
++ price has tapped it        <- the tap IS the delivery (see below)
 + LTF Unicorn setup confirms
 = VALID SIGNAL
 ```
@@ -27,31 +26,44 @@ A Unicorn fires only when **all four** conditions hold:
 Directional match is mandatory and has no toggle — a bullish Unicorn requires a bullish HTF FVG,
 a bearish Unicorn requires a bearish one. Opposite-direction pairings never fire.
 
-### Interaction vs delivery
+### Interaction and delivery
 
-These are deliberately different tests.
+**Delivery means the tap.** Price reaching the HTF FVG *is* price delivering from it, so in the
+default `Tap` mode interaction and delivery are the same event and the filter reduces to:
 
-| | Interaction | Delivery (default mode) |
+```
+direction-matched HTF FVG + price tapped it + LTF Unicorn = SIGNAL
+```
+
+| | Test (default `Tap` mode) |
+|---|---|
+| Bullish | `low < fvgTop` — price reached into the gap |
+| Bearish | `high > fvgBottom` |
+
+This reuses the `Touched` semantics already in the FVG engine's `CheckMitigated` — no second
+calculation. It also reads only `high`/`low`, which can only widen within a bar, so it never
+needs a bar-close gate and cannot repaint.
+
+Two stricter modes are available under `Delivery Definition` if you ever want to demand a
+reaction rather than just a tap. Both require a **confirmed** close and therefore only resolve at
+bar close:
+
+| Mode | Bullish | Bearish |
 |---|---|---|
-| Bullish | `low < fvgTop` — price entered the gap | `close > fvgTop` on a **confirmed** bar — price delivered back out |
-| Bearish | `high > fvgBottom` | `close < fvgBottom` on a **confirmed** bar |
-
-Interaction reuses the `Touched` semantics already in the FVG engine's `CheckMitigated`.
-Delivery means price *left* the gap in the signal direction — price slicing straight through
-never satisfies it, which is the whole point of having it as a separate condition.
-
-`Delivery Definition` can be relaxed to `Close Beyond CE`, which uses the gap's midpoint
-(consequent encroachment) instead of the far boundary.
+| `Close Outside FVG` | `close > fvgTop` | `close < fvgBottom` |
+| `Close Beyond CE` | `close > fvgMid` | `close < fvgMid` |
 
 ### Ordering
 
 ```
 HTF FVG forms (confirmed HTF bar)
-  └─ interaction      bar i
-      └─ delivery     bar j ≥ i    same bar allowed — the wick-in / close-out rejection candle
-          └─ Unicorn  bar k ≥ j    same bar allowed
-              └─ SIGNAL
+  └─ tap / delivery   bar i
+      └─ Unicorn      bar k ≥ i    same bar allowed
+          └─ SIGNAL
 ```
+
+The sweep low that arms a bullish setup is typically itself the tap into the bullish HTF FVG
+below, so the same bar routinely satisfies both.
 
 ### Association
 
@@ -69,8 +81,8 @@ One new group, **`HTF FVG Filter`**:
 | Input | Default | Meaning |
 |---|---|---|
 | Require HTF FVG Context? | `true` | Master switch. Off ⇒ the Unicorn behaves exactly as before the merge. |
-| Require Delivery? | `true` | Off ⇒ a bare interaction qualifies. |
-| Delivery Definition | `Close Outside FVG` | or `Close Beyond CE` (looser). |
+| Require Delivery? | `true` | No effect in `Tap` mode, where the tap is the delivery. |
+| Delivery Definition | `Tap` | The tap is the delivery. Or `Close Outside FVG` / `Close Beyond CE` for a stricter reaction. |
 | Require Sweep Into FVG? | `true` | Association rule, above. |
 | FVG Freshness (chart bars) | `0` | Max bars from interaction to confirmation. `0` = unlimited. |
 | Consume FVG After Signal? | `false` | On ⇒ each FVG validates at most one signal. |
@@ -100,10 +112,12 @@ Unicorn Detected:  YES   BULL
 HTF FVG Found:     YES   1H
 Direction Match:   YES
 FVG Interacted:    YES   12 bars ago
-Delivery:          NO          Close Outside FVG
+Delivery:          YES   Tap
 Final Signal:      NO
-Blocked At:        DELIVERY
+Blocked At:        ASSOCIATION
 ```
+
+In `Tap` mode `FVG Interacted` and `Delivery` always agree — they are the same event.
 
 These are text rows on the table that already existed — no chart objects, no clutter when off.
 The validating FVG is also appended to the setup label's tooltip.
@@ -116,12 +130,15 @@ The validating FVG is also appended to the setup label's tooltip.
 |---|---|
 | HTF FVG detection | Unchanged. `lookahead_on` with an offset of ≥1 bar reads only closed HTF bars — the standard non-repainting idiom, not a future leak. |
 | Interaction | Reads `high`/`low`, which only ever widen within a bar, so it cannot flip back. Safe to evaluate live. |
-| Delivery / invalidation | Read `close`, which does move intrabar, so both are gated on `barstate.isconfirmed`. |
+| Delivery (`Tap`, default) | Same event as interaction, so same guarantee — no bar-close gate needed. |
+| Delivery (`Close …` modes) / invalidation | Read `close`, which does move intrabar, so both are gated on `barstate.isconfirmed`. |
 | All filter flags | Latch `false → true` only. No past bar's decision can be rewritten. |
 
-Historical and realtime agree **at bar close**, which is also when the Unicorn's own
-`alert.freq_once_per_bar_close` fires. The only realtime difference is that a filtered setup now
-appears at the close rather than flickering intrabar — strictly more conservative.
+In the default `Tap` mode nothing in the filter reads `close`, so the filter adds no bar-close
+dependency at all: it resolves the moment price touches the gap, historically and in realtime
+alike. Under the stricter `Close …` modes, historical and realtime agree **at bar close**, which
+is also when the Unicorn's own `alert.freq_once_per_bar_close` fires; the only realtime
+difference there is that a filtered setup appears at the close rather than flickering intrabar.
 
 **Pre-existing** repaint characteristics of the Unicorn engine were not changed and are not fixed
 here: its swing-level detection reads the forming HTF bar, and setup confirmation is evaluated
@@ -156,7 +173,7 @@ every bar. Guarded.
 | No HTF FVG at all | No signal |
 | Opposite-direction FVG only | No signal — direction match fails |
 | Multiple qualifying FVGs | Most recently interacted wins; named in the tooltip |
-| FVG filled between delivery and Unicorn | Invalidation latches → no longer qualifies |
+| FVG closed through between the tap and the Unicorn | Invalidation latches → no longer qualifies |
 | FVG trimmed by the per-slot count | Signal lost. The slot's max count is the de-facto freshness ceiling. |
 | **Chart TF at or above every filter TF** | The FVG engine cannot build those FVGs at all, so the filter **auto-bypasses** and the dashboard shows `N/A (no valid TF)` in orange. Failing loud beats going silently dead. |
 | FVGs formed before the script loaded | Only tracked from the bar they are registered on — the filter cannot know about interactions that predate the FVG's own creation. |
@@ -199,9 +216,10 @@ what prove the merge didn't disturb either engine.
 4. Every surviving signal shows a direction-matched HTF FVG on the chart.
 5. Bullish Unicorn with only a bearish HTF FVG nearby → no signal, diagnostic reads `DIRECTION`.
 6. Unicorn with no HTF FVG in range → filtered, diagnostic reads `NO HTF FVG`.
-7. Price slicing straight through a gap → `Interacted: YES`, `Delivery: NO`, no signal.
-   *This is the case that proves interaction ≠ delivery.*
-8. Wick-in / close-out rejection candle that is also the breaker close-through bar → fires.
+7. A Unicorn whose sweep tapped a direction-matched HTF FVG → fires, tooltip names the FVG.
+8. Switch `Delivery Definition` to `Close Outside FVG`: a Unicorn where price sliced straight
+   through the gap without closing back outside now filters out (`Blocked At: DELIVERY`), and
+   fires again on `Tap`. Confirms the stricter modes still work.
 9. `Require Sweep Into FVG?` on, Unicorn whose sweep never reached the gap → filtered; off → fires.
 
 **C. Non-repainting**
