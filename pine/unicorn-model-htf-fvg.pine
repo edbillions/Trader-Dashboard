@@ -51,6 +51,8 @@ type Setup
     label levelLabel          // Text label at origin of level line
     box breakerBox            // Box drawing for breaker
     box fvgBox                // Box drawing for FVG
+    box htfFvgBox             // HTF FVG FILTER: the HTF FVG that validated this setup
+    label htfFvgLabel         // HTF FVG FILTER: its timeframe/direction caption
     line[] targetLines        // Array of lines for target projections
     label[] targetLabels      // Array of labels for targets
     label setupLabel          // Monospaced text label (+Unicorn / -Breaker)
@@ -643,6 +645,11 @@ bearColorInactive = input.color(color.new(#787b86, 85), "", inline="bear_breaker
 
 bearFvgColor = input.color(color.new(#f23645, 70), "Bear FVG", tooltip="Highlight color for overlapping Fair Value Gaps inside bearish breakers (default opacity 30%).", group=GRP_STYLE)
 
+// HTF FVG FILTER: the setup-linked higher-timeframe FVG zone. More transparent
+// than the breaker-internal FVG above so it reads as background context.
+htfBullFvgColor = input.color(color.new(#089981, 88), "HTF Bull FVG", tooltip="Fill color for the higher-timeframe FVG that validated a bullish setup.", group=GRP_STYLE)
+htfBearFvgColor = input.color(color.new(#f23645, 88), "HTF Bear FVG", tooltip="Fill color for the higher-timeframe FVG that validated a bearish setup.", group=GRP_STYLE)
+
 // Line Styles
 sweepLineColor = input.color(color.gray, "Sweep Line", inline="sweep_line_inline", tooltip="Color of the horizontal line marking swept liquidity levels.", group=GRP_STYLE)
 sweepLineStyle = input.string("Dotted", "", options=["Solid", "Dashed", "Dotted"], inline="sweep_line_inline", tooltip="Style of the sweep line.", group=GRP_STYLE)
@@ -839,6 +846,7 @@ htfDeliveryMode = input.string("Tap", "Delivery Definition", options=["Tap", "Cl
 htfRequireSweepInto = input.bool(true, "Require Sweep Into FVG?", tooltip="Associates a Unicorn with a specific FVG: the liquidity sweep that armed this setup must itself have reached into the gap. Prevents an unrelated older FVG from validating a new Unicorn.", group=GRP_HTF_FLT, active=enableHtfFvgFilter)
 htfFreshnessBars = input.int(0, "FVG Freshness (chart bars, 0 = unlimited)", minval=0, tooltip="Maximum number of chart bars between the FVG interaction and Unicorn confirmation. 0 leaves it unbounded (the per-slot FVG count is then the practical ceiling).", group=GRP_HTF_FLT, active=enableHtfFvgFilter)
 htfConsumeAfterSignal = input.bool(false, "Consume FVG After Signal?", tooltip="When enabled an HTF FVG can validate only one Unicorn signal. Off by default: an HTF FVG is context and may host several setups until it is invalidated.", group=GRP_HTF_FLT, active=enableHtfFvgFilter)
+htfFvgShowMode = input.string("Setup Only", "Show HTF FVGs", options=["Setup Only", "All", "None"], tooltip="Setup Only (default): draw only the HTF FVG that validated a setup, as part of that setup. All: the source indicator's full rendering, every FVG on every enabled timeframe. None: draw nothing, the filter still works. Detection and filtering are unaffected by this setting.", group=GRP_HTF_FLT)
 showFilterDebug = input.bool(false, "Show Filter Diagnostic?", tooltip="Adds a diagnostic section to the dashboard showing how far the last Unicorn candidate got through the filter, and which condition blocked it.", group=GRP_HTF_FLT)
 
 // Which HTF FVG timeframe slots feed the filter. Slots themselves are configured
@@ -1113,7 +1121,9 @@ method clear(Imbalance imb) =>
 // AddZone is used to display and manage imbalance related boxes
 method AddZone(ImbalanceStructure IS, Imbalance imb, int step) =>
     bool visible = true
-    if IS.settings.show
+    // HTF FVG FILTER: htfFvgShowMode gates drawing only - detection and the
+    // filter's own tracking are untouched by it.
+    if IS.settings.show and htfFvgShowMode == 'All'
         int buffer = time + (time - time[1]) * (settings.extend + 1 + settings.buffer * (step - 1))
 
         if imb.mitigated and not settings.mitigated_show
@@ -1362,6 +1372,9 @@ method FilterScan(ImbalanceStructure IS, bool wantBull, float sweepExtreme, int 
     bool ok = false
     string tf = ""
     int ibar = -1
+    float bTop = na     // geometry of the winning FVG, for the setup-linked drawing
+    float bBtm = na
+    int bT0 = na
     bool anyF = false   // any live FVG in this set
     bool anyD = false   // ...matching the Unicorn's direction
     bool anyI = false   // ...that price has interacted with
@@ -1388,7 +1401,10 @@ method FilterScan(ImbalanceStructure IS, bool wantBull, float sweepExtreme, int 
                                 ok := true
                                 ibar := imb.fltInteractBar
                                 tf := IS.settings.tfLabel
-    [ok, tf, ibar, anyF, anyD, anyI, anyDv]
+                                bTop := fTop
+                                bBtm := fBtm
+                                bT0 := imb.open_time
+    [ok, tf, ibar, bTop, bBtm, bT0, anyF, anyD, anyI, anyDv]
 
 // Retire the FVG that validated a signal (only when consumption is enabled).
 method MarkConsumed(ImbalanceStructure IS, bool wantBull, int interactBar) =>
@@ -1441,6 +1457,9 @@ f_htfContext(bool wantBull, float sweepExtreme, int confBar) =>
     bool ok = not htfFilterActive   // filter off / no valid TF -> bypass
     string tf = ""
     int ibar = -1
+    float top = na
+    float btm = na
+    int t0 = na
     bool anyF = false
     bool anyD = false
     bool anyI = false
@@ -1448,7 +1467,7 @@ f_htfContext(bool wantBull, float sweepExtreme, int confBar) =>
 
     if htfFilterActive
         for IS in htfFvgSets
-            [sOk, sTf, sBar, sF, sD, sI, sDv] = IS.FilterScan(wantBull, sweepExtreme, confBar)
+            [sOk, sTf, sBar, sTop, sBtm, sT0, sF, sD, sI, sDv] = IS.FilterScan(wantBull, sweepExtreme, confBar)
             anyF := anyF or sF
             anyD := anyD or sD
             anyI := anyI or sI
@@ -1457,7 +1476,10 @@ f_htfContext(bool wantBull, float sweepExtreme, int confBar) =>
                 ok := true
                 ibar := sBar
                 tf := sTf
-    [ok, tf, ibar, anyF, anyD, anyI, anyDv]
+                top := sTop
+                btm := sBtm
+                t0 := sT0
+    [ok, tf, ibar, top, btm, t0, anyF, anyD, anyI, anyDv]
 
 f_htfConsume(bool wantBull, int interactBar) =>
     if htfConsumeAfterSignal and interactBar >= 0
@@ -1776,7 +1798,7 @@ if not na(pendingBullSweepIdx)
                 // ---------------- HTF FVG FILTER (see section header above) -----------
                 // The ONLY place the Unicorn engine is gated. Everything below this line
                 // (Setup construction, drawing, activation alert) is upstream code.
-                [htfOk, htfTf, htfBar, htfAnyF, htfAnyD, htfAnyI, htfAnyDv] = f_htfContext(true, pendingBullSweepExtreme, bar_index)
+                [htfOk, htfTf, htfBar, htfTop, htfBtm, htfT0, htfAnyF, htfAnyD, htfAnyI, htfAnyDv] = f_htfContext(true, pendingBullSweepExtreme, bar_index)
                 if showFilterDebug
                     dbgDir := "BULL"
                     dbgFvgAny := htfAnyF
@@ -1864,6 +1886,29 @@ if not na(pendingBullSweepIdx)
                                  xloc = xloc.bar_index
                                  )
                         
+                        // HTF FVG FILTER: setup-linked HTF FVG zone
+                        if htfFvgShowMode == "Setup Only" and htfOk and not na(htfTop)
+                            newBull.htfFvgBox := box.new(
+                                 left = htfT0,
+                                 top = htfTop,
+                                 right = time,
+                                 bottom = htfBtm,
+                                 border_color = color.new(na, na),
+                                 bgcolor = htfBullFvgColor,
+                                 xloc = xloc.bar_time
+                                 )
+                            newBull.htfFvgLabel := label.new(
+                                 x = time,
+                                 y = htfBtm,
+                                 text = htfTf + " Bull FVG",
+                                 xloc = xloc.bar_time,
+                                 color = color.new(na, na),
+                                 textcolor = labelTextColor,
+                                 style = label.style_label_up,
+                                 size = f_getLabelSize(labelSizeStr),
+                                 text_font_family = font.family_monospace
+                                 )
+
                         labelText = hasFvg ? "+Unicorn" : "+Breaker"
                         tooltipText = "Setup: " + (hasFvg ? "Bullish Unicorn" : "Bullish Breaker") + "\n" +
                                      "Swept Level: " + str.tostring(newBull.sweptLevel, format.mintick) + "\n" +
@@ -1966,7 +2011,7 @@ if not na(pendingBearSweepIdx)
                 // ---------------- HTF FVG FILTER (see section header above) -----------
                 // The ONLY place the Unicorn engine is gated. Everything below this line
                 // (Setup construction, drawing, activation alert) is upstream code.
-                [htfOk, htfTf, htfBar, htfAnyF, htfAnyD, htfAnyI, htfAnyDv] = f_htfContext(false, pendingBearSweepExtreme, bar_index)
+                [htfOk, htfTf, htfBar, htfTop, htfBtm, htfT0, htfAnyF, htfAnyD, htfAnyI, htfAnyDv] = f_htfContext(false, pendingBearSweepExtreme, bar_index)
                 if showFilterDebug
                     dbgDir := "BEAR"
                     dbgFvgAny := htfAnyF
@@ -2054,6 +2099,29 @@ if not na(pendingBearSweepIdx)
                                  xloc = xloc.bar_index
                                  )
                         
+                        // HTF FVG FILTER: setup-linked HTF FVG zone
+                        if htfFvgShowMode == "Setup Only" and htfOk and not na(htfTop)
+                            newBear.htfFvgBox := box.new(
+                                 left = htfT0,
+                                 top = htfTop,
+                                 right = time,
+                                 bottom = htfBtm,
+                                 border_color = color.new(na, na),
+                                 bgcolor = htfBearFvgColor,
+                                 xloc = xloc.bar_time
+                                 )
+                            newBear.htfFvgLabel := label.new(
+                                 x = time,
+                                 y = htfTop,
+                                 text = htfTf + " Bear FVG",
+                                 xloc = xloc.bar_time,
+                                 color = color.new(na, na),
+                                 textcolor = labelTextColor,
+                                 style = label.style_label_down,
+                                 size = f_getLabelSize(labelSizeStr),
+                                 text_font_family = font.family_monospace
+                                 )
+
                         labelText = hasFvg ? "-Unicorn" : "-Breaker"
                         tooltipText = "Setup: " + (hasFvg ? "Bearish Unicorn" : "Bearish Breaker") + "\n" +
                                      "Swept Level: " + str.tostring(newBear.sweptLevel, format.mintick) + "\n" +
@@ -2164,6 +2232,9 @@ if array.size(activeSetups) > 0
                     box.delete(setup.breakerBox)
                     if not na(setup.fvgBox)
                         box.delete(setup.fvgBox)
+                    if not na(setup.htfFvgBox)
+                        box.delete(setup.htfFvgBox)
+                        label.delete(setup.htfFvgLabel)
                     label.delete(setup.setupLabel)
                     for l in setup.targetLines
                         line.delete(l)
@@ -2176,6 +2247,9 @@ if array.size(activeSetups) > 0
                     box.set_bgcolor(setup.breakerBox, setup.dir == "BULL" ? bullColorInactive : bearColorInactive)
                     if not na(setup.fvgBox)
                         box.set_bgcolor(setup.fvgBox, setup.dir == "BULL" ? bullColorInactive : bearColorInactive)
+                    if not na(setup.htfFvgBox)
+                        box.set_bgcolor(setup.htfFvgBox, setup.dir == "BULL" ? bullColorInactive : bearColorInactive)
+                        label.set_textcolor(setup.htfFvgLabel, setup.dir == "BULL" ? bullColorInactive : bearColorInactive)
                     label.set_textcolor(setup.setupLabel, setup.dir == "BULL" ? bullColorInactive : bearColorInactive)
                     
                     for l in setup.targetLines
@@ -2188,6 +2262,9 @@ if array.size(activeSetups) > 0
                 // Extend breaker box only (FVG and targets are static)
                 box.set_right(setup.breakerBox, bar_index)
                 label.set_x(setup.setupLabel, bar_index)
+                if not na(setup.htfFvgBox)
+                    box.set_right(setup.htfFvgBox, time)
+                    label.set_x(setup.htfFvgLabel, time)
                 
                 // Track targets hit
                 int activeTargets = 0
@@ -2226,6 +2303,9 @@ while array.size(activeSetups) > historyCount
     box.delete(oldSetup.breakerBox)
     if not na(oldSetup.fvgBox)
         box.delete(oldSetup.fvgBox)
+    if not na(oldSetup.htfFvgBox)
+        box.delete(oldSetup.htfFvgBox)
+        label.delete(oldSetup.htfFvgLabel)
     label.delete(oldSetup.setupLabel)
     for l in oldSetup.targetLines
         line.delete(l)
@@ -2244,7 +2324,7 @@ if alertPotential and barstate.isrealtime and not barstate.isconfirmed and bar_i
             [bTop, bBtm] = f_getSeriesRange(startOff, endOff)
             if close > bTop and bBtm >= pendingBullSweepExtreme
                 // HTF FVG FILTER: don't pre-announce a setup the filter would reject
-                [pOk, pTf, pBar, pAnyF, pAnyD, pAnyI, pAnyDv] = f_htfContext(true, pendingBullSweepExtreme, bar_index)
+                [pOk, pTf, pBar, pTop, pBtm, pT0, pAnyF, pAnyD, pAnyI, pAnyDv] = f_htfContext(true, pendingBullSweepExtreme, bar_index)
                 if pOk
                     alert("Potential Breaker: Potential Bullish Breaker forming on " + syminfo.ticker, alert.freq_once_per_bar)
                     lastPotentialAlertBar := bar_index
@@ -2256,7 +2336,7 @@ if alertPotential and barstate.isrealtime and not barstate.isconfirmed and bar_i
             [bTop, bBtm] = f_getSeriesRange(startOff, endOff)
             if close < bBtm and bTop <= pendingBearSweepExtreme
                 // HTF FVG FILTER: don't pre-announce a setup the filter would reject
-                [pOk, pTf, pBar, pAnyF, pAnyD, pAnyI, pAnyDv] = f_htfContext(false, pendingBearSweepExtreme, bar_index)
+                [pOk, pTf, pBar, pTop, pBtm, pT0, pAnyF, pAnyD, pAnyI, pAnyDv] = f_htfContext(false, pendingBearSweepExtreme, bar_index)
                 if pOk
                     alert("Potential Breaker: Potential Bearish Breaker forming on " + syminfo.ticker, alert.freq_once_per_bar)
                     lastPotentialAlertBar := bar_index

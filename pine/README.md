@@ -86,11 +86,38 @@ One new group, **`HTF FVG Filter`**:
 | Require Sweep Into FVG? | `true` | Association rule, above. |
 | FVG Freshness (chart bars) | `0` | Max bars from interaction to confirmation. `0` = unlimited. |
 | Consume FVG After Signal? | `false` | On ⇒ each FVG validates at most one signal. |
+| Show HTF FVGs | `Setup Only` | `Setup Only` draws only the FVG that validated a setup. `All` = the source indicator's full rendering. `None` = draw nothing. |
 | Show Filter Diagnostic? | `false` | Adds the diagnostic rows to the dashboard. |
 | Slot 1…6 | `2,3,4` on | Which HTF FVG timeframe slots may validate a Unicorn. Defaults = 15m / 1H / 4H. |
 
 Slot defaults match the HTF FVG levels in the dashboard's own setup grader
 (`src/app/setup-grader/grading.ts`: `15M FVG`, `1H FVG`, `4H FVG`).
+
+---
+
+## Visuals
+
+By default (`Show HTF FVGs = Setup Only`) the chart shows **only the HTF FVG that validated the
+current setup** — not every FVG on every enabled timeframe. It is drawn as a single shaded zone
+spanning from where the gap formed to the current bar, captioned with its timeframe and
+direction (`1H Bull FVG`), coloured by `HTF Bull FVG` / `HTF Bear FVG` in *Style Settings*.
+
+That zone belongs to the setup: it extends with it, greys out when the setup invalidates, and is
+deleted when the setup drops off the history limit — exactly like the breaker box.
+
+Detection and filtering are completely unaffected by this setting. Every FVG on every enabled
+slot is still tracked in memory; the mode only decides what is drawn.
+
+| Mode | Drawn |
+|---|---|
+| `Setup Only` *(default)* | One zone per setup — the FVG that validated it |
+| `All` | The source indicator's full rendering, every FVG on every enabled timeframe |
+| `None` | Nothing; the filter still works |
+
+With the filter disabled *and* the mode left on `Setup Only`, no HTF FVGs appear at all — there
+is no association to draw. Switch to `All` if you want the plain FVG display back.
+
+Everything else is untouched: Unicorn boxes, labels, targets, colours and alerts are as they were.
 
 ---
 
@@ -183,12 +210,14 @@ every bar. Guarded.
 ## Performance
 
 fadi's engine draws up to 4 lines + 1 linefill + 3 labels **per FVG**, and TradingView caps lines
-and labels at 500 each. At the original defaults (6 slots × 20) the merged script would need
-~480 lines and ~360 labels before the Unicorn's own drawings.
+and labels at 500 each. At the original defaults (6 slots × 20 FVGs) the merged script would have
+needed ~480 lines and ~360 labels before the Unicorn drew anything.
 
-Per-slot FVG counts are therefore defaulted lower — **8 / 8 / 8 / 6 / 4 / 2** instead of
-20/20/20/10/10/2 — for ~192 lines and ~144 labels. All still user-editable. If you raise them,
-watch the object count.
+The default `Setup Only` display removes that problem outright: the FVG engine draws nothing, and
+each setup adds exactly **one box and one label**. Per-slot FVG counts are still defaulted lower
+than upstream — **8 / 8 / 8 / 6 / 4 / 2** rather than 20/20/20/10/10/2 — because switching to
+`All` brings the full rendering back; raise them if you stay on `Setup Only`, where the count only
+governs how much filter memory each slot keeps.
 
 `request.*` calls: 4 (Unicorn) + 18 (6 slots × 3) + 2 (ATR) = **24**, within Pine's limit of 40.
 
@@ -207,8 +236,8 @@ what prove the merge didn't disturb either engine.
 **A. Regression (filter OFF)**
 1. `Require HTF FVG Context? = false`, side by side with the original Unicorn Model → signals,
    boxes, labels, targets identical bar for bar.
-2. Side by side with the original HTF FVG indicator, slot settings matched → FVG lines, fills, CE
-   lines, labels and mitigation identical.
+2. Set `Show HTF FVGs = All`, side by side with the original HTF FVG indicator, slot settings
+   matched → FVG lines, fills, CE lines, labels and mitigation identical.
 3. Cycle `mitigated_type` through all six options with the filter **on** → FVG display changes,
    the set of Unicorn signals does not.
 
@@ -221,6 +250,10 @@ what prove the merge didn't disturb either engine.
    through the gap without closing back outside now filters out (`Blocked At: DELIVERY`), and
    fires again on `Tap`. Confirms the stricter modes still work.
 9. `Require Sweep Into FVG?` on, Unicorn whose sweep never reached the gap → filtered; off → fires.
+
+9b. Back on `Setup Only`: exactly one HTF FVG zone is drawn per setup, captioned with the same
+    timeframe the tooltip names. It extends with the setup, greys on invalidation, and disappears
+    when the setup is trimmed. `None` draws no zone but the same signals still fire.
 
 **C. Non-repainting**
 10. Record every signal over three sessions, reload the chart → identical set, identical bars.
