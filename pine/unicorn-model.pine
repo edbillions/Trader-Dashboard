@@ -1364,10 +1364,15 @@ if not na(pendingBullSweepIdx) and setupEvalOk
                 [fvgT, fvgB, fvgIdx, fvgRightIdx] = f_findBullishFVG(breakerT, breakerB, breakerStartBar, enableFvgAtrFilter, fvgAtrMult)
                 hasFvg = not na(fvgIdx)
                 htfFvgOkBull = not requireHtfFvgContext or f_hasTappedHtfFvg(true)
-                // Zone Entry: displacement is confirmed by the FVG existing, and price is holding
-                // above its bottom — entry sits in the breaker/FVG zone near the invalidation.
+                // Zone Entry: the overlapping FVG exists, price is holding above its bottom, and
+                // price is STILL INSIDE the breaker zone. That last clause is what makes this an
+                // entry rather than a chase — without it the trigger fires whenever the remaining
+                // gates happen to align, which for an FVG that formed several bars back means the
+                // zone gets drawn where it happened while entry lands far above it, late and wide
+                // of the stop. If price has already left the breaker there is no zone entry left
+                // to take, so the setup is skipped rather than printed at a chased price.
                 // Breaker Break: original rule, waits for a close above the entire breaker range.
-                bool triggeredBull = entryTrigger == "Breaker Break" ? close > breakerT : (hasFvg and close > fvgB)
+                bool triggeredBull = entryTrigger == "Breaker Break" ? close > breakerT : (hasFvg and close > fvgB and close < breakerT)
 
                 if triggeredBull and (not unicornMode or (unicornMode and hasFvg)) and htfFvgOkBull
                     float invPrice = useSwingInvalidation ? pendingBullSweepExtreme : breakerB
@@ -1597,7 +1602,9 @@ if not na(pendingBearSweepIdx) and setupEvalOk
                 [fvgT, fvgB, fvgIdx, fvgRightIdx] = f_findBearishFVG(breakerT, breakerB, breakerStartBar, enableFvgAtrFilter, fvgAtrMult)
                 hasFvg = not na(fvgIdx)
                 htfFvgOkBear = not requireHtfFvgContext or f_hasTappedHtfFvg(false)
-                bool triggeredBear = entryTrigger == "Breaker Break" ? close < breakerB : (hasFvg and close < fvgT)
+                // Mirrors the bullish trigger — see the note there on why price must still be
+                // inside the breaker zone for a Zone Entry to count.
+                bool triggeredBear = entryTrigger == "Breaker Break" ? close < breakerB : (hasFvg and close < fvgT and close > breakerB)
 
                 if triggeredBear and (not unicornMode or (unicornMode and hasFvg)) and htfFvgOkBear
                     float invPrice = useSwingInvalidation ? pendingBearSweepExtreme : breakerT
@@ -2047,11 +2054,13 @@ if barstate.islast and showDashboard
                 signalStatus := "BULL: size filter"
             else
                 [dFt, dFb, dFi, dFr] = f_findBullishFVG(dTop, dBtm, bar_index - dEnd, enableFvgAtrFilter, fvgAtrMult)
-                bool dTrig = entryTrigger == "Breaker Break" ? close > dTop : (not na(dFi) and close > dFb)
+                bool dTrig = entryTrigger == "Breaker Break" ? close > dTop : (not na(dFi) and close > dFb and close < dTop)
                 if unicornMode and na(dFi)
                     signalStatus := "BULL: no LTF FVG"
                 else if not dTrig
-                    signalStatus := entryTrigger == "Breaker Break" ? "BULL: close < breaker top" : "BULL: below FVG"
+                    // Separate "hasn't reached the zone" from "already left it" — the second means
+                    // the move was missed, not that it is still pending.
+                    signalStatus := entryTrigger == "Breaker Break" ? "BULL: close < breaker top" : (close >= dTop ? "BULL: extended past zone" : "BULL: below FVG")
                 else if requireHtfFvgContext and not f_hasTappedHtfFvg(true)
                     signalStatus := "BULL: no HTF FVG tap"
                 else if close - (useSwingInvalidation ? pendingBullSweepExtreme : dBtm) <= 0
@@ -2074,11 +2083,11 @@ if barstate.islast and showDashboard
                 signalStatus := "BEAR: size filter"
             else
                 [dFt, dFb, dFi, dFr] = f_findBearishFVG(dTop, dBtm, bar_index - dEnd, enableFvgAtrFilter, fvgAtrMult)
-                bool dTrig = entryTrigger == "Breaker Break" ? close < dBtm : (not na(dFi) and close < dFt)
+                bool dTrig = entryTrigger == "Breaker Break" ? close < dBtm : (not na(dFi) and close < dFt and close > dBtm)
                 if unicornMode and na(dFi)
                     signalStatus := "BEAR: no LTF FVG"
                 else if not dTrig
-                    signalStatus := entryTrigger == "Breaker Break" ? "BEAR: close > breaker btm" : "BEAR: above FVG"
+                    signalStatus := entryTrigger == "Breaker Break" ? "BEAR: close > breaker btm" : (close <= dBtm ? "BEAR: extended past zone" : "BEAR: above FVG")
                 else if requireHtfFvgContext and not f_hasTappedHtfFvg(false)
                     signalStatus := "BEAR: no HTF FVG tap"
                 else if (useSwingInvalidation ? pendingBearSweepExtreme : dTop) - close <= 0
