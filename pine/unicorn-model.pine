@@ -695,6 +695,7 @@ unicornMode = input.bool(true, "Unicorn Mode?", tooltip="When enabled, filters o
 useSwingInvalidation = input.bool(false, "Use Swing as Invalidation?", tooltip="When enabled, invalidation occurs at the extreme high/low of the sweep leg. When disabled, invalidation occurs at the opposite extreme of the breaker block.", group=GRP_GEN)
 discardInvalidated = input.bool(false, "Discard Invalidated from History?", tooltip="When enabled, completely deletes invalidated setups from the chart. When disabled, retains them but changes their color to grey.", group=GRP_GEN)
 setupConfirmMode = input.string("Real-Time", "Setup Detection", options=["Real-Time", "Bar Close"], tooltip="Real-Time: a setup prints the moment its conditions are met inside the forming bar, so you catch it live. Because the bar is still moving, a setup can appear and then disappear if price pulls back before the bar closes. Bar Close: a setup is only created from a closed bar — it can never appear then vanish, but you see it up to one full bar later.", group=GRP_GEN)
+entryTrigger = input.string("Zone Entry", "Entry Trigger", options=["Zone Entry", "Breaker Break"], tooltip="What fires the setup once the sweep, breaker and FVG all exist.\n\nZone Entry: fires as soon as displacement is confirmed — the overlapping FVG has formed and price is holding above it (below it for shorts). Entry lands in the breaker/FVG zone, close to the invalidation, which is the tight-stop entry the model is built around.\n\nBreaker Break: the original rule — waits for a close beyond the FULL breaker range. When the breaker run is tall this fires much later and far from the stop, so risk per trade balloons.", group=GRP_GEN)
 enableFvgAtrFilter = input.bool(false, "Enable FVG ATR Filter", tooltip="If enabled, FVGs must be larger than a multiplier of ATR to be considered valid.", group=GRP_GEN)
 fvgAtrMult = input.float(0.5, "FVG ATR Multiplier", minval=0.0, step=0.1, tooltip="ATR multiplier for minimum FVG height.", group=GRP_GEN, active=enableFvgAtrFilter)
 
@@ -1323,15 +1324,21 @@ if not na(pendingBullSweepIdx) and setupEvalOk
     if not na(startOffset)
         [breakerT, breakerB] = f_getSeriesRange(startOffset, endOffset)
 
-        // Validation: Breaker bottom must not be below (more extreme than) the sweep low extreme
-        if close > breakerT and breakerB >= pendingBullSweepExtreme and f_isInSession()
+        // Validation: Breaker bottom must not be below (more extreme than) the sweep low extreme.
+        // The directional trigger is evaluated further down so the FVG can be found first —
+        // Zone Entry needs the FVG's location, which the old `close > breakerT` gate ran before.
+        if breakerB >= pendingBullSweepExtreme and f_isInSession()
             if f_checkSizeFilter(breakerT, breakerB, sizeFilterMode, minBreakerSize, maxBreakerSize, breakerSizeUnit)
                 breakerStartBar = bar_index - endOffset
                 [fvgT, fvgB, fvgIdx, fvgRightIdx] = f_findBullishFVG(breakerT, breakerB, breakerStartBar, enableFvgAtrFilter, fvgAtrMult)
                 hasFvg = not na(fvgIdx)
                 htfFvgOkBull = not requireHtfFvgContext or f_hasTappedHtfFvg(true)
+                // Zone Entry: displacement is confirmed by the FVG existing, and price is holding
+                // above its bottom — entry sits in the breaker/FVG zone near the invalidation.
+                // Breaker Break: original rule, waits for a close above the entire breaker range.
+                bool triggeredBull = entryTrigger == "Breaker Break" ? close > breakerT : (hasFvg and close > fvgB)
 
-                if (not unicornMode or (unicornMode and hasFvg)) and htfFvgOkBull
+                if triggeredBull and (not unicornMode or (unicornMode and hasFvg)) and htfFvgOkBull
                     float invPrice = useSwingInvalidation ? pendingBullSweepExtreme : breakerB
                     float riskRange = close - invPrice
 
@@ -1551,15 +1558,17 @@ if not na(pendingBearSweepIdx) and setupEvalOk
     if not na(startOffset)
         [breakerT, breakerB] = f_getSeriesRange(startOffset, endOffset)
 
-        // Validation: Breaker top must not be above (more extreme than) the sweep high extreme
-        if close < breakerB and breakerT <= pendingBearSweepExtreme and f_isInSession()
+        // Validation: Breaker top must not be above (more extreme than) the sweep high extreme.
+        // Directional trigger evaluated below so the FVG is available — see the bullish note.
+        if breakerT <= pendingBearSweepExtreme and f_isInSession()
             if f_checkSizeFilter(breakerT, breakerB, sizeFilterMode, minBreakerSize, maxBreakerSize, breakerSizeUnit)
                 breakerStartBar = bar_index - endOffset
                 [fvgT, fvgB, fvgIdx, fvgRightIdx] = f_findBearishFVG(breakerT, breakerB, breakerStartBar, enableFvgAtrFilter, fvgAtrMult)
                 hasFvg = not na(fvgIdx)
                 htfFvgOkBear = not requireHtfFvgContext or f_hasTappedHtfFvg(false)
+                bool triggeredBear = entryTrigger == "Breaker Break" ? close < breakerB : (hasFvg and close < fvgT)
 
-                if (not unicornMode or (unicornMode and hasFvg)) and htfFvgOkBear
+                if triggeredBear and (not unicornMode or (unicornMode and hasFvg)) and htfFvgOkBear
                     float invPrice = useSwingInvalidation ? pendingBearSweepExtreme : breakerT
                     float riskRange = invPrice - close
 
@@ -1978,9 +1987,7 @@ if barstate.islast and showDashboard
             signalStatus := "BULL: no breaker run"
         else
             [dTop, dBtm] = f_getSeriesRange(dStart, dEnd)
-            if close <= dTop
-                signalStatus := "BULL: close < breaker top"
-            else if dBtm < pendingBullSweepExtreme
+            if dBtm < pendingBullSweepExtreme
                 signalStatus := "BULL: breaker under sweep"
             else if not f_isInSession()
                 signalStatus := "BULL: outside session"
@@ -1988,8 +1995,11 @@ if barstate.islast and showDashboard
                 signalStatus := "BULL: size filter"
             else
                 [dFt, dFb, dFi, dFr] = f_findBullishFVG(dTop, dBtm, bar_index - dEnd, enableFvgAtrFilter, fvgAtrMult)
+                bool dTrig = entryTrigger == "Breaker Break" ? close > dTop : (not na(dFi) and close > dFb)
                 if unicornMode and na(dFi)
                     signalStatus := "BULL: no LTF FVG"
+                else if not dTrig
+                    signalStatus := entryTrigger == "Breaker Break" ? "BULL: close < breaker top" : "BULL: below FVG"
                 else if requireHtfFvgContext and not f_hasTappedHtfFvg(true)
                     signalStatus := "BULL: no HTF FVG tap"
                 else if close - (useSwingInvalidation ? pendingBullSweepExtreme : dBtm) <= 0
@@ -2004,9 +2014,7 @@ if barstate.islast and showDashboard
             signalStatus := "BEAR: no breaker run"
         else
             [dTop, dBtm] = f_getSeriesRange(dStart, dEnd)
-            if close >= dBtm
-                signalStatus := "BEAR: close > breaker btm"
-            else if dTop > pendingBearSweepExtreme
+            if dTop > pendingBearSweepExtreme
                 signalStatus := "BEAR: breaker over sweep"
             else if not f_isInSession()
                 signalStatus := "BEAR: outside session"
@@ -2014,8 +2022,11 @@ if barstate.islast and showDashboard
                 signalStatus := "BEAR: size filter"
             else
                 [dFt, dFb, dFi, dFr] = f_findBearishFVG(dTop, dBtm, bar_index - dEnd, enableFvgAtrFilter, fvgAtrMult)
+                bool dTrig = entryTrigger == "Breaker Break" ? close < dBtm : (not na(dFi) and close < dFt)
                 if unicornMode and na(dFi)
                     signalStatus := "BEAR: no LTF FVG"
+                else if not dTrig
+                    signalStatus := entryTrigger == "Breaker Break" ? "BEAR: close > breaker btm" : "BEAR: above FVG"
                 else if requireHtfFvgContext and not f_hasTappedHtfFvg(false)
                     signalStatus := "BEAR: no HTF FVG tap"
                 else if (useSwingInvalidation ? pendingBearSweepExtreme : dTop) - close <= 0
@@ -2049,7 +2060,7 @@ if barstate.islast and showDashboard
 
     table.cell(dashboardTable, 0, 2, "Unicorn Mode:", text_color=tableTextColor, text_size=tSize, text_halign=text.align_left, text_font_family=font.family_monospace)
     table.cell(dashboardTable, 1, 2, unicornMode ? "ENABLED" : "DISABLED", text_color=unicornMode ? color.green : color.gray, text_size=tSize, text_font_family=font.family_monospace)
-    table.cell(dashboardTable, 2, 2, "(" + setupConfirmMode + ")", text_color=setupConfirmMode == "Real-Time" ? color.orange : color.gray, text_size=tSize, text_font_family=font.family_monospace)
+    table.cell(dashboardTable, 2, 2, "(" + setupConfirmMode + " / " + entryTrigger + ")", text_color=color.gray, text_size=tSize, text_font_family=font.family_monospace)
 
     table.cell(dashboardTable, 0, 3, "Liquidity Source:", text_color=tableTextColor, text_size=tSize, text_halign=text.align_left, text_font_family=font.family_monospace)
     activeSrcs = ""
