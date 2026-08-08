@@ -29,7 +29,10 @@ type Setup
     float entryPrice          // Price at confirmation (close)
     float invalidationPrice   // Invalidation level
     bool isInvalidated        // Has it been invalidated?
-    bool isTargetHit          // Has target been hit?
+    bool isTargetHit          // Has the primary R:R target been hit?
+    float primaryTarget       // The primary R:R target price (na if showRRTarget is off) — used
+                               // to identify which hit line is the primary one, so isTargetHit
+                               // actually gets set (see "Track targets hit")
     line levelLine            // Dotted level line drawn when setup confirmed
     label levelLabel          // Text label at origin of level line
     box breakerBox            // Box drawing for breaker
@@ -1270,6 +1273,7 @@ if not na(pendingBullSweepIdx)
                              invalidationPrice = invPrice,
                              isInvalidated = false,
                              isTargetHit = false,
+                             primaryTarget = na,
                              levelLine = na,
                              levelLabel = na,
                              breakerBox = na,
@@ -1384,6 +1388,7 @@ if not na(pendingBullSweepIdx)
 
                         primaryTargetPrice = close + rrRatio * riskRange
                         if showRRTarget
+                            newBull.primaryTarget := primaryTargetPrice
                             l = line.new(
                                  x1 = newBull.breakerEndIdx,
                                  y1 = primaryTargetPrice,
@@ -1496,6 +1501,7 @@ if not na(pendingBearSweepIdx)
                              invalidationPrice = invPrice,
                              isInvalidated = false,
                              isTargetHit = false,
+                             primaryTarget = na,
                              levelLine = na,
                              levelLabel = na,
                              breakerBox = na,
@@ -1610,6 +1616,7 @@ if not na(pendingBearSweepIdx)
 
                         primaryTargetPrice = close - rrRatio * riskRange
                         if showRRTarget
+                            newBear.primaryTarget := primaryTargetPrice
                             l = line.new(
                                  x1 = newBear.breakerEndIdx,
                                  y1 = primaryTargetPrice,
@@ -1750,6 +1757,11 @@ if array.size(activeSetups) > 0
                         if hit
                             if enableAlerts and alertTarget
                                 alert("Target Reached: Setup " + setup.dir + " target reached at " + str.tostring(tgtVal), alert.freq_once_per_bar_close)
+                            // Mark the setup itself as target-hit once its PRIMARY R:R target is
+                            // the one that got hit (not just any additional target), so it stops
+                            // being shown as the dashboard's "latest active setup" with stale info.
+                            if not na(setup.primaryTarget) and math.abs(tgtVal - setup.primaryTarget) < syminfo.mintick * 0.5
+                                setup.isTargetHit := true
                             line.delete(l)
                             label.delete(lb)
                             array.remove(setup.targetLines, i)
