@@ -18,6 +18,12 @@
 //      3. the Unicorn Model confirms a same-direction Unicorn,
 //      4. all within the configured interaction window.
 //
+//  "Only Show Qualified Setups?" (on by default once the layer is enabled)
+//  removes setups that fail that test from the chart entirely. Turn it off to
+//  keep every setup the Unicorn Model confirms and merely mark the qualified
+//  ones. Either way the engine's decisions are identical — the switch only
+//  governs what is displayed.
+//
 //  Sequencing is structural, not checked after the fact: the tap timestamp can
 //  only ever be written on the bar the tap happened, and the FVG layer runs
 //  above the Unicorn engine in this file, so a tap occurring after a Unicorn can
@@ -719,6 +725,7 @@ enableHtfFvg = input.bool(false, "Enable HTF FVG Context?", tooltip="Master swit
 htfFvgWindow = input.int(30, "Interaction Window (bars)", minval=0, maxval=1000, tooltip="How many chart bars a HTF FVG tap keeps qualifying same-direction Unicorns for. 0 means the Unicorn must confirm on the same bar as the tap. Note that the HTF FVG engine only builds gaps within its own 'Max bars back to find FVGs' setting, so qualification never reaches further back than that.", group=GRP_QUAL, active=enableHtfFvg)
 qualifyBull = input.bool(true, "Qualify Bullish Unicorns?", tooltip="A bullish Unicorn qualifies only after price has tapped a bullish HTF FVG. A bearish FVG tap can never qualify it.", group=GRP_QUAL, active=enableHtfFvg)
 qualifyBear = input.bool(true, "Qualify Bearish Unicorns?", tooltip="A bearish Unicorn qualifies only after price has tapped a bearish HTF FVG. A bullish FVG tap can never qualify it.", group=GRP_QUAL, active=enableHtfFvg)
+onlyQualifiedSetups = input.bool(true, "Only Show Qualified Setups?", tooltip="ON: a confirmed setup that did not follow a same-direction HTF FVG tap is removed from the chart along with its drawings, so only qualified Unicorns remain. OFF: every setup the Unicorn Model confirms stays on the chart exactly as it does today, and qualified ones are merely marked. Either way the Unicorn engine's own decisions are unchanged — this only controls what is displayed. Note that the engine's 'Activation' alert still fires for setups hidden by this mode; use the 'Qualified Bullish/Bearish Unicorn' alerts instead when filtering.", group=GRP_QUAL, active=enableHtfFvg)
 showQualifiedMarkers = input.bool(true, "Show Qualified Markers?", tooltip="Draw a diamond at the confirmation bar of every qualified Unicorn. The original Unicorn label, boxes and targets are unaffected either way.", group=GRP_QUAL, active=enableHtfFvg)
 showTapMarkers = input.bool(false, "Show HTF FVG Tap Markers?", tooltip="Mark the bar on which price first traded into a HTF FVG.", group=GRP_QUAL, active=enableHtfFvg)
 showFvgZones = input.bool(true, "Show HTF FVG Zones?", tooltip="Draw the HTF FVG boxes and labels. Turn off to keep the qualification logic while leaving the chart clean: gaps are still tracked, only the drawing is skipped, which also keeps the shared 500-box budget free for the Unicorn's own drawings.", group=GRP_QUAL, active=enableHtfFvg)
@@ -942,6 +949,31 @@ useD_resolved = useD
 [l5b, l5r, l5t, l5o, l5l] = request.security(syminfo.tickerid, tf5, detectLive(), lookahead = barmerge.lookahead_off)
 
 // ========================================
+// QUALIFICATION HELPERS (NEW)
+// ========================================
+// Removes the setup that was just pushed, together with every drawing attached
+// to it — the same cleanup the Unicorn's own history-limit and
+// discard-invalidated paths perform. Called only from the qualification hooks,
+// immediately after array.push, so the target is always the last element.
+//
+// This hides output; it does not change the engine. The setup was still
+// confirmed by the Unicorn Model on exactly the same bar under exactly the same
+// conditions, and the pending sweep leg is still consumed by it.
+f_discardLastSetup() =>
+    if array.size(activeSetups) > 0
+        Setup s = array.pop(activeSetups)
+        line.delete(s.levelLine)
+        label.delete(s.levelLabel)
+        box.delete(s.breakerBox)
+        if not na(s.fvgBox)
+            box.delete(s.fvgBox)
+        label.delete(s.setupLabel)
+        for l in s.targetLines
+            line.delete(l)
+        for lb in s.targetLabels
+            label.delete(lb)
+
+// ========================================
 // HTF FVG INTERACTION STATE (NEW)
 // ========================================
 // bar_index of the most recent tap of a HTF FVG in each direction, plus the
@@ -957,6 +989,14 @@ var int    lastBullTapBar = na
 var int    lastBearTapBar = na
 var string lastBullTapTf  = ""
 var string lastBearTapTf  = ""
+
+// The most recently qualified Unicorn, recorded at its confirmation bar. Keeping
+// this here rather than adding fields to the Setup type leaves the Unicorn
+// engine untouched; a setup is matched to it by confirmation bar + direction,
+// which is exact because a setup's confIndex is the bar it was pushed on.
+var int    lastQualBar = na
+var string lastQualDir = ""
+var string lastQualTf  = ""
 
 // ─── HTF FVG layer: build gaps, then track taps and fills ────────────────────
 // Wrapped in enableHtfFvg so the whole layer produces nothing — no boxes, no
@@ -1359,14 +1399,23 @@ if not na(pendingBullSweepIdx)
                             alert("Activation: Bullish Breaker activated on " + syminfo.ticker + " at " + str.tostring(close), alert.freq_once_per_bar_close)
 
                         // ── HTF FVG qualification (NEW) ──────────────────────
-                        // Additive only: this runs after the setup has already
-                        // been built and pushed, and changes nothing about it.
+                        // Runs after the setup has already been built and
+                        // pushed, so it never influences whether the Unicorn
+                        // Model confirmed — it only decides how the result is
+                        // presented: marked, or (in Only Qualified mode) hidden.
                         // hasFvg is required, so only a true "+Unicorn" can be
                         // qualified — a "+Breaker" never is.
                         if bullHtfContext and hasFvg
                             qualifiedBullSignal := true
+                            lastQualBar := bar_index
+                            lastQualDir := "BULL"
+                            lastQualTf  := lastBullTapTf
                             if enableAlerts
                                 alert("Qualified Bullish Unicorn on " + syminfo.ticker + " at " + str.tostring(close) + " — " + lastBullTapTf + " HTF FVG tapped " + str.tostring(bar_index - lastBullTapBar) + " bar(s) ago", alert.freq_once_per_bar_close)
+                        else if onlyQualifiedSetups
+                            // No same-direction bullish HTF FVG tap behind this
+                            // setup: hide it rather than mark it.
+                            f_discardLastSetup()
                         
                         pendingBullSweepIdx := na
                         pendingBullFirstSweepBar := na
@@ -1538,14 +1587,23 @@ if not na(pendingBearSweepIdx)
                             alert("Activation: Bearish Breaker activated on " + syminfo.ticker + " at " + str.tostring(close), alert.freq_once_per_bar_close)
 
                         // ── HTF FVG qualification (NEW) ──────────────────────
-                        // Additive only: this runs after the setup has already
-                        // been built and pushed, and changes nothing about it.
+                        // Runs after the setup has already been built and
+                        // pushed, so it never influences whether the Unicorn
+                        // Model confirmed — it only decides how the result is
+                        // presented: marked, or (in Only Qualified mode) hidden.
                         // hasFvg is required, so only a true "-Unicorn" can be
                         // qualified — a "-Breaker" never is.
                         if bearHtfContext and hasFvg
                             qualifiedBearSignal := true
+                            lastQualBar := bar_index
+                            lastQualDir := "BEAR"
+                            lastQualTf  := lastBearTapTf
                             if enableAlerts
                                 alert("Qualified Bearish Unicorn on " + syminfo.ticker + " at " + str.tostring(close) + " — " + lastBearTapTf + " HTF FVG tapped " + str.tostring(bar_index - lastBearTapBar) + " bar(s) ago", alert.freq_once_per_bar_close)
+                        else if onlyQualifiedSetups
+                            // No same-direction bearish HTF FVG tap behind this
+                            // setup: hide it rather than mark it.
+                            f_discardLastSetup()
                         
                         pendingBearSweepIdx := na
                         pendingBearFirstSweepBar := na
@@ -1788,10 +1846,37 @@ if barstate.islast and showDashboard
     // ── HTF FVG context row (NEW) ──
     // Row 13 of the 14-row table, unused by the original dashboard. Nothing is
     // written here when the filter is off, so the table renders identically.
+    //
+    // This row sits under "LATEST SETUP", so while a setup is on the chart it
+    // must describe *that setup* — it reports whether the setup itself was
+    // qualified, never the opposite direction's context, which is irrelevant to
+    // it by definition. Only with no active setup does it fall back to showing
+    // live context, where there is no setup for it to be misread against.
     if enableHtfFvg
+        // Mirrors the latest-setup extraction above (same order, same
+        // conditions, same break) so it always resolves to the same setup.
+        int    latestConf = na
+        string latestDir  = ""
+        if array.size(activeSetups) > 0
+            for i = array.size(activeSetups) - 1 to 0
+                s = array.get(activeSetups, i)
+                if not s.isInvalidated and not s.isTargetHit
+                    latestConf := s.confIndex
+                    latestDir  := s.dir
+                    break
+
         string ctxTxt = "NONE"
         color  ctxCol = color.gray
-        if bullHtfContext and bearHtfContext
+        if not na(latestConf)
+            // Matched on confirmation bar AND direction: a qualified setup in
+            // one direction can never light up a setup in the other.
+            if not na(lastQualBar) and lastQualBar == latestConf and lastQualDir == latestDir
+                ctxTxt := "QUALIFIED " + lastQualTf
+                ctxCol := latestDir == "BULL" ? color.green : color.red
+            else
+                ctxTxt := "NOT QUALIFIED"
+                ctxCol := color.gray
+        else if bullHtfContext and bearHtfContext
             ctxTxt := "BULL + BEAR"
             ctxCol := color.orange
         else if bullHtfContext

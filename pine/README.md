@@ -19,6 +19,15 @@ of the original Unicorn script is different in the merged file — the
 `indicator()` declaration. Everything else is byte-identical, with new code only
 ever appended around it.
 
+`Only Show Qualified Setups?` does not weaken that. Setups are still confirmed on
+exactly the same bars under exactly the same conditions, and the pending sweep
+leg is still consumed by them; an unqualified one is discarded *after* the fact,
+using the same cleanup the engine's own history-limit and discard-invalidated
+paths perform. One consequence to know about: the engine's "Activation" alert
+still fires for a setup this mode hides, because suppressing it would mean
+editing locked Unicorn code. Use the **Qualified Bullish/Bearish Unicorn** alerts
+instead when filtering.
+
 With **Enable HTF FVG Context?** off, the script is the original Unicorn Model:
 no FVG zones, no FVG state, no extra `alert()` calls, no qualified markers, and
 an unchanged dashboard. (The two FVG `alertcondition` entries still appear in
@@ -30,6 +39,7 @@ conditionally — but they can never fire while the layer is off.)
 | Setting | Notes |
 |---|---|
 | `Enable HTF FVG Context?` | Master switch. Off = original Unicorn Model. |
+| `Only Show Qualified Setups?` | **On by default.** A confirmed setup with no same-direction HTF FVG tap behind it is removed from the chart along with its drawings. Turn off for the purely additive behaviour: every setup stays visible and qualified ones are merely marked. |
 | `Interaction Window (bars)` | Chart bars a tap keeps qualifying for. `0` = same bar only. |
 | `Show HTF FVG Zones?` | Off keeps qualification working with no boxes drawn — useful for a clean chart and it leaves the shared 500-box budget to the Unicorn. |
 | `Wait for candle close to identify FVG ?` | Leave **on**. Off is the FVG engine's live mode, which repaints by design and would make qualification repaint with it. |
