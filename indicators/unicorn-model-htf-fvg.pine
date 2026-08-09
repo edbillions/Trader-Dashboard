@@ -564,6 +564,26 @@ useD = input.bool(true, "Source D", inline="src_d", tooltip="Enable or disable S
 tfD = input.timeframe("1440", "", inline="src_d", tooltip="Timeframe for Source D (ignored if Mode is Automatic).", group=GRP_LIQ, active=useD and htfMode == "Manual")
 typeD = input.string("OHLC + Swing", "", options=["OHLC", "Swing", "OHLC + Swing"], inline="src_d", tooltip="Liquidity level type for Source D.", group=GRP_LIQ, active=useD)
 
+// Session Liquidity — the high and low of each completed session become
+// sweepable liquidity levels, alongside the timeframe-based sources above.
+useSessionLiq = input.bool(false, "Session Liquidity", tooltip="Register the high and low of each enabled session as liquidity levels once that session closes. They are swept, and build setups, exactly like the OHLC and Swing levels from Sources A-D. Session times are read in the same timezone as the Time Filter group — set 'Custom Timezone?' there to override the exchange timezone.", group=GRP_LIQ)
+
+liqS1On = input.bool(true, "Session 1", inline="liq_s1", tooltip="Enable this session.", group=GRP_LIQ, active=useSessionLiq)
+liqS1Tm = input.session("2000-0000", "", inline="liq_s1", tooltip="Session window. Ranges that cross midnight are supported.", group=GRP_LIQ, active=useSessionLiq and liqS1On)
+liqS1Nm = input.string("Asia", "", inline="liq_s1", tooltip="Name shown on the level label, e.g. 'Asia Session'.", group=GRP_LIQ, active=useSessionLiq and liqS1On)
+
+liqS2On = input.bool(true, "Session 2", inline="liq_s2", tooltip="Enable this session.", group=GRP_LIQ, active=useSessionLiq)
+liqS2Tm = input.session("0200-0500", "", inline="liq_s2", tooltip="Session window. Ranges that cross midnight are supported.", group=GRP_LIQ, active=useSessionLiq and liqS2On)
+liqS2Nm = input.string("London", "", inline="liq_s2", tooltip="Name shown on the level label, e.g. 'London Session'.", group=GRP_LIQ, active=useSessionLiq and liqS2On)
+
+liqS3On = input.bool(true, "Session 3", inline="liq_s3", tooltip="Enable this session.", group=GRP_LIQ, active=useSessionLiq)
+liqS3Tm = input.session("0930-1200", "", inline="liq_s3", tooltip="Session window. Ranges that cross midnight are supported.", group=GRP_LIQ, active=useSessionLiq and liqS3On)
+liqS3Nm = input.string("NY AM", "", inline="liq_s3", tooltip="Name shown on the level label, e.g. 'NY AM Session'.", group=GRP_LIQ, active=useSessionLiq and liqS3On)
+
+liqS4On = input.bool(false, "Session 4", inline="liq_s4", tooltip="Enable this session.", group=GRP_LIQ, active=useSessionLiq)
+liqS4Tm = input.session("1330-1600", "", inline="liq_s4", tooltip="Session window. Ranges that cross midnight are supported.", group=GRP_LIQ, active=useSessionLiq and liqS4On)
+liqS4Nm = input.string("NY PM", "", inline="liq_s4", tooltip="Name shown on the level label, e.g. 'NY PM Session'.", group=GRP_LIQ, active=useSessionLiq and liqS4On)
+
 // ========================================
 // INPUTS - Group 4: Target Projections (Separate, No Inlines)
 // ========================================
@@ -941,6 +961,31 @@ f_isInSession() =>
         inSess := s1 or s2 or s3
     inSess
 
+// Timezone the script reads session windows in. Same resolution the Time Filter
+// uses internally, lifted to global scope so Session Liquidity reads its windows
+// in exactly the same timezone rather than a second, independently configured one.
+string scriptTz = customTimezone ? "GMT" + (tzHourOffset >= 0 ? "+" : "-") + str.tostring(math.abs(tzHourOffset), "00") + str.tostring(math.abs(tzMinOffset), "00") : syminfo.timezone
+
+// Session liquidity state machine. Tracks the running extremes of one session
+// and, on the first bar after it closes, hands its high and low to the same
+// level registry the timeframe sources use — from there they are ordinary
+// liquidity, swept and consumed by the unchanged Unicorn engine.
+//
+// Each call site gets its own instance of these `var` locals, so the four
+// sessions keep four independent sets of extremes.
+f_sessionLiq(bool isIn, string sessName) =>
+    var float sHigh = na
+    var float sLow  = na
+    var bool  wasIn = false
+    if isIn
+        sHigh := wasIn ? math.max(nz(sHigh, high), high) : high
+        sLow  := wasIn ? math.min(nz(sLow, low), low) : low
+    else if wasIn
+        // Session just closed: its extremes are final.
+        f_registerLevel(sessName, "Session", true, sHigh)
+        f_registerLevel(sessName, "Session", false, sLow)
+    wasIn := isIn
+
 // ========================================
 // FETCHING DATA RESOLUTION
 // ========================================
@@ -1260,6 +1305,21 @@ if useD_resolved
         if sl_D != lastSl_D or (na(lastSl_D) and not na(sl_D))
             lastSl_D := sl_D
             f_registerLevel(f_getTFLabel(htfD_resolved), "Swing", false, sl_D)
+
+// Session Liquidity sources
+// Registered here, in the same pass as Sources A-D and before the sweep check
+// below, so a session level is available to be swept from the bar it is created.
+// The membership tests are evaluated at global scope rather than inside
+// f_sessionLiq because `time()` needs its session argument as a plain input.
+bool inLiqS1 = useSessionLiq and liqS1On and not na(time(timeframe.period, liqS1Tm, scriptTz))
+bool inLiqS2 = useSessionLiq and liqS2On and not na(time(timeframe.period, liqS2Tm, scriptTz))
+bool inLiqS3 = useSessionLiq and liqS3On and not na(time(timeframe.period, liqS3Tm, scriptTz))
+bool inLiqS4 = useSessionLiq and liqS4On and not na(time(timeframe.period, liqS4Tm, scriptTz))
+
+f_sessionLiq(inLiqS1, liqS1Nm)
+f_sessionLiq(inLiqS2, liqS2Nm)
+f_sessionLiq(inLiqS3, liqS3Nm)
+f_sessionLiq(inLiqS4, liqS4Nm)
 
 // ========================================
 // MAIN EXECUTION STATE MACHINE (Level update & sweep check)
@@ -1966,6 +2026,8 @@ if barstate.islast and showDashboard
         activeSrcs := activeSrcs + "C "
     if useD_resolved
         activeSrcs := activeSrcs + "D "
+    if useSessionLiq
+        activeSrcs := activeSrcs + "S "
     table.cell(dashboardTable, 1, 3, activeSrcs, text_color=color.orange, text_size=tSize, text_font_family=font.family_monospace)
     table.cell(dashboardTable, 2, 3, "(" + htfMode + ")", text_color=color.gray, text_size=tSize, text_font_family=font.family_monospace)
 
