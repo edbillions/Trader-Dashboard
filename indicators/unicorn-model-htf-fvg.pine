@@ -70,6 +70,13 @@ type Setup
     line[] targetLines        // Array of lines for target projections
     label[] targetLabels      // Array of labels for targets
     label setupLabel          // Monospaced text label (+Unicorn / -Breaker)
+    // Setup Grade factors, recorded on the confirmation bar so the dashboard
+    // grades the setup as it was when it fired rather than as the chart looks
+    // now. Nothing here feeds back into the engine.
+    bool factorSweep          // Took out a HTF liquidity level
+    bool factorHtfFvg         // Confirmed inside a HTF FVG interaction window
+    bool factorLtfFvg         // Breaker overlaps an LTF FVG (a true Unicorn)
+    bool factorVolume         // Confirmation-bar volume exceeded its average
 
 // ========================================
 // GLOBAL STATE ARRAYS (Defined before functions)
@@ -735,7 +742,16 @@ fvgZoneMode = input.string("Qualifying Only", "HTF FVG Zones", options=["Qualify
 alertFvgTap = input.bool(false, "Alert on HTF FVG Tap?", tooltip="Fire the HTF FVG engine's own 'price entered FVG' alert() call. Off by default so that an 'Any alert() function call' alert keeps delivering exactly the Unicorn Model's own alerts.", group=GRP_QUAL, active=enableHtfFvg)
 
 // ========================================
-// INPUTS - Group 11: Diagnostics (NEW)
+// INPUTS - Group 11: Setup Grade (NEW)
+// ========================================
+string GRP_GRADE = "Setup Grade"
+showSetupGrade = input.bool(true, "Show Setup Grade?", tooltip="Add a graded confluence checklist to the dashboard for the setup currently on the chart. Purely a readout — it scores what the engine already decided and never changes which setups appear.", group=GRP_GRADE)
+gradeVolume = input.bool(true, "Score Volume?", tooltip="Include the volume check as a graded factor. Turn it off on symbols with no meaningful volume feed and the row shows '–' and drops out of the denominator instead of counting as a failure.", group=GRP_GRADE, active=showSetupGrade)
+volLookback = input.int(20, "Volume Average Length", minval=1, maxval=500, tooltip="Bars in the simple moving average that confirmation-bar volume is measured against.", group=GRP_GRADE, active=showSetupGrade and gradeVolume)
+volMult = input.float(1.5, "Volume Multiplier", minval=0.1, step=0.1, tooltip="Confirmation-bar volume must exceed the average by this multiple to score. 1.5 means 50% above average.", group=GRP_GRADE, active=showSetupGrade and gradeVolume)
+
+// ========================================
+// INPUTS - Group 12: Diagnostics (NEW)
 // ========================================
 // Read-only instrumentation. Nothing here participates in a decision: every
 // value it reports is recomputed from state the engine has already settled, and
@@ -745,6 +761,15 @@ string GRP_DBG = "Diagnostics"
 debugMode = input.bool(false, "Show Rejection Diagnostics?", tooltip="Label every bar on which the Unicorn Model had a live sweep leg but did NOT confirm a setup, stating which gate rejected it and with what numbers. Use this to find out why a setup you expected on a given bar arrived later — the label on that bar names the gate.", group=GRP_DBG)
 debugBars = input.int(100, "Diagnostics Lookback (bars)", minval=1, maxval=500, tooltip="Only label the most recent N bars. Labels share the 500-label budget with the Unicorn's own drawings, so keep this tight.", group=GRP_DBG, active=debugMode)
 debugNoSweep = input.bool(false, "Also Label Bars With No Sweep Leg?", tooltip="Include bars where no liquidity sweep is pending at all, so 'nothing happened here' is distinguishable from 'a gate rejected it'. Noisy — usually only needed when a setup never appears at all.", group=GRP_DBG, active=debugMode)
+
+// ========================================
+// SETUP GRADE - VOLUME FACTOR (NEW)
+// ========================================
+// Evaluated unconditionally on every bar so the moving average sees an unbroken
+// series. Reading it only inside the confirmation block would leave gaps in the
+// average and make the factor depend on how often setups fire.
+float volAvg      = ta.sma(volume, volLookback)
+bool  volumeScore = not na(volume) and not na(volAvg) and volAvg > 0 and volume > volAvg * volMult
 
 // ========================================
 // HTF FVG ENGINE - DETECTION & DRAWING HELPERS
@@ -1360,7 +1385,11 @@ if not na(pendingBullSweepIdx)
                              fvgBox = na,
                              targetLines = array.new_line(),
                              targetLabels = array.new_label(),
-                             setupLabel = na
+                             setupLabel = na,
+                             factorSweep = not na(pendingBullSweptLevel),
+                             factorHtfFvg = false,
+                             factorLtfFvg = hasFvg,
+                             factorVolume = volumeScore
                              )
 
                         // Setup-linked level line (starts at exact extreme index, ends at sweepIndex)
@@ -1493,6 +1522,9 @@ if not na(pendingBullSweepIdx)
                         // qualified — a "+Breaker" never is.
                         if bullHtfContext and hasFvg
                             qualifiedBullSignal := true
+                            // Setup objects are references, so this reaches the
+                            // element already pushed to activeSetups.
+                            newBull.factorHtfFvg := true
                             lastQualBar := bar_index
                             lastQualDir := "BULL"
                             lastQualTf  := lastBullTapTf
@@ -1568,7 +1600,11 @@ if not na(pendingBearSweepIdx)
                              fvgBox = na,
                              targetLines = array.new_line(),
                              targetLabels = array.new_label(),
-                             setupLabel = na
+                             setupLabel = na,
+                             factorSweep = not na(pendingBearSweptLevel),
+                             factorHtfFvg = false,
+                             factorLtfFvg = hasFvg,
+                             factorVolume = volumeScore
                              )
 
                         // Setup-linked level line (starts at exact extreme index, ends at sweepIndex)
@@ -1701,6 +1737,9 @@ if not na(pendingBearSweepIdx)
                         // qualified — a "-Breaker" never is.
                         if bearHtfContext and hasFvg
                             qualifiedBearSignal := true
+                            // Setup objects are references, so this reaches the
+                            // element already pushed to activeSetups.
+                            newBear.factorHtfFvg := true
                             lastQualBar := bar_index
                             lastQualDir := "BEAR"
                             lastQualTf  := lastBearTapTf
@@ -1847,6 +1886,18 @@ if alertPotential and barstate.isrealtime and not barstate.isconfirmed and bar_i
                 lastPotentialAlertBar := bar_index
 
 // ========================================
+// SETUP GRADE HELPERS (NEW)
+// ========================================
+// "–" means the factor could not be evaluated on the current settings. Such a
+// factor is dropped from the score's denominator rather than counted as a miss,
+// so switching a check off never lowers the grade.
+f_gradeMark(bool evaluated, bool passed) =>
+    evaluated ? (passed ? "✓" : "✗") : "–"
+
+f_gradeColor(bool evaluated, bool passed) =>
+    evaluated ? (passed ? color.green : color.red) : color.gray
+
+// ========================================
 // DASHBOARD RENDERING & DYNAMIC INVAL SYNC
 // ========================================
 
@@ -1857,11 +1908,15 @@ float showInvalidationPrice = na
 float showTargetPrice = na
 float showRiskUsd = na
 float showPositionSizeVal = na
+// Same setup the rows above describe, kept as a reference so the Setup Grade
+// section grades exactly what "LATEST SETUP" is showing.
+Setup gradeSetup = na
 
 if array.size(activeSetups) > 0
     for i = array.size(activeSetups) - 1 to 0
         s = array.get(activeSetups, i)
         if not s.isInvalidated and not s.isTargetHit
+            gradeSetup := s
             showSetupDir := s.dir == "BULL" ? "BULLISH" : "BEARISH"
             showEntryPrice := s.entryPrice
             showInvalidationPrice := s.invalidationPrice
@@ -1877,7 +1932,7 @@ if array.size(activeSetups) > 0
 var table dashboardTable = table.new(
      position = f_getTablePosition(dashboardPosition),
      columns = 3,
-     rows = 14,
+     rows = 20,
      bgcolor = tableBgColor,
      border_width = tableBorderWidth,
      border_color = tableBorderColor,
@@ -2008,6 +2063,65 @@ if barstate.islast and showDashboard
         table.cell(dashboardTable, 0, 13, "HTF FVG Context:", text_color=tableTextColor, text_size=tSize, text_halign=text.align_left, text_font_family=font.family_monospace)
         table.cell(dashboardTable, 1, 13, ctxTxt, text_color=ctxCol, text_size=tSize, text_font_family=font.family_monospace)
         table.cell(dashboardTable, 2, 13, str.tostring(htfFvgWindow) + "b", text_color=color.gray, text_size=tSize, text_font_family=font.family_monospace)
+
+    // ── SETUP GRADE (NEW) ──
+    // Rows 14-19 of the 20-row table. Scores the same setup the LATEST SETUP
+    // rows describe, against the four confluence factors recorded on its
+    // confirmation bar. This is a readout only: it reads Setup fields that were
+    // already settled and never feeds back into the engine.
+    if showSetupGrade
+        bool hasSetup = not na(gradeSetup)
+
+        // Guarded field reads. Pine does not guarantee short-circuit evaluation,
+        // so touching a field of an na object inside a compound condition is not
+        // safe — the reads happen only after the na check has passed.
+        bool fSweep = false
+        bool fHtf   = false
+        bool fLtf   = false
+        bool fVol   = false
+        if hasSetup
+            fSweep := gradeSetup.factorSweep
+            fHtf   := gradeSetup.factorHtfFvg
+            fLtf   := gradeSetup.factorLtfFvg
+            fVol   := gradeSetup.factorVolume
+
+        // A factor counts toward the denominator only when the settings allow it
+        // to be judged at all.
+        bool htfEval = enableHtfFvg
+        bool volEval = gradeVolume
+
+        int scored = 2 + (htfEval ? 1 : 0) + (volEval ? 1 : 0)
+        int passed = (fSweep ? 1 : 0) + (fLtf ? 1 : 0) + (htfEval and fHtf ? 1 : 0) + (volEval and fVol ? 1 : 0)
+        float pct  = scored > 0 ? (passed * 1.0) / scored : 0.0
+
+        string gradeTxt = "–"
+        color  gradeCol = color.gray
+        if hasSetup
+            gradeTxt := pct >= 1.0 ? "A" : pct >= 0.75 ? "B" : pct >= 0.5 ? "C" : pct >= 0.25 ? "D" : "F"
+            gradeCol := pct >= 0.75 ? color.green : pct >= 0.5 ? color.orange : color.red
+
+        table.cell(dashboardTable, 0, 14, "── SETUP GRADE ──", bgcolor=tableHeaderBgColor, text_color=tableHeaderTextColor, text_size=tSize, text_font_family=font.family_monospace)
+        table.merge_cells(dashboardTable, 0, 14, 2, 14)
+
+        table.cell(dashboardTable, 0, 15, "Grade:", text_color=tableTextColor, text_size=tSize, text_halign=text.align_left, text_font_family=font.family_monospace)
+        table.cell(dashboardTable, 1, 15, gradeTxt, text_color=gradeCol, text_size=tSize, text_font_family=font.family_monospace)
+        table.cell(dashboardTable, 2, 15, hasSetup ? str.tostring(passed) + "/" + str.tostring(scored) : "", text_color=color.gray, text_size=tSize, text_font_family=font.family_monospace)
+
+        table.cell(dashboardTable, 0, 16, "Liquidity Sweep", text_color=tableTextColor, text_size=tSize, text_halign=text.align_left, text_font_family=font.family_monospace)
+        table.cell(dashboardTable, 1, 16, f_gradeMark(hasSetup, fSweep), text_color=f_gradeColor(hasSetup, fSweep), text_size=tSize, text_font_family=font.family_monospace)
+        table.cell(dashboardTable, 2, 16, "", text_size=tSize)
+
+        table.cell(dashboardTable, 0, 17, "HTF FVG Delivery", text_color=tableTextColor, text_size=tSize, text_halign=text.align_left, text_font_family=font.family_monospace)
+        table.cell(dashboardTable, 1, 17, f_gradeMark(hasSetup and htfEval, fHtf), text_color=f_gradeColor(hasSetup and htfEval, fHtf), text_size=tSize, text_font_family=font.family_monospace)
+        table.cell(dashboardTable, 2, 17, hasSetup and not htfEval ? "off" : "", text_color=color.gray, text_size=tSize, text_font_family=font.family_monospace)
+
+        table.cell(dashboardTable, 0, 18, "LTF FVG (Unicorn)", text_color=tableTextColor, text_size=tSize, text_halign=text.align_left, text_font_family=font.family_monospace)
+        table.cell(dashboardTable, 1, 18, f_gradeMark(hasSetup, fLtf), text_color=f_gradeColor(hasSetup, fLtf), text_size=tSize, text_font_family=font.family_monospace)
+        table.cell(dashboardTable, 2, 18, "", text_size=tSize)
+
+        table.cell(dashboardTable, 0, 19, "Volume", text_color=tableTextColor, text_size=tSize, text_halign=text.align_left, text_font_family=font.family_monospace)
+        table.cell(dashboardTable, 1, 19, f_gradeMark(hasSetup and volEval, fVol), text_color=f_gradeColor(hasSetup and volEval, fVol), text_size=tSize, text_font_family=font.family_monospace)
+        table.cell(dashboardTable, 2, 19, hasSetup and not volEval ? "off" : "", text_color=color.gray, text_size=tSize, text_font_family=font.family_monospace)
 
 // ========================================
 // QUALIFIED UNICORN RENDERING & ALERTS (NEW)
