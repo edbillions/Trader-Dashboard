@@ -12,6 +12,10 @@ function dateKey(d: Date) {
   return d.toISOString().slice(0, 10);
 }
 
+function formatTime(d: Date) {
+  return d.toLocaleTimeString("en-US", { hour: "numeric", minute: "2-digit" });
+}
+
 export default async function TradeDetailPage({
   params,
 }: {
@@ -97,6 +101,8 @@ export default async function TradeDetailPage({
               <Info label="Entry price" value={trade.entryPrice.toString()} />
               <Info label="Exit price" value={trade.exitPrice?.toString() ?? null} />
               <Info label="Position size" value={`${trade.positionSize} contracts`} />
+              <Info label="Entry time" value={formatTime(trade.entryTime)} />
+              <Info label="Exit time" value={trade.exitTime ? formatTime(trade.exitTime) : null} />
               <Info label="Stop (planned)" value={trade.stopLossPlanned?.toString() ?? null} />
               <Info label="Stop (actual)" value={trade.stopLossActual?.toString() ?? null} />
               <Info label="Target (planned)" value={trade.targetPlanned?.toString() ?? null} />
