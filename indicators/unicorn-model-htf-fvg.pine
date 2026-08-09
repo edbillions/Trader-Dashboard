@@ -765,7 +765,8 @@ alertFvgTap = input.bool(false, "Alert on HTF FVG Tap?", tooltip="Fire the HTF F
 // INPUTS - Group 11: Setup Grade (NEW)
 // ========================================
 string GRP_GRADE = "Setup Grade"
-showSetupGrade = input.bool(true, "Show Setup Grade?", tooltip="Add a graded confluence checklist to the dashboard for the setup currently on the chart. Purely a readout — it scores what the engine already decided and never changes which setups appear.", group=GRP_GRADE)
+showSetupGrade = input.bool(true, "Show Setup Grade?", tooltip="Show a graded confluence checklist for the setup currently on the chart, in its own panel. Purely a readout — it scores what the engine already decided and never changes which setups appear. Independent of 'Show Dashboard', so you can run either panel on its own.", group=GRP_GRADE)
+gradePosition = input.string("Bottom Right", "Panel Position", options=["Top Left", "Top Center", "Top Right", "Middle Left", "Middle Center", "Middle Right", "Bottom Left", "Bottom Center", "Bottom Right"], tooltip="Anchor position of the Setup Grade panel. Keep it clear of the main dashboard — two tables anchored to the same corner overlap.", group=GRP_GRADE, active=showSetupGrade)
 gradeVolume = input.bool(true, "Score Volume?", tooltip="Include the volume check as a graded factor. Turn it off on symbols with no meaningful volume feed and the row shows '–' and drops out of the denominator instead of counting as a failure.", group=GRP_GRADE, active=showSetupGrade)
 volLookback = input.int(20, "Volume Average Length", minval=1, maxval=500, tooltip="Bars in the simple moving average that confirmation-bar volume is measured against.", group=GRP_GRADE, active=showSetupGrade and gradeVolume)
 volMult = input.float(1.5, "Volume Multiplier", minval=0.1, step=0.1, tooltip="Confirmation-bar volume must exceed the average by this multiple to score. 1.5 means 50% above average.", group=GRP_GRADE, active=showSetupGrade and gradeVolume)
@@ -1992,7 +1993,7 @@ if array.size(activeSetups) > 0
 var table dashboardTable = table.new(
      position = f_getTablePosition(dashboardPosition),
      columns = 3,
-     rows = 20,
+     rows = 14,
      bgcolor = tableBgColor,
      border_width = tableBorderWidth,
      border_color = tableBorderColor,
@@ -2126,64 +2127,80 @@ if barstate.islast and showDashboard
         table.cell(dashboardTable, 1, 13, ctxTxt, text_color=ctxCol, text_size=tSize, text_font_family=font.family_monospace)
         table.cell(dashboardTable, 2, 13, str.tostring(htfFvgWindow) + "b", text_color=color.gray, text_size=tSize, text_font_family=font.family_monospace)
 
-    // ── SETUP GRADE (NEW) ──
-    // Rows 14-19 of the 20-row table. Scores the same setup the LATEST SETUP
-    // rows describe, against the four confluence factors recorded on its
-    // confirmation bar. This is a readout only: it reads Setup fields that were
-    // already settled and never feeds back into the engine.
-    if showSetupGrade
-        bool hasSetup = not na(gradeSetup)
+// ========================================
+// SETUP GRADE PANEL (NEW)
+// ========================================
+// Its own table, anchored independently of the main dashboard, so the checklist
+// can sit in a different corner and can be shown with the dashboard switched
+// off. Scores the same setup the dashboard's LATEST SETUP rows describe, against
+// the four confluence factors recorded on its confirmation bar. A readout only:
+// it reads Setup fields that were already settled and never feeds back into the
+// engine.
+var table gradeTable = table.new(
+     position = f_getTablePosition(gradePosition),
+     columns = 3,
+     rows = 6,
+     bgcolor = tableBgColor,
+     border_width = tableBorderWidth,
+     border_color = tableBorderColor,
+     frame_color = tableFrameColor,
+     frame_width = tableFrameWidth
+     )
 
-        // Guarded field reads. Pine does not guarantee short-circuit evaluation,
-        // so touching a field of an na object inside a compound condition is not
-        // safe — the reads happen only after the na check has passed.
-        bool fSweep = false
-        bool fHtf   = false
-        bool fLtf   = false
-        bool fVol   = false
-        if hasSetup
-            fSweep := gradeSetup.factorSweep
-            fHtf   := gradeSetup.factorHtfFvg
-            fLtf   := gradeSetup.factorLtfFvg
-            fVol   := gradeSetup.factorVolume
+if barstate.islast and showSetupGrade
+    gSize = f_getTableTextSize(dashboardSize)
+    bool hasSetup = not na(gradeSetup)
 
-        // A factor counts toward the denominator only when the settings allow it
-        // to be judged at all.
-        bool htfEval = enableHtfFvg
-        bool volEval = gradeVolume
+    // Guarded field reads. Pine does not guarantee short-circuit evaluation, so
+    // touching a field of an na object inside a compound condition is not safe —
+    // the reads happen only after the na check has passed.
+    bool fSweep = false
+    bool fHtf   = false
+    bool fLtf   = false
+    bool fVol   = false
+    if hasSetup
+        fSweep := gradeSetup.factorSweep
+        fHtf   := gradeSetup.factorHtfFvg
+        fLtf   := gradeSetup.factorLtfFvg
+        fVol   := gradeSetup.factorVolume
 
-        int scored = 2 + (htfEval ? 1 : 0) + (volEval ? 1 : 0)
-        int passed = (fSweep ? 1 : 0) + (fLtf ? 1 : 0) + (htfEval and fHtf ? 1 : 0) + (volEval and fVol ? 1 : 0)
-        float pct  = scored > 0 ? (passed * 1.0) / scored : 0.0
+    // A factor counts toward the denominator only when the settings allow it to
+    // be judged at all.
+    bool htfEval = enableHtfFvg
+    bool volEval = gradeVolume
 
-        string gradeTxt = "–"
-        color  gradeCol = color.gray
-        if hasSetup
-            gradeTxt := pct >= 1.0 ? "A" : pct >= 0.75 ? "B" : pct >= 0.5 ? "C" : pct >= 0.25 ? "D" : "F"
-            gradeCol := pct >= 0.75 ? color.green : pct >= 0.5 ? color.orange : color.red
+    int scored = 2 + (htfEval ? 1 : 0) + (volEval ? 1 : 0)
+    int passed = (fSweep ? 1 : 0) + (fLtf ? 1 : 0) + (htfEval and fHtf ? 1 : 0) + (volEval and fVol ? 1 : 0)
+    float pct  = scored > 0 ? (passed * 1.0) / scored : 0.0
 
-        table.cell(dashboardTable, 0, 14, "── SETUP GRADE ──", bgcolor=tableHeaderBgColor, text_color=tableHeaderTextColor, text_size=tSize, text_font_family=font.family_monospace)
-        table.merge_cells(dashboardTable, 0, 14, 2, 14)
+    string gradeTxt = "–"
+    color  gradeCol = color.gray
+    if hasSetup
+        gradeTxt := pct >= 1.0 ? "A" : pct >= 0.75 ? "B" : pct >= 0.5 ? "C" : pct >= 0.25 ? "D" : "F"
+        gradeCol := pct >= 0.75 ? color.green : pct >= 0.5 ? color.orange : color.red
 
-        table.cell(dashboardTable, 0, 15, "Grade:", text_color=tableTextColor, text_size=tSize, text_halign=text.align_left, text_font_family=font.family_monospace)
-        table.cell(dashboardTable, 1, 15, gradeTxt, text_color=gradeCol, text_size=tSize, text_font_family=font.family_monospace)
-        table.cell(dashboardTable, 2, 15, hasSetup ? str.tostring(passed) + "/" + str.tostring(scored) : "", text_color=color.gray, text_size=tSize, text_font_family=font.family_monospace)
+    table.cell(gradeTable, 0, 0, "── SETUP GRADE ──", bgcolor=tableHeaderBgColor, text_color=tableHeaderTextColor, text_size=gSize, text_font_family=font.family_monospace)
+    table.merge_cells(gradeTable, 0, 0, 2, 0)
 
-        table.cell(dashboardTable, 0, 16, "Liquidity Sweep", text_color=tableTextColor, text_size=tSize, text_halign=text.align_left, text_font_family=font.family_monospace)
-        table.cell(dashboardTable, 1, 16, f_gradeMark(hasSetup, fSweep), text_color=f_gradeColor(hasSetup, fSweep), text_size=tSize, text_font_family=font.family_monospace)
-        table.cell(dashboardTable, 2, 16, "", text_size=tSize)
+    table.cell(gradeTable, 0, 1, "Grade:", text_color=tableTextColor, text_size=gSize, text_halign=text.align_left, text_font_family=font.family_monospace)
+    table.cell(gradeTable, 1, 1, gradeTxt, text_color=gradeCol, text_size=gSize, text_font_family=font.family_monospace)
+    table.cell(gradeTable, 2, 1, hasSetup ? str.tostring(passed) + "/" + str.tostring(scored) : "", text_color=color.gray, text_size=gSize, text_font_family=font.family_monospace)
 
-        table.cell(dashboardTable, 0, 17, "HTF FVG Delivery", text_color=tableTextColor, text_size=tSize, text_halign=text.align_left, text_font_family=font.family_monospace)
-        table.cell(dashboardTable, 1, 17, f_gradeMark(hasSetup and htfEval, fHtf), text_color=f_gradeColor(hasSetup and htfEval, fHtf), text_size=tSize, text_font_family=font.family_monospace)
-        table.cell(dashboardTable, 2, 17, hasSetup and not htfEval ? "off" : "", text_color=color.gray, text_size=tSize, text_font_family=font.family_monospace)
+    table.cell(gradeTable, 0, 2, "Liquidity Sweep", text_color=tableTextColor, text_size=gSize, text_halign=text.align_left, text_font_family=font.family_monospace)
+    table.cell(gradeTable, 1, 2, f_gradeMark(hasSetup, fSweep), text_color=f_gradeColor(hasSetup, fSweep), text_size=gSize, text_font_family=font.family_monospace)
+    table.cell(gradeTable, 2, 2, "", text_size=gSize)
 
-        table.cell(dashboardTable, 0, 18, "LTF FVG (Unicorn)", text_color=tableTextColor, text_size=tSize, text_halign=text.align_left, text_font_family=font.family_monospace)
-        table.cell(dashboardTable, 1, 18, f_gradeMark(hasSetup, fLtf), text_color=f_gradeColor(hasSetup, fLtf), text_size=tSize, text_font_family=font.family_monospace)
-        table.cell(dashboardTable, 2, 18, "", text_size=tSize)
+    table.cell(gradeTable, 0, 3, "HTF FVG Delivery", text_color=tableTextColor, text_size=gSize, text_halign=text.align_left, text_font_family=font.family_monospace)
+    table.cell(gradeTable, 1, 3, f_gradeMark(hasSetup and htfEval, fHtf), text_color=f_gradeColor(hasSetup and htfEval, fHtf), text_size=gSize, text_font_family=font.family_monospace)
+    table.cell(gradeTable, 2, 3, hasSetup and not htfEval ? "off" : "", text_color=color.gray, text_size=gSize, text_font_family=font.family_monospace)
 
-        table.cell(dashboardTable, 0, 19, "Volume", text_color=tableTextColor, text_size=tSize, text_halign=text.align_left, text_font_family=font.family_monospace)
-        table.cell(dashboardTable, 1, 19, f_gradeMark(hasSetup and volEval, fVol), text_color=f_gradeColor(hasSetup and volEval, fVol), text_size=tSize, text_font_family=font.family_monospace)
-        table.cell(dashboardTable, 2, 19, hasSetup and not volEval ? "off" : "", text_color=color.gray, text_size=tSize, text_font_family=font.family_monospace)
+    table.cell(gradeTable, 0, 4, "LTF FVG (Unicorn)", text_color=tableTextColor, text_size=gSize, text_halign=text.align_left, text_font_family=font.family_monospace)
+    table.cell(gradeTable, 1, 4, f_gradeMark(hasSetup, fLtf), text_color=f_gradeColor(hasSetup, fLtf), text_size=gSize, text_font_family=font.family_monospace)
+    table.cell(gradeTable, 2, 4, "", text_size=gSize)
+
+    table.cell(gradeTable, 0, 5, "Volume", text_color=tableTextColor, text_size=gSize, text_halign=text.align_left, text_font_family=font.family_monospace)
+    table.cell(gradeTable, 1, 5, f_gradeMark(hasSetup and volEval, fVol), text_color=f_gradeColor(hasSetup and volEval, fVol), text_size=gSize, text_font_family=font.family_monospace)
+    table.cell(gradeTable, 2, 5, hasSetup and not volEval ? "off" : "", text_color=color.gray, text_size=gSize, text_font_family=font.family_monospace)
 
 // ========================================
 // QUALIFIED UNICORN RENDERING & ALERTS (NEW)
