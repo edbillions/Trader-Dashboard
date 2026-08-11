@@ -34,11 +34,7 @@ export function HabitChecklist({ habits }: { habits: HabitRow[] }) {
       ) : (
         <div className="flex flex-col gap-2">
           {habits.map((h) => (
-            <form
-              key={h.id}
-              action={toggleHabitLogAction}
-              className="flex items-center gap-2.5 rounded-lg px-2 py-1.5 hover:bg-surface-raised"
-            >
+            <form key={h.id} action={toggleHabitLogAction}>
               <input type="hidden" name="habitId" value={h.id} />
               <input type="hidden" name="date" value={date} />
               <input
@@ -46,6 +42,8 @@ export function HabitChecklist({ habits }: { habits: HabitRow[] }) {
                 name="done"
                 value={h.doneToday ? "true" : "false"}
               />
+              {/* The whole row is the submit target, not just the small
+                  checkbox square — a 20px hit area was too easy to miss. */}
               <button
                 type="submit"
                 aria-label={
@@ -53,30 +51,35 @@ export function HabitChecklist({ habits }: { habits: HabitRow[] }) {
                     ? `Mark "${h.label}" as not done`
                     : `Mark "${h.label}" as done`
                 }
-                className={clsx(
-                  "flex h-5 w-5 shrink-0 items-center justify-center rounded border transition-colors",
-                  h.doneToday
-                    ? "border-accent bg-accent text-white"
-                    : "border-border hover:border-accent",
-                )}
+                className="flex w-full items-center gap-2.5 rounded-lg px-2 py-1.5 text-left hover:bg-surface-raised"
               >
-                {h.doneToday && (
-                  <span className="text-xs leading-none">✓</span>
+                <span
+                  aria-hidden="true"
+                  className={clsx(
+                    "flex h-5 w-5 shrink-0 items-center justify-center rounded border transition-colors",
+                    h.doneToday
+                      ? "border-accent bg-accent text-white"
+                      : "border-border",
+                  )}
+                >
+                  {h.doneToday && (
+                    <span className="text-xs leading-none">✓</span>
+                  )}
+                </span>
+                <span
+                  className={clsx(
+                    "flex-1 text-sm",
+                    h.doneToday ? "text-muted line-through" : "text-foreground",
+                  )}
+                >
+                  {h.label}
+                </span>
+                {h.streak > 0 && (
+                  <span className="whitespace-nowrap text-xs font-medium text-accent">
+                    🔥 {h.streak}
+                  </span>
                 )}
               </button>
-              <span
-                className={clsx(
-                  "flex-1 text-left text-sm",
-                  h.doneToday ? "text-muted line-through" : "text-foreground",
-                )}
-              >
-                {h.label}
-              </span>
-              {h.streak > 0 && (
-                <span className="whitespace-nowrap text-xs font-medium text-accent">
-                  🔥 {h.streak}
-                </span>
-              )}
             </form>
           ))}
         </div>
