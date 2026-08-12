@@ -63,6 +63,21 @@
 //       objects; every array has a stated bound. Two retention issues that
 //       cannot be fixed without changing what you see are proposed, not
 //       applied — see the Pass 2 notes.
+//
+//  ── PASS 3 VALIDATION ───────────────────────────────────────────────────────
+//  Differential audit of this file against the original reference, plus the two
+//  fixes that audit turned up. No architectural change.
+//
+//    1. Removed the `pendingId` slot array — dead since Pass 2 replaced
+//       findById() with a direct reference; written on three paths, read on none.
+//    2. Explicitly typed the na written into the `pendingRef` object array at
+//       both clear sites, rather than relying on inference for a bare na.
+//
+//  One deliberate deviation from the original remains, introduced in Pass 1 and
+//  carried forward knowingly: the five conditionally-evaluated ta.atr(14)
+//  instances are now one always-evaluated series. This is inert on default
+//  settings and only observable with "Enable FVG ATR Filter" or the ATR-unit
+//  breaker size filter switched on, where the new value is the correct one.
 // ─────────────────────────────────────────────────────────────────────────────
 indicator("Unicorn Model + HTF FVG", shorttitle="UM+FVG", overlay=true, max_boxes_count=500, max_lines_count=500, max_labels_count=500)
 
@@ -169,8 +184,10 @@ var array<Fvg> fvgs      = array.new<Fvg>()
 // Left-edge time of the most recent gap drawn per slot — guards against redrawing
 // the same gap on every chart bar inside one source-timeframe bar.
 var array<int> lastLeft  = array.new_int(5, 0)
-// Id of the still-unconfirmed gap per slot (only used when waitForClose is off).
-var array<int> pendingId = array.new_int(5, -1)
+// PASS 3 — the `pendingId` slot array is gone. Once Pass 2 replaced findById()
+// with a direct reference, nothing ever read those ids again; they were written
+// on three paths and consumed on none. Removing dead state, not behaviour.
+//
 // PASS 2 — direct reference to the still-unconfirmed gap per slot, replacing the
 // id -> linear-scan lookup findById() used to perform once per slot per bar.
 //
@@ -1037,7 +1054,6 @@ processSlot(int slot, bool enabled, string tfStr, string tfLabel, bool bullC, bo
             Fvg f = createFvg(bull, top, bot, left, tfLabel, tfSec * 1000, slot)
             array.set(lastLeft, slot, left)
             if not waitForClose
-                array.set(pendingId, slot, f.id)
                 array.set(pendingRef, slot, f)   // PASS 2
         else if not waitForClose and left == prev
             // Still inside the candle that produced this gap: track it as it develops.
@@ -1055,8 +1071,11 @@ processSlot(int slot, bool enabled, string tfStr, string tfLabel, bool bullC, bo
                 else
                     // The gap closed before the candle did — it never existed.
                     dropById(p.id)
-                    array.set(pendingId, slot, -1)
-                    array.set(pendingRef, slot, na)  // PASS 2: keep the slot in step
+                    // PASS 3 — an explicitly typed na rather than a bare one, so
+                    // the element type of an object array is never left to
+                    // inference at this call site.
+                    Fvg noneFvg = na
+                    array.set(pendingRef, slot, noneFvg)  // PASS 2: keep the slot in step
                     array.set(lastLeft, slot, 0)
 
 
@@ -1355,8 +1374,8 @@ if enableHtfFvg and array.size(fvgs) > 0
             if not waitForClose
                 Fvg pend = array.get(pendingRef, f.slot)
                 if not na(pend) and pend.id == f.id
-                    array.set(pendingRef, f.slot, na)
-                    array.set(pendingId, f.slot, -1)
+                    Fvg noneFvg = na  // PASS 3: explicitly typed na
+                    array.set(pendingRef, f.slot, noneFvg)
             // Filled gaps stop being tracked either way: no more extending, no more alerts.
             array.remove(fvgs, i)
 
