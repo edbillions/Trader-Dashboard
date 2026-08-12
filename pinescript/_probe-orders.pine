@@ -1,0 +1,51 @@
+//@version=6
+// ─────────────────────────────────────────────────────────────────────────────
+//  THROWAWAY PROBE — delete after use. This is not a strategy, it is a test.
+//
+//  It answers one question: can ANY strategy place a filled trade on this
+//  chart, with these Properties, on this symbol and timeframe?
+//
+//  Paste it in as a second script, on the SAME chart and timeframe you tried
+//  the Unicorn strategy on, and look at the Strategy Tester.
+//
+//    • Trades appear  →  the environment is fine. The problem is inside the
+//                        Unicorn strategy, and the Setups/Sig/Ord row tells us
+//                        which stage.
+//    • Still empty    →  the problem is the chart, the symbol, or a Properties
+//                        setting (date range, order size, margin), and no
+//                        amount of editing the Unicorn strategy will help.
+// ─────────────────────────────────────────────────────────────────────────────
+strategy("PROBE — can orders fill?", overlay=true,
+     initial_capital         = 10000,
+     default_qty_type        = strategy.fixed,
+     default_qty_value       = 1,
+     process_orders_on_close = true)
+
+// Deliberately dumb and frequent: cross of two fast moving averages. This is
+// not meant to make money, it is meant to make FILLS.
+fast = ta.sma(close, 5)
+slow = ta.sma(close, 20)
+
+if ta.crossover(fast, slow)
+    strategy.entry("L", strategy.long)
+
+if ta.crossunder(fast, slow)
+    strategy.entry("S", strategy.short)
+
+plot(fast, "Fast", color.aqua)
+plot(slow, "Slow", color.orange)
+
+// Bar count and order count, so "no trades" can be told apart from
+// "no data on this chart at all".
+var int orders = 0
+if ta.crossover(fast, slow) or ta.crossunder(fast, slow)
+    orders += 1
+
+var table t = table.new(position.bottom_left, 2, 3, border_width=1)
+if barstate.islast
+    table.cell(t, 0, 0, "PROBE", bgcolor=color.new(color.purple, 30), text_color=color.white)
+    table.cell(t, 1, 0, "", bgcolor=color.new(color.black, 30))
+    table.cell(t, 0, 1, "Bars on chart", text_color=color.gray, text_size=size.small)
+    table.cell(t, 1, 1, str.tostring(bar_index + 1), text_color=color.white, text_size=size.small)
+    table.cell(t, 0, 2, "Signals / Closed trades", text_color=color.gray, text_size=size.small)
+    table.cell(t, 1, 2, str.tostring(orders) + " / " + str.tostring(strategy.closedtrades), text_color=strategy.closedtrades > 0 ? color.green : color.red, text_size=size.small)
