@@ -1296,6 +1296,21 @@ float  sigStop  = na   // the engine's own invalidationPrice
 float  sigZoneT = na   // breaker top, for retrace-limit entries
 float  sigZoneB = na   // breaker bottom, for retrace-limit entries
 
+// [STRATEGY] Pipeline counters, shown on the dashboard's bottom row as
+// "S / G / O". They localise an empty backtest report to one link in the chain:
+//   S = setups the engine confirmed. 0 means the engine found nothing on this
+//       symbol/timeframe with these settings — the execution layer is innocent
+//       and the fix is in the engine's own inputs.
+//   G = signals that survived the qualification and execution filters. Lower
+//       than S means setups are being filtered out (Only Qualified, or orders
+//       disabled), not lost.
+//   O = entry orders actually submitted. Lower than G means sizing returned
+//       nothing or a position was already open. Equal to G with an empty
+//       report means the orders were submitted but never filled.
+var int dbgSetups  = 0
+var int dbgSignals = 0
+var int dbgOrders  = 0
+
 // Track formation bar index for each liquidity level
 var float lastPrevH_A = na
 var float lastSh_A = na
@@ -1649,6 +1664,7 @@ if not na(pendingBullSweepIdx)
                                     array.push(newBull.targetLabels, lbl)
 
                         array.push(activeSetups, newBull)
+                        dbgSetups += 1
 
                         if enableAlerts and alertActivation
                             alert("Activation: Bullish Breaker activated on " + syminfo.ticker + " at " + str.tostring(close), alert.freq_once_per_bar_close)
@@ -1691,6 +1707,7 @@ if not na(pendingBullSweepIdx)
                             sigStop  := newBull.invalidationPrice
                             sigZoneT := newBull.breakerTop
                             sigZoneB := newBull.breakerBottom
+                            dbgSignals += 1
 
                         pendingBullSweepIdx := na
                         pendingBullFirstSweepBar := na
@@ -1879,6 +1896,7 @@ if not na(pendingBearSweepIdx)
                                     array.push(newBear.targetLabels, lbl)
 
                         array.push(activeSetups, newBear)
+                        dbgSetups += 1
 
                         if enableAlerts and alertActivation
                             alert("Activation: Bearish Breaker activated on " + syminfo.ticker + " at " + str.tostring(close), alert.freq_once_per_bar_close)
@@ -1919,6 +1937,7 @@ if not na(pendingBearSweepIdx)
                             sigStop  := newBear.invalidationPrice
                             sigZoneT := newBear.breakerTop
                             sigZoneB := newBear.breakerBottom
+                            dbgSignals += 1
 
                         pendingBearSweepIdx := na
                         pendingBearFirstSweepBar := na
@@ -2144,7 +2163,15 @@ if sigFire and dailyLimitOk and not na(sigStop)
                 float t2 = not execPartials ? t1 : (sigDir > 0 ? math.max(t1, entryPx + riskDist * execRunnerR) : math.min(t1, entryPx - riskDist * execRunnerR))
                 string entryId = sigDir > 0 ? ID_LONG : ID_SHORT
 
-                strategy.entry(entryId, sigDir > 0 ? strategy.long : strategy.short, qty = qty, limit = useLimit ? entryPx : na, comment = sigDir > 0 ? "Unicorn Long" : "Unicorn Short")
+                // The two calls differ only in whether `limit` is passed at all.
+                // Passing limit = na instead submits a limit order with no price,
+                // which rests forever and never fills — an empty backtest report
+                // with no error anywhere to explain it.
+                if useLimit
+                    strategy.entry(entryId, sigDir > 0 ? strategy.long : strategy.short, qty = qty, limit = entryPx, comment = sigDir > 0 ? "Unicorn Long" : "Unicorn Short")
+                else
+                    strategy.entry(entryId, sigDir > 0 ? strategy.long : strategy.short, qty = qty, comment = sigDir > 0 ? "Unicorn Long" : "Unicorn Short")
+                dbgOrders += 1
 
                 // Protection submitted alongside the entry, so a fill is never
                 // left naked for a bar.
@@ -2323,7 +2350,7 @@ if array.size(activeSetups) > 0
 var table dashboardTable = table.new(
      position = f_getTablePosition(dashboardPosition),
      columns = 3,
-     rows = 15,
+     rows = 16,
      bgcolor = tableBgColor,
      border_width = tableBorderWidth,
      border_color = tableBorderColor,
@@ -2476,6 +2503,15 @@ if barstate.islast and showDashboard
         table.cell(dashboardTable, 0, 14, "Position:", text_color=tableTextColor, text_size=tSize, text_halign=text.align_left, text_font_family=font.family_monospace)
         table.cell(dashboardTable, 1, 14, posTxt, text_color=posCol, text_size=tSize, text_font_family=font.family_monospace)
         table.cell(dashboardTable, 2, 14, str.tostring(tradesToday) + "t " + str.tostring(winsToday) + "w " + str.tostring(lossesToday) + "l", text_color=color.gray, text_size=tSize, text_font_family=font.family_monospace)
+
+        // ── [STRATEGY] Pipeline row ──
+        // Setups confirmed → signals captured → orders sent, counted over the
+        // whole backtest. An empty report with S=0 is an engine/settings issue;
+        // with S>0 and O=0 it is the execution filters; with O>0 it means orders
+        // went out but never filled.
+        table.cell(dashboardTable, 0, 15, "Setups/Sig/Ord:", text_color=tableTextColor, text_size=tSize, text_halign=text.align_left, text_font_family=font.family_monospace)
+        table.cell(dashboardTable, 1, 15, str.tostring(dbgSetups) + " / " + str.tostring(dbgSignals) + " / " + str.tostring(dbgOrders), text_color=dbgOrders > 0 ? color.green : dbgSetups > 0 ? color.orange : color.red, text_size=tSize, text_font_family=font.family_monospace)
+        table.cell(dashboardTable, 2, 15, str.tostring(strategy.closedtrades) + " closed", text_color=color.gray, text_size=tSize, text_font_family=font.family_monospace)
 
 // ========================================
 // SETUP GRADE PANEL

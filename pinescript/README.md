@@ -61,3 +61,15 @@ both in Properties to match your broker. For a more conservative model, use
 
 The engine's `History` input only governs how many setups stay drawn — every
 confirmed setup is traded regardless of it.
+
+### Empty backtest report? Read the bottom dashboard row
+
+The dashboard's last row reads `Setups/Sig/Ord: S / G / O`, counted across the
+whole backtest. It localises "no trade data" to one link in the chain:
+
+| Reading | Meaning | Where to look |
+| --- | --- | --- |
+| `0 / 0 / 0` | The engine confirmed nothing at all | Symbol, timeframe and the engine's own inputs — not the execution layer. Try Unicorn Mode off, or a lower timeframe |
+| `S > 0`, `G = 0` | Setups confirmed but filtered out before ordering | *Place Orders?*, *Only Trade HTF-Qualified Setups?*, *Only Show Qualified Setups?* |
+| `G > 0`, `O = 0` | Signals reached the order layer but no order was sent | Sizing — *Minimum Quantity* at 0 with a size that rounds to nothing, or a position already open with *Reverse On Opposite Signal?* off |
+| `O > 0`, report empty | Orders submitted but never filled | Retrace entries that price never returned to; widen *Cancel Unfilled Limit After*, or switch to *Confirmation Close* |
