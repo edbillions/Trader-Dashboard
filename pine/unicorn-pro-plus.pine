@@ -14,7 +14,7 @@
 //    two independent signals occupy the same price — that overlap is the Unicorn.
 // ═════════════════════════════════════════════════════════════════════════════
 
-indicator("Unicorn° [Pro+]", "Unicorn° [Pro+]", overlay = true, max_boxes_count = 500, max_lines_count = 500, max_labels_count = 500, max_bars_back = 5000)
+indicator("Unicorn° [Pro+]", "Unicorn°", overlay = true, max_boxes_count = 500, max_lines_count = 500, max_labels_count = 500, max_bars_back = 5000)
 
 // ═════════════════════════════════════════════════════════════════════════════
 //  1. CONSTANTS
@@ -536,21 +536,26 @@ if pools.size() > 0
                     bearSrc := q.name
                     bearLvlBar := q.bar
 
+// Evaluated on every bar, not inside the branches below: smtCheck reads the
+// correlated markets through the history operator, and a call that only runs on
+// some bars would leave that history inconsistent. Both return "" when there is
+// no sweep to test, since the reference bar is na.
+smtWhoBull = smtCheck(bullLvlBar, true)
+smtWhoBear = smtCheck(bearLvlBar, false)
+
 if sweptBullNow and not na(lastPh)
-    smtWho = smtCheck(bullLvlBar, true)
     pbLvl := math.min(low, bullLvl)
     pbBar := bar_index
-    pbSrc := smtWho != "" ? smtWho : bullSrc
+    pbSrc := smtWhoBull != "" ? smtWhoBull : bullSrc
     pbStruct := lastPh
-    pbSmt := smtWho != ""
+    pbSmt := smtWhoBull != ""
 
 if sweptBearNow and not na(lastPl)
-    smtWho = smtCheck(bearLvlBar, false)
     psLvl := math.max(high, bearLvl)
     psBar := bar_index
-    psSrc := smtWho != "" ? smtWho : bearSrc
+    psSrc := smtWhoBear != "" ? smtWhoBear : bearSrc
     psStruct := lastPl
-    psSmt := smtWho != ""
+    psSmt := smtWhoBear != ""
 
 // Expire stale sweeps
 if not na(pbBar) and bar_index - pbBar > maxWaitBars
@@ -849,7 +854,6 @@ drawModel(Model m) =>
     else
         box.set_right(m.bModel, right)
         box.set_right(m.bZone, right)
-        box.set_bgcolor(m.bModel, modelColor(m))
         label.set_x(m.lbMain, right)
         line.set_x2(m.lEntry, right)
         line.set_x2(m.lStop, right)
@@ -858,6 +862,11 @@ drawModel(Model m) =>
         if not na(m.lBe)
             line.set_x2(m.lBe, right)
             label.set_x(m.lbBe, right)
+
+    // Kept last, and deliberately: it recolours the box as the state changes,
+    // and it leaves the function returning void so neither this if/else nor the
+    // caller's disposeModel/drawModel branches have to agree on a value type.
+    box.set_bgcolor(m.bModel, modelColor(m))
 
 if models.size() > 0
     for i = 0 to models.size() - 1
