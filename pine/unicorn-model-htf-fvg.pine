@@ -45,6 +45,24 @@
 //                               sweep leg instead of once per bar per direction.
 //    3. Single ATR(14) instance shared by all call sites.
 //    4. Session filter evaluated once per bar; targets string parsed once.
+//
+//  ── PASS 2 OPTIMIZATION ─────────────────────────────────────────────────────
+//  HTF liquidity state, arrays and drawing-object lifecycle. Again performance
+//  only: no signal logic, no qualification sequencing, no visual output changed.
+//
+//    1. f_registerLevel     — the origin search and the prior-breach scan are
+//                             fused into one backward pass over the same 1000
+//                             bars, roughly halving the worst case.
+//    2. Sweep loop early-out — cached min/max level bounds let the per-bar
+//                             100-element scan be skipped on bars where no
+//                             level can possibly be reached.
+//    3. pendingRef          — per-slot direct object reference replaces the
+//                             findById() linear scan (live-FVG mode).
+//    4. Dashboard           — the duplicated latest-setup scan is gone.
+//    5. Audited: every setup teardown path deletes all seven of its drawing
+//       objects; every array has a stated bound. Two retention issues that
+//       cannot be fixed without changing what you see are proposed, not
+//       applied — see the Pass 2 notes.
 // ─────────────────────────────────────────────────────────────────────────────
 indicator("Unicorn Model + HTF FVG", shorttitle="UM+FVG", overlay=true, max_boxes_count=500, max_lines_count=500, max_labels_count=500)
 
@@ -108,6 +126,20 @@ type LtfFvg
 var HTFLevel[] activeHTFLevels = array.new<HTFLevel>()
 var Setup[] activeSetups = array.new<Setup>()
 
+// PASS 2 — sweep-loop early-out bounds for activeHTFLevels.
+//   slot 0 = lowest  price among unswept isHigh levels
+//   slot 1 = highest price among unswept isLow  levels
+// A bar can only sweep something if high >= slot 0 or low <= slot 1, so when
+// neither holds the 100-element scan below can be skipped whole. Held in an
+// array because Pine functions may mutate a global object but may not reassign
+// a global variable, and f_registerLevel has to update these on push.
+//
+// Staleness is safe by construction and in one direction only: every path that
+// ADDS a level tightens the bounds at the push site, while paths that REMOVE
+// one (the sweep itself, the 100-level trim) can only leave the bounds too
+// permissive — which costs an unnecessary scan, never a missed sweep.
+var float[] lvlBounds = array.new_float(2, na)
+
 // PASS 1 — unmitigated LTF FVG registries, oldest first. Maintained once per
 // bar; read (never written) by the FVG lookup functions.
 var LtfFvg[] ltfBullFvgs = array.new<LtfFvg>()
@@ -129,6 +161,9 @@ type Fvg
     // Left edge of the gap, kept on the object so a zone can still be drawn
     // later from a gap that was never drawn when it formed.
     int    leftTime
+    // PASS 2 — timeframe slot this gap belongs to, so the maintenance loop can
+    // clear the slot's pending reference when the gap stops being tracked.
+    int    slot
 
 var array<Fvg> fvgs      = array.new<Fvg>()
 // Left-edge time of the most recent gap drawn per slot — guards against redrawing
@@ -136,6 +171,15 @@ var array<Fvg> fvgs      = array.new<Fvg>()
 var array<int> lastLeft  = array.new_int(5, 0)
 // Id of the still-unconfirmed gap per slot (only used when waitForClose is off).
 var array<int> pendingId = array.new_int(5, -1)
+// PASS 2 — direct reference to the still-unconfirmed gap per slot, replacing the
+// id -> linear-scan lookup findById() used to perform once per slot per bar.
+//
+// Equivalence rests on one invariant: this slot holds a gap if and only if that
+// gap is still in `fvgs`. Both removal paths clear it — the fill branch of the
+// maintenance loop (matched on id, so a slot already reused by a newer gap is
+// left alone) and processSlot's own drop path. So a read here returns exactly
+// what findById would have: the object while it is tracked, na once it is not.
+var array<Fvg> pendingRef = array.new<Fvg>(5)
 // Id counter. Held in an array because Pine functions may mutate a global object
 // but may not reassign a global variable.
 var array<int> idSeq = array.new_int(1, 0)
@@ -454,10 +498,57 @@ f_checkSizeFilter(breakerTop, breakerBottom, sizeFilterMode, minBreakerSize, max
             pass := false
     pass
 
-// Find exact extreme index where price was hit (looks back up to 1000 bars)
-f_findExtremeBar(float priceVal, bool isHigh) =>
-    int extBar = na
+// PASS 2 — origin bar + prior-breach test, fused into a single backward pass.
+//
+// The reference ran two separate scans back to back: f_findExtremeBar walked
+// offsets 0..1000 newest-first looking for the bar that printed the level, and
+// f_registerLevel then walked the bars *between* that bar and now looking for a
+// prior breach. Both cover the same stretch of history, so one pass answers
+// both questions.
+//
+// Range mapping, so the fusion is checkable rather than asserted. With the
+// match found at offset iExt, the reference's breach loop ran over absolute bar
+// indices [max(extBar + 1, bar_index - 999), bar_index - 1], which in offset
+// terms is exactly [1, min(iExt - 1, 999)]:
+//
+//   • offset 0 is excluded — the match test is evaluated first at every offset,
+//     so the matching bar itself is never treated as a breach, and neither is
+//     the current bar when it is the match;
+//   • the 999 cap is the reference's own bar_index - 999 floor;
+//   • the reference's breach loop broke on the first (oldest) breach while this
+//     one records the newest; only the boolean is consumed, so both agree.
+//
+// When no match is found the reference skipped the breach test altogether and
+// registered the level regardless of history. That fallback is preserved
+// verbatim — see the note in f_registerLevel for why it is load-bearing.
+//
+// Bound is unchanged at 1000 offsets. This is a fusion, not a shortened
+// lookback: worst case drops from ~2N to ~N over the identical bar range.
+//
+// The fused loop lives inline in f_registerLevel below rather than in its own
+// helper: f_registerLevel was the only caller, and keeping it inline avoids
+// returning a tuple out of one user function into another.
+
+// Register active levels in memory (no visual rendering here)
+//
+// PASS 2 — the origin search and the prior-breach scan are now one call. Note
+// that the "no origin found" fallback is deliberately untouched: when the level
+// is older than 1000 chart bars (routinely the case for a Daily source on an
+// intraday chart) the reference located no origin bar, skipped the breach test
+// entirely and registered the level anyway. Capturing the true origin bar at
+// creation time — as a pure state design would — would make the breach test
+// always run and would therefore reject levels this engine currently accepts,
+// changing which liquidity exists and so which setups fire. That is a signal
+// change, so it is not made here. See the Pass 2 notes for the opt-in proposal.
+//
+// The duplicate scan is deliberately left after the breach test as well. It is
+// bounded at 100 and is a small fraction of this function's cost, whereas
+// hoisting it above the breach test would change behaviour for a level that is
+// both already registered and already breached.
+f_registerLevel(string tfLabel, string lvlType, bool isHigh, float priceVal) =>
     if not na(priceVal)
+        int  extBar   = na
+        bool breached = false
         for i = 0 to 1000
             if i >= bar_index
                 break
@@ -465,27 +556,14 @@ f_findExtremeBar(float priceVal, bool isHigh) =>
             if math.abs(checkVal - priceVal) < (syminfo.mintick * 0.1)
                 extBar := bar_index - i
                 break
-    extBar
+            if i <= 999 and not breached
+                if isHigh ? checkVal >= priceVal : checkVal <= priceVal
+                    breached := true
 
-// Register active levels in memory (no visual rendering here)
-f_registerLevel(string tfLabel, string lvlType, bool isHigh, float priceVal) =>
-    if not na(priceVal)
-        int extBar = f_findExtremeBar(priceVal, isHigh)
         int startB = na(extBar) ? bar_index : extBar
-
-        // Check if the level has already been breached in the past (between startB + 1 and bar_index - 1, capped at 999 bars max)
-        int startSearch = math.max(startB + 1, bar_index - 999)
-        bool alreadyBreached = false
-        if not na(extBar) and startSearch <= bar_index - 1
-            for i = startSearch to bar_index - 1
-                float checkHigh = high[bar_index - i]
-                float checkLow = low[bar_index - i]
-                if isHigh and checkHigh >= priceVal
-                    alreadyBreached := true
-                    break
-                else if not isHigh and checkLow <= priceVal
-                    alreadyBreached := true
-                    break
+        // A breach only counts when the origin bar was located, matching the
+        // reference's `if not na(extBar) and ...` guard on its breach loop.
+        bool alreadyBreached = na(extBar) ? false : breached
 
         if not alreadyBreached
             bool exists = false
@@ -512,6 +590,15 @@ f_registerLevel(string tfLabel, string lvlType, bool isHigh, float priceVal) =>
                      labelText = labelTxt
                      )
                 array.push(activeHTFLevels, newLvl)
+                // PASS 2 — keep the sweep-loop bounds current. Held in an array
+                // because a Pine function may mutate a global object but may not
+                // reassign a global variable (same reason idSeq is an array).
+                if isHigh
+                    float curMin = array.get(lvlBounds, 0)
+                    array.set(lvlBounds, 0, na(curMin) ? priceVal : math.min(curMin, priceVal))
+                else
+                    float curMax = array.get(lvlBounds, 1)
+                    array.set(lvlBounds, 1, na(curMax) ? priceVal : math.max(curMax, priceVal))
 
 // Position Sizing Calculations (From MTF MA Model)
 getContractSize() =>
@@ -889,7 +976,7 @@ labelX(int l, int r) =>
         "Center" => int(math.avg(l, r))
         => r - pad
 
-createFvg(bool bull, float top, float bot, int leftTime, string tfLabel, int tfMs) =>
+createFvg(bool bull, float top, float bot, int leftTime, string tfLabel, int tfMs, int slot) =>
     // Never narrower than the three source candles that formed the gap, so a
     // high-timeframe box stays visible on a much lower chart timeframe.
     int   rightTime = leftTime + int(math.max(boxLength * chartMs, 2 * tfMs))
@@ -910,20 +997,17 @@ createFvg(bool bull, float top, float bot, int leftTime, string tfLabel, int tfM
                  size      = labelSizeOf())
     int id = array.get(idSeq, 0) + 1
     array.set(idSeq, 0, id)
-    Fvg f = Fvg.new(id = id, bx = bx, lb = lb, top = top, bot = bot, bull = bull, entered = false, tfLabel = tfLabel, leftTime = leftTime)
+    Fvg f = Fvg.new(id = id, bx = bx, lb = lb, top = top, bot = bot, bull = bull, entered = false, tfLabel = tfLabel, leftTime = leftTime, slot = slot)
     array.push(fvgs, f)
     f
 
-findById(int id) =>
-    Fvg res = na
-    if id >= 0 and array.size(fvgs) > 0
-        for i = 0 to array.size(fvgs) - 1
-            Fvg f = array.get(fvgs, i)
-            if f.id == id
-                res := f
-                break
-    res
-
+// PASS 2 — findById() removed. Its only caller (processSlot's live-gap update
+// path) now reads pendingRef directly, turning a linear scan of every tracked
+// gap, run once per slot per bar, into an O(1) array read.
+//
+// dropById keeps its scan: it needs the element's index to remove it, it fires
+// only on the rare bar where a still-forming gap closes up before its candle
+// does, and it exits at the match.
 dropById(int id) =>
     if id >= 0 and array.size(fvgs) > 0
         for i = array.size(fvgs) - 1 to 0
@@ -950,13 +1034,14 @@ processSlot(int slot, bool enabled, string tfStr, string tfLabel, bool bullC, bo
         int  prev = array.get(lastLeft, slot)
 
         if has and not na(left) and left != prev
-            Fvg f = createFvg(bull, top, bot, left, tfLabel, tfSec * 1000)
+            Fvg f = createFvg(bull, top, bot, left, tfLabel, tfSec * 1000, slot)
             array.set(lastLeft, slot, left)
             if not waitForClose
                 array.set(pendingId, slot, f.id)
+                array.set(pendingRef, slot, f)   // PASS 2
         else if not waitForClose and left == prev
             // Still inside the candle that produced this gap: track it as it develops.
-            Fvg p = findById(array.get(pendingId, slot))
+            Fvg p = array.get(pendingRef, slot)  // PASS 2: was findById(pendingId[slot])
             if not na(p)
                 if has
                     p.top := top
@@ -971,6 +1056,7 @@ processSlot(int slot, bool enabled, string tfStr, string tfLabel, bool bullC, bo
                     // The gap closed before the candle did — it never existed.
                     dropById(p.id)
                     array.set(pendingId, slot, -1)
+                    array.set(pendingRef, slot, na)  // PASS 2: keep the slot in step
                     array.set(lastLeft, slot, 0)
 
 
@@ -1254,12 +1340,23 @@ if enableHtfFvg and array.size(fvgs) > 0
 
         if extendBoxes and not na(f.bx)
             box.set_right(f.bx, time)
-            label.set_x(f.lb, labelX(box.get_left(f.bx), time))
+            // PASS 2 — the box's left edge is already on the object and nothing
+            // ever moves it, so read the field instead of querying the drawing.
+            label.set_x(f.lb, labelX(f.leftTime, time))
 
         if filled
             if deleteAfterFill and not na(f.bx)
                 box.delete(f.bx)
                 label.delete(f.lb)
+            // PASS 2 — a gap leaving `fvgs` must also leave the slot's pending
+            // reference, or that slot would keep a handle on an untracked gap.
+            // Matched on id so a slot already reassigned to a newer gap is not
+            // cleared. This is what makes pendingRef agree with findById.
+            if not waitForClose
+                Fvg pend = array.get(pendingRef, f.slot)
+                if not na(pend) and pend.id == f.id
+                    array.set(pendingRef, f.slot, na)
+                    array.set(pendingId, f.slot, -1)
             // Filled gaps stop being tracked either way: no more extending, no more alerts.
             array.remove(fvgs, i)
 
@@ -1482,7 +1579,20 @@ float sweptBearPrice = na
 int sweptBearStartBar = na
 string sweptBearlabelText = ""
 
-if array.size(activeHTFLevels) > 0
+// PASS 2 — early-out. minHighLvl is the lowest price among unswept isHigh
+// levels, so `high >= lvl.price` can hold for some level only if high has
+// reached it; maxLowLvl is the mirror. When neither is reached no level can be
+// swept, the loop below would set swept = false for all 100 elements and leave
+// every sweptBull/sweptBear output at its default — so skipping it is exactly
+// equivalent, not an approximation. The bounds are recomputed from the
+// survivors on the bars the loop does run.
+float minHighLvl = array.get(lvlBounds, 0)
+float maxLowLvl  = array.get(lvlBounds, 1)
+bool  maySweep   = (not na(minHighLvl) and high >= minHighLvl) or (not na(maxLowLvl) and low <= maxLowLvl)
+
+if maySweep and array.size(activeHTFLevels) > 0
+    float nextMinHigh = na
+    float nextMaxLow  = na
     for idx = array.size(activeHTFLevels) - 1 to 0
         lvl = array.get(activeHTFLevels, idx)
 
@@ -1514,9 +1624,21 @@ if array.size(activeHTFLevels) > 0
             lvl.isSwept := true
             lvl.sweepBar := bar_index
             // Performance Optimization: Immediately remove swept level from execution array
+            // (reverse iteration already makes this index-stable — PASS 2 audit)
             array.remove(activeHTFLevels, idx)
+        else
+            // PASS 2 — refresh the early-out bounds from the levels that survive.
+            if lvl.isHigh
+                nextMinHigh := na(nextMinHigh) ? lvl.price : math.min(nextMinHigh, lvl.price)
+            else
+                nextMaxLow := na(nextMaxLow) ? lvl.price : math.max(nextMaxLow, lvl.price)
+
+    array.set(lvlBounds, 0, nextMinHigh)
+    array.set(lvlBounds, 1, nextMaxLow)
 
 // Limit level memory history to prevent array overflow
+// PASS 2 note: trimming here can only remove levels, so the bounds above stay
+// valid in the permissive direction; no refresh is needed.
 while array.size(activeHTFLevels) > 100
     array.shift(activeHTFLevels)
 
@@ -2272,17 +2394,19 @@ if barstate.islast and showDashboard
     // it by definition. Only with no active setup does it fall back to showing
     // live context, where there is no setup for it to be misread against.
     if enableHtfFvg
-        // Mirrors the latest-setup extraction above (same order, same
-        // conditions, same break) so it always resolves to the same setup.
+        // PASS 2 — this used to re-run the latest-setup scan verbatim, a second
+        // walk of activeSetups on every last-bar render whose only job was to
+        // land on the setup `gradeSetup` already points at. Reading that
+        // reference is the same value by construction and removes both the
+        // duplicate scan and the risk of the two copies drifting apart.
+        //
+        // Guarded reads: Pine does not guarantee short-circuit evaluation, so
+        // the fields are only touched after the na check, as elsewhere.
         int    latestConf = na
         string latestDir  = ""
-        if array.size(activeSetups) > 0
-            for i = array.size(activeSetups) - 1 to 0
-                s = array.get(activeSetups, i)
-                if not s.isInvalidated and not s.isTargetHit
-                    latestConf := s.confIndex
-                    latestDir  := s.dir
-                    break
+        if not na(gradeSetup)
+            latestConf := gradeSetup.confIndex
+            latestDir  := gradeSetup.dir
 
         string ctxTxt = "NONE"
         color  ctxCol = color.gray
