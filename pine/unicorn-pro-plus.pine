@@ -1,0 +1,1064 @@
+// This source code is subject to the terms of the Mozilla Public License 2.0
+//@version=6
+
+// ═════════════════════════════════════════════════════════════════════════════
+//  Unicorn° [Pro+]
+//  ICT Unicorn Model — liquidity sweep → MSS/displacement → breaker block → FVG
+//  overlap, with R-projection, break-even management, daily risk limiting and
+//  performance statistics.
+//
+//  Model sequence (bullish; bearish is mirrored):
+//    Low → High → Lower Low (sweeps liquidity) → displacement close above the
+//    prior High (MSS). The last down-close candle of that sweep leg becomes the
+//    bullish breaker. Where the breaker's range overlaps a Fair Value Gap, the
+//    two independent signals occupy the same price — that overlap is the Unicorn.
+// ═════════════════════════════════════════════════════════════════════════════
+
+indicator("Unicorn° [Pro+]", "Unicorn° [Pro+]", overlay = true, max_boxes_count = 500, max_lines_count = 500, max_labels_count = 500, max_bars_back = 5000)
+
+// ═════════════════════════════════════════════════════════════════════════════
+//  1. CONSTANTS
+// ═════════════════════════════════════════════════════════════════════════════
+
+// Model lifecycle states
+const int ST_CONFIRMED = 1
+const int ST_ACTIVE    = 2
+const int ST_ARMED     = 3
+const int ST_WIN       = 4
+const int ST_LOSS      = 5
+const int ST_BE        = 6
+const int ST_INVALID   = 7
+
+const string MODE_UNICORN = "Unicorn (Breaker + FVG)"
+const string MODE_BREAKER = "Breaker Only"
+const string MODE_BOTH    = "Unicorn + Breaker"
+
+const string FSRC_HTF    = "Paired HTF"
+const string FSRC_CHART  = "Chart TF"
+const string FSRC_EITHER = "Either"
+
+const string BIAS_BOTH  = "Both"
+const string BIAS_LONG  = "Longs Only"
+const string BIAS_SHORT = "Shorts Only"
+const string BIAS_AUTO  = "Auto (HTF Bias)"
+
+const string PROJ_BREAKER = "Breaker Range"
+const string PROJ_CONF    = "Confirmation Close"
+
+const string ENT_PROX = "Zone Proximal"
+const string ENT_CE   = "Zone Midpoint (CE)"
+const string ENT_DIST = "Zone Distal"
+
+const string SZ_TICKS = "Ticks"
+const string SZ_ATR   = "ATR Multiple"
+
+const string POS_TR = "Top Right"
+const string POS_TL = "Top Left"
+const string POS_BR = "Bottom Right"
+const string POS_BL = "Bottom Left"
+
+// ═════════════════════════════════════════════════════════════════════════════
+//  2. INPUTS
+// ═════════════════════════════════════════════════════════════════════════════
+
+const string G_MDL  = "MODEL"
+const string G_TF   = "TIMEFRAME PAIRING"
+const string G_LIQ  = "LIQUIDITY SOURCES"
+const string G_SESS = "SESSION LIQUIDITY"
+const string G_SMT  = "SMART MONEY DIVERGENCE"
+const string G_FILT = "FILTERS"
+const string G_RISK = "TARGET & PROJECTION"
+const string G_BE   = "BREAK-EVEN"
+const string G_DRL  = "DAILY RISK LIMITER"
+const string G_HTFC = "HIGHER TIMEFRAME CANDLES"
+const string G_HUD  = "HUD & STATISTICS"
+const string G_STY  = "STYLE"
+const string G_ALRT = "ALERTS"
+
+// ── Model ────────────────────────────────────────────────────────────────────
+modelMode = input.string(MODE_UNICORN, "Model Mode", options = [MODE_UNICORN, MODE_BREAKER, MODE_BOTH], group = G_MDL, tooltip = "Unicorn — only confirm when a Fair Value Gap overlaps the breaker (strict).\nBreaker Only — confirm on sweep + MSS + breaker, FVG not required.\nUnicorn + Breaker — confirm both, labelled separately.")
+histLimit = input.int(10, "History Limit (models kept)", minval = 1, maxval = 50, group = G_MDL, tooltip = "How many past models stay on the chart. Each model owns several drawings, and TradingView caps a script at 500 boxes / lines / labels — raise this only if the oldest models start disappearing on their own.")
+biasMode = input.string(BIAS_BOTH, "Bias Filter", options = [BIAS_BOTH, BIAS_LONG, BIAS_SHORT, BIAS_AUTO], group = G_MDL, tooltip = "Auto derives bias from the paired higher timeframe: price above the HTF midpoint favours longs, below favours shorts. Counter-bias setups are skipped.")
+showPotential = input.bool(true, "Show Potential Model?", group = G_MDL, tooltip = "Draw the setup as soon as the sweep and breaker exist, before the market structure shift confirms it.")
+hideInvalid = input.bool(true, "Hide Invalidated History?", group = G_MDL, tooltip = "Remove models that were invalidated before entry instead of leaving them on the chart.")
+fvgSource = input.string(FSRC_HTF, "Unicorn FVG Source", options = [FSRC_HTF, FSRC_CHART, FSRC_EITHER], group = G_MDL, tooltip = "Which Fair Value Gap has to overlap the breaker to form the Unicorn zone.")
+
+// ── Timeframe pairing ────────────────────────────────────────────────────────
+autoPair = input.bool(true, "Automatic Timeframe Pairing", group = G_TF, tooltip = "Pairs the chart timeframe with a sensible higher timeframe: 1m→15m, 3m→30m, 5m→1H, 15m/30m→4H, 1H→1D, 4H→1W.")
+manualHtf = input.timeframe("60", "Paired Higher Timeframe", group = G_TF)
+
+// ── Liquidity sources ────────────────────────────────────────────────────────
+useChartSwings = input.bool(true, "Chart Timeframe Swings", group = G_LIQ)
+useHtfSwings = input.bool(true, "Higher Timeframe Swings", group = G_LIQ)
+useHtfOhlc = input.bool(true, "Higher Timeframe OHLC", group = G_LIQ, tooltip = "The open, high, low and close of the last closed HTF candle act as micro-liquidity pools.")
+usePdhl = input.bool(true, "Previous Day High / Low", group = G_LIQ)
+pivLen = input.int(5, "Swing Pivot Strength", minval = 1, maxval = 25, group = G_LIQ)
+htfPivLen = input.int(3, "HTF Swing Pivot Strength", minval = 1, maxval = 25, group = G_LIQ)
+maxPools = input.int(40, "Max Tracked Liquidity Pools", minval = 5, maxval = 200, group = G_LIQ)
+
+// ── Session liquidity ────────────────────────────────────────────────────────
+sessEnable = input.bool(true, "Enable Session Liquidity", group = G_SESS)
+sessTz = input.string("America/New_York", "Session Timezone", group = G_SESS)
+s1Name = input.string("Asia", "Session 1 Name", group = G_SESS)
+s1Time = input.session("2000-0000", "Session 1 Time", group = G_SESS)
+s2Name = input.string("London", "Session 2 Name", group = G_SESS)
+s2Time = input.session("0200-0500", "Session 2 Time", group = G_SESS)
+s3Name = input.string("New York AM", "Session 3 Name", group = G_SESS)
+s3Time = input.session("0930-1200", "Session 3 Time", group = G_SESS)
+s4Name = input.string("New York PM", "Session 4 Name", group = G_SESS)
+s4Time = input.session("1330-1600", "Session 4 Time", group = G_SESS)
+
+// ── Smart money divergence ───────────────────────────────────────────────────
+smtEnable = input.bool(true, "Enable SMT Divergence Mapping", group = G_SMT, tooltip = "When the chart sweeps a level but a correlated market fails to follow, the sweep is labelled with the diverging ticker instead of the level name.")
+smtSym1 = input.symbol("", "Correlated Ticker 1", group = G_SMT)
+smtSym2 = input.symbol("", "Correlated Ticker 2", group = G_SMT)
+smtSym3 = input.symbol("", "Correlated Ticker 3", group = G_SMT)
+smtRequired = input.bool(false, "Require SMT for Confirmation", group = G_SMT, tooltip = "Only confirm models whose sweep also produced a divergence against one of the correlated tickers.")
+
+// ── Filters ──────────────────────────────────────────────────────────────────
+sessFilter = input.bool(false, "Only Signal Inside Sessions", group = G_FILT, tooltip = "Restricts confirmations to the enabled session windows below. Off = All Hours.")
+sf1 = input.bool(false, "· Session 1", group = G_FILT, inline = "sf1")
+sf2 = input.bool(false, "· Session 2", group = G_FILT, inline = "sf1")
+sf3 = input.bool(true, "· Session 3", group = G_FILT, inline = "sf2")
+sf4 = input.bool(false, "· Session 4", group = G_FILT, inline = "sf2")
+sizeMode = input.string(SZ_ATR, "Breaker Size Measured In", options = [SZ_TICKS, SZ_ATR], group = G_FILT)
+minSize = input.float(0.15, "Min Breaker Size", minval = 0.0, step = 0.05, group = G_FILT)
+maxSize = input.float(4.0, "Max Breaker Size", minval = 0.0, step = 0.05, group = G_FILT)
+reqDisplacement = input.bool(true, "Require Displacement on MSS", group = G_FILT, tooltip = "The structure break has to arrive with a Fair Value Gap in the breaking leg, or a candle range of at least the multiple below. A breaker without displacement is just a shape on a chart.")
+dispMult = input.float(1.0, "Displacement ATR Multiple", minval = 0.1, step = 0.1, group = G_FILT)
+maxWaitBars = input.int(60, "Max Bars Sweep → Confirmation", minval = 3, maxval = 500, group = G_FILT, tooltip = "A pending sweep that has not produced a structure shift within this many bars is discarded.")
+maxEntryBars = input.int(120, "Max Bars Confirmation → Entry", minval = 3, maxval = 500, group = G_FILT, tooltip = "A confirmed model that never gets a retrace entry within this many bars expires.")
+
+// ── Target & projection ──────────────────────────────────────────────────────
+targetR = input.float(2.0, "Target Risk : Reward", minval = 0.5, maxval = 20.0, step = 0.5, group = G_RISK)
+projMode = input.string(PROJ_CONF, "Projection Calculation", options = [PROJ_BREAKER, PROJ_CONF], group = G_RISK, tooltip = "Breaker Range — 1R is the height of the breaker block.\nConfirmation Close — 1R is measured from the close of the candle that confirmed the structure shift.")
+useSwingInval = input.bool(true, "Use Swing as Invalidation", group = G_RISK, tooltip = "On — the stop sits beyond the swept swing point.\nOff — the stop sits at the far edge of the breaker block.")
+entryMode = input.string(ENT_PROX, "Entry Level", options = [ENT_PROX, ENT_CE, ENT_DIST], group = G_RISK)
+stopBufTicks = input.int(2, "Stop Buffer (ticks)", minval = 0, maxval = 200, group = G_RISK)
+stopFirst = input.bool(true, "Ambiguous Bars Count as Losses", group = G_RISK, tooltip = "When one bar's range covers both the stop and the target there is no way to know which came first. On — count it as a loss, the conservative backtesting convention. Off — count it as a win, which flatters the statistics.")
+showRr = input.bool(true, "Show Risk : Reward Bar", group = G_RISK)
+rrOffset = input.int(30, "R:R Bar Offset (bars)", minval = 1, maxval = 200, group = G_RISK)
+rrWidth = input.int(6, "R:R Bar Width (bars)", minval = 1, maxval = 50, group = G_RISK)
+
+// ── Break-even ───────────────────────────────────────────────────────────────
+beEnable = input.bool(true, "Enable Break-Even (50% of Trade)?", group = G_BE, tooltip = "Once price travels half the distance from entry to target, the stop is treated as moved to entry. A pull back to entry after that closes the trade at break-even instead of a loss.")
+beShowLine = input.bool(true, "Show Break-Even Trigger Line?", group = G_BE)
+beColor = input.color(#2962ff, "BE Trigger Line Color", group = G_BE)
+beStyle = input.string("dotted", "BE Trigger Line Style", options = ["solid", "dotted", "dashed"], group = G_BE)
+beWidth = input.int(1, "BE Trigger Line Width", minval = 1, maxval = 5, group = G_BE)
+
+// ── Daily risk limiter ───────────────────────────────────────────────────────
+drlEnable = input.bool(true, "Enable Daily Trade Limit?", group = G_DRL, tooltip = "Stops new models from confirming once the day's win or loss budget is spent. One loss and you are done for the day; one win and you walk away.")
+maxDayWins = input.int(1, "Max Daily Wins", minval = 1, maxval = 20, group = G_DRL)
+maxDayLosses = input.int(2, "Max Daily Losses", minval = 1, maxval = 20, group = G_DRL)
+
+// ── HTF candles ──────────────────────────────────────────────────────────────
+htfcShow = input.bool(true, "Show Higher Timeframe Candles", group = G_HTFC)
+htfcCount = input.int(4, "Candles to Display", minval = 1, maxval = 20, group = G_HTFC)
+htfcOffset = input.int(48, "Panel Offset (bars)", minval = 1, maxval = 300, group = G_HTFC)
+htfcWidth = input.int(4, "Candle Body Width (bars)", minval = 1, maxval = 20, group = G_HTFC)
+htfcGap = input.int(3, "Gap Between Candles (bars)", minval = 1, maxval = 20, group = G_HTFC)
+htfcCountdown = input.bool(true, "Show Countdown to Close", group = G_HTFC)
+htfFvgShow = input.bool(true, "Show HTF FVG Delivery Bands", group = G_HTFC)
+htfFvgCount = input.int(3, "HTF FVG Bands to Display", minval = 1, maxval = 10, group = G_HTFC)
+
+// ── HUD & statistics ─────────────────────────────────────────────────────────
+hudShow = input.bool(true, "Show HUD", group = G_HUD)
+hudPos = input.string(POS_BR, "HUD Position", options = [POS_TR, POS_TL, POS_BR, POS_BL], group = G_HUD)
+statsShow = input.bool(true, "Show Monthly Statistics Table", group = G_HUD)
+statsPos = input.string(POS_TR, "Statistics Position", options = [POS_TR, POS_TL, POS_BR, POS_BL], group = G_HUD)
+statsRows = input.int(6, "Months to Display", minval = 1, maxval = 24, group = G_HUD)
+tblTextSize = input.string("Small", "Table Text Size", options = ["Tiny", "Small", "Normal", "Large"], group = G_HUD)
+tblTextColor = input.color(#787b86, "Table Text Color", group = G_HUD)
+
+// ── Style ────────────────────────────────────────────────────────────────────
+bullColor = input.color(#2962ff, "Model Box Color", group = G_STY, inline = "mb")
+modelTransp = input.int(90, "Transp.", minval = 0, maxval = 100, group = G_STY, inline = "mb")
+zoneColor = input.color(#f2994a, "Unicorn Zone Color", group = G_STY, inline = "zb")
+zoneTransp = input.int(70, "Transp.", minval = 0, maxval = 100, group = G_STY, inline = "zb")
+potColor = input.color(#9598a1, "Potential Model Color", group = G_STY, inline = "pb")
+potTransp = input.int(93, "Transp.", minval = 0, maxval = 100, group = G_STY, inline = "pb")
+fvgBandColor = input.color(#9598a1, "HTF FVG Band Color", group = G_STY, inline = "fb")
+fvgBandTransp = input.int(88, "Transp.", minval = 0, maxval = 100, group = G_STY, inline = "fb")
+riskColor = input.color(#b2b5be, "R:R Risk Color", group = G_STY, inline = "rr")
+rewardColor = input.color(#a5d6c1, "R:R Reward Color", group = G_STY, inline = "rr")
+lineColor = input.color(#787b86, "Level & Label Color", group = G_STY)
+upColor = input.color(#26a69a, "HTF Candle Up", group = G_STY, inline = "hc")
+downColor = input.color(#131722, "HTF Candle Down", group = G_STY, inline = "hc")
+labelSize = input.string("Small", "Label Text Size", options = ["Tiny", "Small", "Normal", "Large"], group = G_STY)
+
+// ── Alerts ───────────────────────────────────────────────────────────────────
+alPotential = input.bool(false, "Alert: Potential Model", group = G_ALRT)
+alConfirmed = input.bool(true, "Alert: Confirmed Model", group = G_ALRT)
+alEntry = input.bool(true, "Alert: Entry", group = G_ALRT)
+alBe = input.bool(true, "Alert: Break-Even Armed", group = G_ALRT)
+alTarget = input.bool(true, "Alert: Target Reached", group = G_ALRT)
+alStop = input.bool(true, "Alert: Stop Loss", group = G_ALRT)
+alInval = input.bool(false, "Alert: Invalidated", group = G_ALRT)
+
+// ═════════════════════════════════════════════════════════════════════════════
+//  3. DERIVED SETTINGS & HELPERS
+// ═════════════════════════════════════════════════════════════════════════════
+
+_tfSec = timeframe.in_seconds()
+autoTf = _tfSec <= 60 ? "15" : _tfSec <= 180 ? "30" : _tfSec <= 300 ? "60" : _tfSec <= 1800 ? "240" : _tfSec <= 3600 ? "D" : _tfSec <= 14400 ? "W" : "M"
+htf = autoPair ? autoTf : manualHtf
+
+// Human-readable timeframe, e.g. "60" → "1H", "15" → "15m"
+tfPretty(string t) =>
+    string out = t
+    if t == "D" or t == "1D"
+        out := "1D"
+    else if t == "W" or t == "1W"
+        out := "1W"
+    else if t == "M" or t == "1M"
+        out := "1M"
+    else
+        v = str.tonumber(t)
+        out := na(v) ? t : v >= 1440 ? str.tostring(v / 1440, "#.##") + "D" : v >= 60 ? str.tostring(v / 60, "#.##") + "H" : str.tostring(v, "#") + "m"
+    out
+
+htfName = tfPretty(htf)
+chartName = tfPretty(timeframe.period)
+
+txtSize(string s) =>
+    s == "Tiny" ? size.tiny : s == "Normal" ? size.normal : s == "Large" ? size.large : size.small
+
+tblPos(string s) =>
+    s == POS_TL ? position.top_left : s == POS_BR ? position.bottom_right : s == POS_BL ? position.bottom_left : position.top_right
+
+lnStyle(string s) =>
+    s == "dotted" ? line.style_dotted : s == "dashed" ? line.style_dashed : line.style_solid
+
+lblSize = txtSize(labelSize)
+tblSize = txtSize(tblTextSize)
+beLineStyle = lnStyle(beStyle)
+tickBuf = stopBufTicks * syminfo.mintick
+
+atr = ta.atr(14)
+
+// Is the current bar inside a session window?
+inSession(string spec) =>
+    not na(time(timeframe.period, spec, sessTz))
+
+s1On = sessEnable and inSession(s1Time)
+s2On = sessEnable and inSession(s2Time)
+s3On = sessEnable and inSession(s3Time)
+s4On = sessEnable and inSession(s4Time)
+
+// Session gate for confirmations
+sessionOk = not sessFilter or (sf1 and s1On) or (sf2 and s2On) or (sf3 and s3On) or (sf4 and s4On)
+
+// Text describing the active session filter, for the HUD
+sessionText() =>
+    string out = ""
+    if not sessFilter
+        out := "All Hours"
+    else
+        if sf1
+            out := s1Name
+        if sf2
+            out := out == "" ? s2Name : out + ", " + s2Name
+        if sf3
+            out := out == "" ? s3Name : out + ", " + s3Name
+        if sf4
+            out := out == "" ? s4Name : out + ", " + s4Name
+        if out == ""
+            out := "None"
+    out
+
+pad2(int v) =>
+    (v < 10 ? "0" : "") + str.tostring(v)
+
+// "CME_MINI:ES1!" → "ES1!"
+tickerOf(string s) =>
+    parts = str.split(s, ":")
+    parts.size() > 0 ? parts.get(parts.size() - 1) : s
+
+// Highest visible price, used to place the HTF panel header.
+panelTop = ta.highest(high, 50)
+
+// ═════════════════════════════════════════════════════════════════════════════
+//  4. TYPES
+// ═════════════════════════════════════════════════════════════════════════════
+
+// A pool of resting liquidity — a swing point, an OHLC level or a session extreme.
+type Liq
+    float  price
+    int    bar
+    string name
+    bool   isHigh
+    bool   swept
+
+// A three-candle imbalance.
+type Fvg
+    float top
+    float bot
+    int   bar
+    bool  bull
+    bool  htf
+
+// One instance of the model, from sweep through to a closed result.
+type Model
+    bool   bull
+    int    state
+    string src
+    bool   isUnicorn
+    bool   smt
+    float  swingLvl
+    float  brkTop
+    float  brkBot
+    float  zoneTop
+    float  zoneBot
+    float  entry
+    float  stop
+    float  target
+    float  beTrig
+    float  risk
+    int    sweepBar
+    int    confBar
+    int    entryBar
+    int    endBar
+    int    endTime
+    box    bModel
+    box    bZone
+    line   lEntry
+    line   lStop
+    line   lTarget
+    line   lBe
+    line   lSwing
+    label  lbMain
+    label  lbSrc
+    label  lbTgt
+    label  lbBe
+
+// ═════════════════════════════════════════════════════════════════════════════
+//  5. HIGHER TIMEFRAME DATA
+// ═════════════════════════════════════════════════════════════════════════════
+
+[htfO, htfH, htfL, htfC, htfH2, htfL2, htfPh, htfPl, htfHi20, htfLo20] = request.security(syminfo.tickerid, htf, [open, high, low, close, high[2], low[2], ta.pivothigh(htfPivLen, htfPivLen), ta.pivotlow(htfPivLen, htfPivLen), ta.highest(high, 20), ta.lowest(low, 20)], lookahead = barmerge.lookahead_off)
+
+// Fires on the first chart bar of a new HTF period — the same bar on which the
+// lookahead_off request above starts returning the just-closed HTF candle.
+htfNew = timeframe.change(htf)
+
+// Previous day high / low
+[pdH, pdL] = request.security(syminfo.tickerid, "D", [high[1], low[1]], lookahead = barmerge.lookahead_off)
+
+// Correlated markets for divergence mapping. An unset slot falls back to the
+// chart symbol so the request stays valid; smtCheck ignores those slots.
+smtId1 = smtSym1 == "" ? syminfo.tickerid : smtSym1
+smtId2 = smtSym2 == "" ? syminfo.tickerid : smtSym2
+smtId3 = smtSym3 == "" ? syminfo.tickerid : smtSym3
+
+[smt1H, smt1L] = request.security(smtId1, timeframe.period, [high, low], lookahead = barmerge.lookahead_off, ignore_invalid_symbol = true)
+[smt2H, smt2L] = request.security(smtId2, timeframe.period, [high, low], lookahead = barmerge.lookahead_off, ignore_invalid_symbol = true)
+[smt3H, smt3L] = request.security(smtId3, timeframe.period, [high, low], lookahead = barmerge.lookahead_off, ignore_invalid_symbol = true)
+
+// Auto bias from the higher timeframe range position
+htfMid = (htfHi20 + htfLo20) / 2
+autoBull = not na(htfMid) and close >= htfMid
+autoBear = not na(htfMid) and close < htfMid
+
+biasAllowsLong = biasMode == BIAS_BOTH or biasMode == BIAS_LONG or (biasMode == BIAS_AUTO and autoBull)
+biasAllowsShort = biasMode == BIAS_BOTH or biasMode == BIAS_SHORT or (biasMode == BIAS_AUTO and autoBear)
+
+// ═════════════════════════════════════════════════════════════════════════════
+//  6. LIQUIDITY REGISTRY
+// ═════════════════════════════════════════════════════════════════════════════
+
+var array<Liq> pools = array.new<Liq>()
+
+// barOff steps the recorded bar back to where the level actually formed, which
+// matters because the divergence check reads correlated markets at that bar.
+addPool(float p, string nm, bool isH, int barOff = 0) =>
+    if not na(p)
+        pools.push(Liq.new(p, math.max(0, bar_index - barOff), nm, isH, false))
+        while pools.size() > maxPools
+            pools.shift()
+
+// Chart timeframe swings
+ph = ta.pivothigh(pivLen, pivLen)
+pl = ta.pivotlow(pivLen, pivLen)
+
+if useChartSwings
+    if not na(ph)
+        addPool(ph, chartName + " Swing", true, pivLen)
+    if not na(pl)
+        addPool(pl, chartName + " Swing", false, pivLen)
+
+// Higher timeframe swings and OHLC
+if htfNew
+    if useHtfSwings
+        if not na(htfPh)
+            addPool(htfPh, htfName + " Swing", true)
+        if not na(htfPl)
+            addPool(htfPl, htfName + " Swing", false)
+    if useHtfOhlc
+        addPool(htfH, htfName + " OHLC", true)
+        addPool(htfL, htfName + " OHLC", false)
+
+// Previous day high / low
+if usePdhl and not na(pdH) and (na(pdH[1]) or pdH != pdH[1])
+    addPool(pdH, "PDH/PDL", true)
+    addPool(pdL, "PDH/PDL", false)
+
+// Session extremes — `var` inside a function gets its own instance per call site,
+// so one definition serves all four session slots.
+trackSession(bool on, string nm) =>
+    var float hi = na
+    var float lo = na
+    var bool prev = false
+    if on
+        if not prev
+            hi := high
+            lo := low
+        else
+            hi := math.max(hi, high)
+            lo := math.min(lo, low)
+    else if prev
+        addPool(hi, nm + " High", true)
+        addPool(lo, nm + " Low", false)
+        hi := na
+        lo := na
+    prev := on
+
+trackSession(s1On, s1Name)
+trackSession(s2On, s2Name)
+trackSession(s3On, s3Name)
+trackSession(s4On, s4Name)
+
+// ═════════════════════════════════════════════════════════════════════════════
+//  7. FAIR VALUE GAPS
+// ═════════════════════════════════════════════════════════════════════════════
+
+var array<Fvg> fvgs = array.new<Fvg>()
+
+addFvg(float t, float b, int bi, bool bull, bool isHtf) =>
+    if not na(t) and not na(b) and t > b
+        fvgs.push(Fvg.new(t, b, bi, bull, isHtf))
+        while fvgs.size() > 40
+            fvgs.shift()
+
+// Chart timeframe imbalances
+chartBullFvg = low > high[2]
+chartBearFvg = high < low[2]
+
+if chartBullFvg
+    addFvg(low, high[2], bar_index - 1, true, false)
+if chartBearFvg
+    addFvg(low[2], high, bar_index - 1, false, false)
+
+// Higher timeframe imbalances
+htfBullFvg = htfNew and not na(htfL) and not na(htfH2) and htfL > htfH2
+htfBearFvg = htfNew and not na(htfH) and not na(htfL2) and htfH < htfL2
+
+if htfBullFvg
+    addFvg(htfL, htfH2, bar_index, true, true)
+if htfBearFvg
+    addFvg(htfL2, htfH, bar_index, false, true)
+
+// Does this FVG qualify as the Unicorn's gap under the current source setting?
+fvgQualifies(Fvg f, bool bull) =>
+    f.bull == bull and (fvgSource == FSRC_EITHER or (fvgSource == FSRC_HTF and f.htf) or (fvgSource == FSRC_CHART and not f.htf))
+
+// ═════════════════════════════════════════════════════════════════════════════
+//  8. SWEEP DETECTION
+// ═════════════════════════════════════════════════════════════════════════════
+
+// Divergence check: this market took out its level, a correlated one did not.
+smtCheck(int refBar, bool bullSweep) =>
+    string who = ""
+    off = bar_index - refBar
+    if smtEnable and off > 0 and off < 4000
+        if bullSweep
+            if smtSym1 != "" and not na(smt1L) and smt1L > smt1L[off]
+                who := tickerOf(smtSym1)
+            else if smtSym2 != "" and not na(smt2L) and smt2L > smt2L[off]
+                who := tickerOf(smtSym2)
+            else if smtSym3 != "" and not na(smt3L) and smt3L > smt3L[off]
+                who := tickerOf(smtSym3)
+        else
+            if smtSym1 != "" and not na(smt1H) and smt1H < smt1H[off]
+                who := tickerOf(smtSym1)
+            else if smtSym2 != "" and not na(smt2H) and smt2H < smt2H[off]
+                who := tickerOf(smtSym2)
+            else if smtSym3 != "" and not na(smt3H) and smt3H < smt3H[off]
+                who := tickerOf(smtSym3)
+    who
+
+// Most recent confirmed swing points, used as the structure to break
+var float lastPh = na
+var float lastPl = na
+
+if not na(ph)
+    lastPh := ph
+if not na(pl)
+    lastPl := pl
+
+// Pending sweeps waiting for a market structure shift
+var float pbLvl = na
+var int pbBar = na
+var string pbSrc = ""
+var float pbStruct = na
+var bool pbSmt = false
+var float psLvl = na
+var int psBar = na
+var string psSrc = ""
+var float psStruct = na
+var bool psSmt = false
+
+sweptBullNow = false
+sweptBearNow = false
+string bullSrc = ""
+string bearSrc = ""
+float bullLvl = na
+float bearLvl = na
+int bullLvlBar = na
+int bearLvlBar = na
+
+if pools.size() > 0
+    for i = 0 to pools.size() - 1
+        Liq q = pools.get(i)
+        if not q.swept and not na(q.price)
+            if not q.isHigh and low < q.price and close > q.price
+                q.swept := true
+                if not sweptBullNow or q.price > bullLvl
+                    sweptBullNow := true
+                    bullLvl := q.price
+                    bullSrc := q.name
+                    bullLvlBar := q.bar
+            else if q.isHigh and high > q.price and close < q.price
+                q.swept := true
+                if not sweptBearNow or q.price < bearLvl
+                    sweptBearNow := true
+                    bearLvl := q.price
+                    bearSrc := q.name
+                    bearLvlBar := q.bar
+
+if sweptBullNow and not na(lastPh)
+    smtWho = smtCheck(bullLvlBar, true)
+    pbLvl := math.min(low, bullLvl)
+    pbBar := bar_index
+    pbSrc := smtWho != "" ? smtWho : bullSrc
+    pbStruct := lastPh
+    pbSmt := smtWho != ""
+
+if sweptBearNow and not na(lastPl)
+    smtWho = smtCheck(bearLvlBar, false)
+    psLvl := math.max(high, bearLvl)
+    psBar := bar_index
+    psSrc := smtWho != "" ? smtWho : bearSrc
+    psStruct := lastPl
+    psSmt := smtWho != ""
+
+// Expire stale sweeps
+if not na(pbBar) and bar_index - pbBar > maxWaitBars
+    pbBar := na
+    pbLvl := na
+if not na(psBar) and bar_index - psBar > maxWaitBars
+    psBar := na
+    psLvl := na
+
+// ═════════════════════════════════════════════════════════════════════════════
+//  9. BREAKER LOCATION
+// ═════════════════════════════════════════════════════════════════════════════
+
+// The last down-close candle (bullish) or up-close candle (bearish) between the
+// sweep and the structure break — the candle the market leaves behind as it
+// reverses. Returns the bar offset, or -1 when the leg has no such candle.
+findBreaker(int sweepBar, bool bull) =>
+    int found = -1
+    start = math.min(bar_index - sweepBar, 400)
+    // Descends from the sweep to the bar before this one, so the final
+    // assignment is the most recent qualifying candle.
+    if start >= 1
+        for j = start to 1
+            bool isCandidate = bull ? close[j] < open[j] : close[j] > open[j]
+            if isCandidate
+                found := j
+    found
+
+// ═════════════════════════════════════════════════════════════════════════════
+//  10. DAILY RISK LIMITER
+// ═════════════════════════════════════════════════════════════════════════════
+
+var int dayWins = 0
+var int dayLosses = 0
+newDay = timeframe.change("D")
+
+if newDay
+    dayWins := 0
+    dayLosses := 0
+
+limiterBlocked = drlEnable and (dayWins >= maxDayWins or dayLosses >= maxDayLosses)
+
+// ═════════════════════════════════════════════════════════════════════════════
+//  11. MODEL CONSTRUCTION
+// ═════════════════════════════════════════════════════════════════════════════
+
+var array<Model> models = array.new<Model>()
+
+// Statistics buckets, keyed by year * 100 + month
+var array<int> mKey = array.new<int>()
+var array<int> mTot = array.new<int>()
+var array<int> mWin = array.new<int>()
+var array<int> mLos = array.new<int>()
+var array<int> mBe = array.new<int>()
+
+var string lastSweepSrc = "—"
+
+recordResult(int t, int state) =>
+    k = year(t) * 100 + month(t)
+    idx = -1
+    if mKey.size() > 0
+        for i = 0 to mKey.size() - 1
+            if mKey.get(i) == k
+                idx := i
+    if idx == -1
+        mKey.push(k)
+        mTot.push(0)
+        mWin.push(0)
+        mLos.push(0)
+        mBe.push(0)
+        idx := mKey.size() - 1
+    mTot.set(idx, mTot.get(idx) + 1)
+    if state == ST_WIN
+        mWin.set(idx, mWin.get(idx) + 1)
+    else if state == ST_LOSS
+        mLos.set(idx, mLos.get(idx) + 1)
+    else
+        mBe.set(idx, mBe.get(idx) + 1)
+
+disposeModel(Model m) =>
+    box.delete(m.bModel)
+    box.delete(m.bZone)
+    line.delete(m.lEntry)
+    line.delete(m.lStop)
+    line.delete(m.lTarget)
+    line.delete(m.lBe)
+    line.delete(m.lSwing)
+    label.delete(m.lbMain)
+    label.delete(m.lbSrc)
+    label.delete(m.lbTgt)
+    label.delete(m.lbBe)
+
+pruneModels() =>
+    while models.size() > histLimit
+        Model old = models.shift()
+        disposeModel(old)
+
+// Alert text, matching the format already used by the playbook's alert examples.
+alertText(Model m, string kind, bool dashed) =>
+    dir = m.bull ? "Bullish" : "Bearish"
+    kind + (dashed ? " — " : " ") + chartName + " " + dir + " " + (m.isUnicorn ? "Unicorn" : "Breaker") + " [" + m.src + "]"
+
+buildModel(bool bull, float swingLvl, int sweepBar, string src, bool smt) =>
+    Model result = na
+    brkOff = findBreaker(sweepBar, bull)
+    if brkOff >= 0
+        float bTop = high[brkOff]
+        float bBot = low[brkOff]
+        // Extend across a run of consecutive same-direction candles
+        int k = brkOff + 1
+        int guard = 0
+        while k <= math.min(bar_index - sweepBar, 400) and guard < 10
+            bool cont = bull ? close[k] < open[k] : close[k] > open[k]
+            if not cont
+                break
+            bTop := math.max(bTop, high[k])
+            bBot := math.min(bBot, low[k])
+            k += 1
+            guard += 1
+
+        brkHeight = bTop - bBot
+        sizeVal = sizeMode == SZ_TICKS ? brkHeight / syminfo.mintick : (na(atr) or atr == 0 ? 0.0 : brkHeight / atr)
+        sizeOk = brkHeight > 0 and sizeVal >= minSize and (maxSize <= 0 or sizeVal <= maxSize)
+
+        if sizeOk
+            // Look for an FVG sharing price with the breaker
+            float zTop = na
+            float zBot = na
+            if fvgs.size() > 0
+                for i = fvgs.size() - 1 to 0
+                    Fvg f = fvgs.get(i)
+                    if fvgQualifies(f, bull)
+                        iTop = math.min(f.top, bTop)
+                        iBot = math.max(f.bot, bBot)
+                        if iTop > iBot
+                            zTop := iTop
+                            zBot := iBot
+                            break
+
+            bool hasOverlap = not na(zTop)
+            bool allowed = modelMode == MODE_BREAKER or hasOverlap or modelMode == MODE_BOTH
+
+            if allowed
+                if not hasOverlap
+                    zTop := bTop
+                    zBot := bBot
+
+                m = Model.new()
+                m.bull := bull
+                m.state := ST_CONFIRMED
+                m.src := src
+                m.isUnicorn := hasOverlap
+                m.smt := smt
+                m.swingLvl := swingLvl
+                m.brkTop := bTop
+                m.brkBot := bBot
+                m.zoneTop := zTop
+                m.zoneBot := zBot
+                m.sweepBar := sweepBar
+                m.confBar := bar_index
+                m.entryBar := na
+                m.endBar := na
+
+                // Entry
+                m.entry := entryMode == ENT_CE ? (zTop + zBot) / 2 : entryMode == ENT_DIST ? (bull ? zBot : zTop) : (bull ? zTop : zBot)
+
+                // Invalidation
+                m.stop := useSwingInval ? (bull ? swingLvl - tickBuf : swingLvl + tickBuf) : (bull ? bBot - tickBuf : bTop + tickBuf)
+
+                // 1R
+                m.risk := projMode == PROJ_BREAKER ? brkHeight : math.abs(close - m.stop)
+                if m.risk <= 0
+                    m.risk := math.max(brkHeight, syminfo.mintick)
+
+                m.target := bull ? m.entry + m.risk * targetR : m.entry - m.risk * targetR
+                m.beTrig := m.entry + (m.target - m.entry) * 0.5
+                result := m
+    result
+
+// Confirmation: a close through the structure that started the sequence.
+bullDisplace = not reqDisplacement or chartBullFvg or chartBullFvg[1] or chartBullFvg[2] or (close - open) >= atr * dispMult
+bearDisplace = not reqDisplacement or chartBearFvg or chartBearFvg[1] or chartBearFvg[2] or (open - close) >= atr * dispMult
+
+bullConfirm = not na(pbBar) and not na(pbStruct) and bar_index > pbBar and close > pbStruct and bullDisplace and biasAllowsLong and sessionOk and not limiterBlocked and (not smtRequired or pbSmt)
+bearConfirm = not na(psBar) and not na(psStruct) and bar_index > psBar and close < psStruct and bearDisplace and biasAllowsShort and sessionOk and not limiterBlocked and (not smtRequired or psSmt)
+
+if bullConfirm
+    Model m = buildModel(true, pbLvl, pbBar, pbSrc, pbSmt)
+    if not na(m)
+        models.push(m)
+        lastSweepSrc := m.src
+        pruneModels()
+        if alConfirmed
+            alert(alertText(m, "Confirmed", false), alert.freq_once_per_bar_close)
+    pbBar := na
+    pbLvl := na
+
+if bearConfirm
+    Model m = buildModel(false, psLvl, psBar, psSrc, psSmt)
+    if not na(m)
+        models.push(m)
+        lastSweepSrc := m.src
+        pruneModels()
+        if alConfirmed
+            alert(alertText(m, "Confirmed", false), alert.freq_once_per_bar_close)
+    psBar := na
+    psLvl := na
+
+// ═════════════════════════════════════════════════════════════════════════════
+//  12. LIFECYCLE
+// ═════════════════════════════════════════════════════════════════════════════
+
+if models.size() > 0
+    for i = 0 to models.size() - 1
+        Model m = models.get(i)
+
+        // Entry is a retrace into the zone, so it can never be the confirmation
+        // candle itself — that candle displaced away from the zone to get here.
+        if m.state == ST_CONFIRMED and bar_index > m.confBar
+            bool blown = m.bull ? close < m.stop : close > m.stop
+            bool touched = m.bull ? low <= m.entry : high >= m.entry
+            if touched
+                m.state := ST_ACTIVE
+                m.entryBar := bar_index
+                if alEntry
+                    alert(alertText(m, "Entry", true), alert.freq_once_per_bar_close)
+            else if blown or bar_index - m.confBar > maxEntryBars
+                m.state := ST_INVALID
+                m.endBar := bar_index
+                m.endTime := time
+                if alInval
+                    alert(alertText(m, "Invalidated", true), alert.freq_once_per_bar_close)
+
+        else if m.state == ST_ACTIVE or m.state == ST_ARMED
+            bool hitTgt = m.bull ? high >= m.target : low <= m.target
+            bool hitStop = m.bull ? low <= m.stop : high >= m.stop
+            bool hitBe = m.bull ? high >= m.beTrig : low <= m.beTrig
+            bool backToEntry = m.bull ? low <= m.entry : high >= m.entry
+
+            // A bar covering both levels is unresolvable from bar data alone;
+            // stopFirst decides which side of that ambiguity to take.
+            bool lossWins = hitStop and m.state == ST_ACTIVE and (stopFirst or not hitTgt)
+
+            if lossWins
+                m.state := ST_LOSS
+                m.endBar := bar_index
+                m.endTime := time
+                dayLosses += 1
+                recordResult(time, ST_LOSS)
+                if alStop
+                    alert(alertText(m, "Stop Loss", true), alert.freq_once_per_bar_close)
+            else if hitTgt
+                m.state := ST_WIN
+                m.endBar := bar_index
+                m.endTime := time
+                dayWins += 1
+                recordResult(time, ST_WIN)
+                if alTarget
+                    alert(alertText(m, "Target Reached", true), alert.freq_once_per_bar_close)
+            else if m.state == ST_ARMED and backToEntry
+                m.state := ST_BE
+                m.endBar := bar_index
+                m.endTime := time
+                recordResult(time, ST_BE)
+            else if m.state == ST_ACTIVE and hitBe and beEnable
+                m.state := ST_ARMED
+                if alBe
+                    alert(alertText(m, "Break-Even", true), alert.freq_once_per_bar_close)
+
+// ═════════════════════════════════════════════════════════════════════════════
+//  13. RENDERING
+// ═════════════════════════════════════════════════════════════════════════════
+
+isOpen(Model m) =>
+    m.state == ST_CONFIRMED or m.state == ST_ACTIVE or m.state == ST_ARMED
+
+modelColor(Model m) =>
+    m.state == ST_INVALID ? color.new(potColor, potTransp) : color.new(bullColor, modelTransp)
+
+drawModel(Model m) =>
+    right = isOpen(m) ? bar_index + 10 : math.max(m.endBar, m.sweepBar + 2)
+
+    if na(m.bModel)
+        m.bModel := box.new(m.sweepBar, m.brkTop, right, m.brkBot, border_color = color.new(bullColor, 100), bgcolor = modelColor(m))
+        m.bZone := box.new(m.sweepBar, m.zoneTop, right, m.zoneBot, border_color = color.new(zoneColor, 100), bgcolor = color.new(zoneColor, m.isUnicorn ? zoneTransp : 100))
+        m.lbMain := label.new(right, (m.brkTop + m.brkBot) / 2, (m.bull ? "+" : "-") + (m.isUnicorn ? "Unicorn" : "Breaker"), style = label.style_none, textcolor = lineColor, size = lblSize)
+        m.lSwing := line.new(m.sweepBar - math.min(m.sweepBar, 40), m.swingLvl, m.sweepBar, m.swingLvl, color = lineColor, width = 1)
+        m.lbSrc := label.new(m.sweepBar - math.min(m.sweepBar, 20), m.swingLvl, m.src, style = label.style_none, textcolor = lineColor, size = lblSize, yloc = yloc.price)
+        m.lEntry := line.new(m.confBar, m.entry, right, m.entry, color = color.new(lineColor, 40), style = line.style_dotted)
+        m.lStop := line.new(m.confBar, m.stop, right, m.stop, color = color.new(lineColor, 40), style = line.style_dotted)
+        m.lTarget := line.new(m.confBar, m.target, right, m.target, color = color.new(lineColor, 20), style = line.style_dotted)
+        m.lbTgt := label.new(right, m.target, str.tostring(targetR, "#.#") + "R", style = label.style_none, textcolor = lineColor, size = lblSize)
+        if beShowLine and beEnable
+            m.lBe := line.new(m.confBar, m.beTrig, right, m.beTrig, color = beColor, style = beLineStyle, width = beWidth)
+            m.lbBe := label.new(right, m.beTrig, "BE Trigger (50%)", style = label.style_none, textcolor = beColor, size = lblSize)
+    else
+        box.set_right(m.bModel, right)
+        box.set_right(m.bZone, right)
+        box.set_bgcolor(m.bModel, modelColor(m))
+        label.set_x(m.lbMain, right)
+        line.set_x2(m.lEntry, right)
+        line.set_x2(m.lStop, right)
+        line.set_x2(m.lTarget, right)
+        label.set_x(m.lbTgt, right)
+        if not na(m.lBe)
+            line.set_x2(m.lBe, right)
+            label.set_x(m.lbBe, right)
+
+if models.size() > 0
+    for i = 0 to models.size() - 1
+        Model m = models.get(i)
+        if m.state == ST_INVALID and hideInvalid
+            disposeModel(m)
+        else
+            drawModel(m)
+
+// ── Potential model preview ──────────────────────────────────────────────────
+var box potBox = na
+var label potLbl = na
+
+if barstate.islast
+    box.delete(potBox)
+    label.delete(potLbl)
+    potBox := na
+    potLbl := na
+    if showPotential
+        bool havePendBull = not na(pbBar) and biasAllowsLong
+        bool havePendBear = not na(psBar) and biasAllowsShort
+        if havePendBull or havePendBear
+            bool bull = havePendBull
+            int sBar = bull ? pbBar : psBar
+            off = findBreaker(sBar, bull)
+            if off >= 0
+                potBox := box.new(sBar, high[off], bar_index + 10, low[off], border_color = color.new(potColor, 100), bgcolor = color.new(potColor, potTransp))
+                potLbl := label.new(bar_index + 10, (high[off] + low[off]) / 2, "Potential " + (bull ? "+" : "-") + "Breaker", style = label.style_none, textcolor = lineColor, size = lblSize)
+
+// ── Risk : reward bar ────────────────────────────────────────────────────────
+var box rrRisk = na
+var box rrReward = na
+
+if barstate.islast
+    box.delete(rrRisk)
+    box.delete(rrReward)
+    rrRisk := na
+    rrReward := na
+    if showRr and models.size() > 0
+        Model latest = models.get(models.size() - 1)
+        if isOpen(latest)
+            l = bar_index + rrOffset
+            r = l + rrWidth
+            rrRisk := box.new(l, math.max(latest.entry, latest.stop), r, math.min(latest.entry, latest.stop), border_color = color.new(riskColor, 100), bgcolor = color.new(riskColor, 35))
+            rrReward := box.new(l, math.max(latest.entry, latest.target), r, math.min(latest.entry, latest.target), border_color = color.new(rewardColor, 100), bgcolor = color.new(rewardColor, 35))
+
+// ── HTF FVG delivery bands ───────────────────────────────────────────────────
+var array<box> fvgBoxes = array.new<box>()
+var array<label> fvgLabels = array.new<label>()
+
+if htfFvgShow and (htfBullFvg or htfBearFvg)
+    float t = htfBullFvg ? htfL : htfL2
+    float b = htfBullFvg ? htfH2 : htfH
+    if not na(t) and not na(b) and t > b
+        nb = box.new(bar_index - 1, t, bar_index + 10, b, border_color = color.new(fvgBandColor, 100), bgcolor = color.new(fvgBandColor, fvgBandTransp))
+        nl = label.new(bar_index + 10, (t + b) / 2, "FVG" + (htfBullFvg ? "+" : "-") + htfName, style = label.style_none, textcolor = lineColor, size = lblSize)
+        fvgBoxes.push(nb)
+        fvgLabels.push(nl)
+        while fvgBoxes.size() > htfFvgCount
+            box.delete(fvgBoxes.shift())
+            label.delete(fvgLabels.shift())
+
+if barstate.islast and fvgBoxes.size() > 0
+    for i = 0 to fvgBoxes.size() - 1
+        box.set_right(fvgBoxes.get(i), bar_index + 10)
+        label.set_x(fvgLabels.get(i), bar_index + 10)
+
+// ── HTF candle panel ─────────────────────────────────────────────────────────
+var array<float> hcO = array.new<float>()
+var array<float> hcH = array.new<float>()
+var array<float> hcL = array.new<float>()
+var array<float> hcC = array.new<float>()
+
+if htfNew and not na(htfO)
+    hcO.push(htfO)
+    hcH.push(htfH)
+    hcL.push(htfL)
+    hcC.push(htfC)
+    while hcO.size() > 20
+        hcO.shift()
+        hcH.shift()
+        hcL.shift()
+        hcC.shift()
+
+// Live forming HTF candle, tracked from chart bars so nothing looks ahead
+var float lfO = na
+var float lfH = na
+var float lfL = na
+if htfNew or na(lfO)
+    lfO := open
+    lfH := high
+    lfL := low
+else
+    lfH := math.max(lfH, high)
+    lfL := math.min(lfL, low)
+
+var array<box> hcBoxes = array.new<box>()
+var array<line> hcWicks = array.new<line>()
+var label hcTitle = na
+
+if barstate.islast
+    if hcBoxes.size() > 0
+        for i = 0 to hcBoxes.size() - 1
+            box.delete(hcBoxes.get(i))
+            line.delete(hcWicks.get(i))
+    hcBoxes.clear()
+    hcWicks.clear()
+    label.delete(hcTitle)
+    hcTitle := na
+
+    if htfcShow and hcO.size() > 0
+        int shown = math.min(htfcCount, hcO.size() + 1)
+        int slot = 0
+        // Oldest closed candle first, live candle last
+        int firstClosed = math.max(0, hcO.size() - (shown - 1))
+        if firstClosed <= hcO.size() - 1
+            for i = firstClosed to hcO.size() - 1
+                o = hcO.get(i)
+                h = hcH.get(i)
+                l = hcL.get(i)
+                c = hcC.get(i)
+                x = bar_index + htfcOffset + slot * (htfcWidth + htfcGap)
+                col = c >= o ? upColor : downColor
+                hcBoxes.push(box.new(x, math.max(o, c), x + htfcWidth, math.min(o, c), border_color = col, bgcolor = col))
+                hcWicks.push(line.new(x + int(htfcWidth / 2), h, x + int(htfcWidth / 2), l, color = col, width = 1))
+                slot += 1
+
+        // The candle currently forming
+        xl = bar_index + htfcOffset + slot * (htfcWidth + htfcGap)
+        lcol = close >= lfO ? upColor : downColor
+        hcBoxes.push(box.new(xl, math.max(lfO, close), xl + htfcWidth, math.min(lfO, close), border_color = lcol, bgcolor = lcol))
+        hcWicks.push(line.new(xl + int(htfcWidth / 2), lfH, xl + int(htfcWidth / 2), lfL, color = lcol, width = 1))
+
+        string head = htfName
+        if htfcCountdown
+            rem = time_close(htf) - timenow
+            if not na(rem) and rem > 0
+                secs = int(rem / 1000)
+                head := head + "\n(" + pad2(int(secs / 3600)) + ":" + pad2(int(secs % 3600 / 60)) + ":" + pad2(int(secs % 60)) + ")"
+        panelMid = bar_index + htfcOffset + int(slot * (htfcWidth + htfcGap) / 2)
+        hcTitle := label.new(panelMid, panelTop, head, style = label.style_none, textcolor = lineColor, size = lblSize)
+
+// ═════════════════════════════════════════════════════════════════════════════
+//  14. HUD & STATISTICS
+// ═════════════════════════════════════════════════════════════════════════════
+
+var table hud = na
+var table stats = na
+
+if barstate.islast and hudShow
+    if na(hud)
+        hud := table.new(tblPos(hudPos), 2, 5, border_width = 0)
+    table.cell(hud, 0, 0, "Unicorn Model° (" + chartName + ")", text_color = tblTextColor, text_size = tblSize, text_halign = text.align_left)
+    table.cell(hud, 1, 0, "", text_size = tblSize)
+    table.cell(hud, 0, 1, "Sweep:", text_color = tblTextColor, text_size = tblSize, text_halign = text.align_left)
+    table.cell(hud, 1, 1, lastSweepSrc, text_color = tblTextColor, text_size = tblSize, text_halign = text.align_left)
+    table.cell(hud, 0, 2, "Sessions:", text_color = tblTextColor, text_size = tblSize, text_halign = text.align_left)
+    table.cell(hud, 1, 2, sessionText(), text_color = tblTextColor, text_size = tblSize, text_halign = text.align_left)
+    table.cell(hud, 0, 3, "Ticker:", text_color = tblTextColor, text_size = tblSize, text_halign = text.align_left)
+    table.cell(hud, 1, 3, syminfo.ticker, text_color = tblTextColor, text_size = tblSize, text_halign = text.align_left)
+    table.cell(hud, 0, 4, drlEnable ? "Limiter:" : "", text_color = tblTextColor, text_size = tblSize, text_halign = text.align_left)
+    table.cell(hud, 1, 4, drlEnable ? (limiterBlocked ? "BLOCKED" : str.tostring(dayWins) + "W / " + str.tostring(dayLosses) + "L") : "", text_color = limiterBlocked ? color.new(#f23645, 0) : tblTextColor, text_size = tblSize, text_halign = text.align_left)
+
+if barstate.islast and statsShow
+    int rows = math.min(statsRows, mKey.size())
+    if na(stats)
+        stats := table.new(tblPos(statsPos), 6, 25, border_width = 1, border_color = color.new(tblTextColor, 70))
+    table.clear(stats, 0, 0, 5, 24)
+    table.cell(stats, 0, 0, "Month", text_color = tblTextColor, text_size = tblSize)
+    table.cell(stats, 1, 0, "T", text_color = tblTextColor, text_size = tblSize)
+    table.cell(stats, 2, 0, "W", text_color = tblTextColor, text_size = tblSize)
+    table.cell(stats, 3, 0, "L", text_color = tblTextColor, text_size = tblSize)
+    table.cell(stats, 4, 0, "BE", text_color = tblTextColor, text_size = tblSize)
+    table.cell(stats, 5, 0, "Win%", text_color = tblTextColor, text_size = tblSize)
+    if rows > 0
+        int r = 1
+        for i = mKey.size() - 1 to mKey.size() - rows
+            k = mKey.get(i)
+            t = mTot.get(i)
+            w = mWin.get(i)
+            l = mLos.get(i)
+            b = mBe.get(i)
+            // Break-even trades are excluded from the win rate — only decided
+            // trades count toward it.
+            decided = w + l
+            wr = decided > 0 ? int(math.round(w * 100.0 / decided)) : 0
+            table.cell(stats, 0, r, str.tostring(k % 100) + "/" + str.tostring(k / 100), text_color = tblTextColor, text_size = tblSize)
+            table.cell(stats, 1, r, str.tostring(t), text_color = tblTextColor, text_size = tblSize)
+            table.cell(stats, 2, r, str.tostring(w), text_color = #26a69a, text_size = tblSize)
+            table.cell(stats, 3, r, str.tostring(l), text_color = #f23645, text_size = tblSize)
+            table.cell(stats, 4, r, str.tostring(b), text_color = #f2994a, text_size = tblSize)
+            table.cell(stats, 5, r, str.tostring(wr) + "%", text_color = tblTextColor, text_size = tblSize)
+            r += 1
+
+// ═════════════════════════════════════════════════════════════════════════════
+//  15. POTENTIAL-MODEL ALERT
+// ═════════════════════════════════════════════════════════════════════════════
+
+potentialFired = (sweptBullNow and biasAllowsLong) or (sweptBearNow and biasAllowsShort)
+
+if alPotential and potentialFired
+    sweepDir = sweptBullNow ? "Bullish" : "Bearish"
+    sweepFrom = sweptBullNow ? bullSrc : bearSrc
+    alert("Potential " + chartName + " " + sweepDir + " Unicorn [" + sweepFrom + "]", alert.freq_once_per_bar_close)
