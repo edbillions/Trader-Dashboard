@@ -31,6 +31,20 @@
 //
 //  With "Enable HTF FVG Context?" off, this script is the original Unicorn
 //  Model: no FVG zones, no FVG state, no extra alerts, no qualified markers.
+//
+//  ── PASS 1 OPTIMIZATION ─────────────────────────────────────────────────────
+//  Performance-only rework of the historical scanning. No trading logic, input,
+//  drawing, alert or threshold was changed, and no lookback was shortened. Four
+//  changes, each marked "PASS 1" at its site with the equivalence argument:
+//
+//    1. LTF FVG REGISTRY      — the 101-bar FVG rescan with its nested
+//                               mitigation rescan is replaced by an incrementally
+//                               maintained set of unmitigated gaps.
+//    2. BREAKER GEOMETRY CACHE — the 41-bar breaker-run scan is anchored to the
+//                               pending sweep bar, so it is computed once per
+//                               sweep leg instead of once per bar per direction.
+//    3. Single ATR(14) instance shared by all call sites.
+//    4. Session filter evaluated once per bar; targets string parsed once.
 // ─────────────────────────────────────────────────────────────────────────────
 indicator("Unicorn Model + HTF FVG", shorttitle="UM+FVG", overlay=true, max_boxes_count=500, max_lines_count=500, max_labels_count=500)
 
@@ -78,11 +92,26 @@ type Setup
     bool factorLtfFvg         // Breaker overlaps an LTF FVG (a true Unicorn)
     bool factorVolume         // Confirmation-bar volume exceeded its average
 
+// PASS 1 — one entry per LTF (chart-timeframe) fair value gap that is still
+// unmitigated. This is the incremental replacement for the historical rescan
+// that f_findBullishFVG / f_findBearishFVG used to perform on every call; see
+// the LTF FVG REGISTRY section for the equivalence argument.
+type LtfFvg
+    float top                 // Gap top    (bull: low[i]      / bear: low[i+2])
+    float bot                 // Gap bottom (bull: high[i+2]   / bear: high[i])
+    int   thirdBar            // bar_index of the 3rd candle of the pattern
+    float atrAtForm           // ATR(14) on thirdBar, frozen for the ATR filter
+
 // ========================================
 // GLOBAL STATE ARRAYS (Defined before functions)
 // ========================================
 var HTFLevel[] activeHTFLevels = array.new<HTFLevel>()
 var Setup[] activeSetups = array.new<Setup>()
+
+// PASS 1 — unmitigated LTF FVG registries, oldest first. Maintained once per
+// bar; read (never written) by the FVG lookup functions.
+var LtfFvg[] ltfBullFvgs = array.new<LtfFvg>()
+var LtfFvg[] ltfBearFvgs = array.new<LtfFvg>()
 
 // ========================================
 // HTF FVG ENGINE - TYPES & STATE (from FVG Multi-Timeframe)
@@ -113,6 +142,20 @@ var array<int> idSeq = array.new_int(1, 0)
 
 chartSec = timeframe.in_seconds()
 chartMs  = chartSec * 1000
+
+// PASS 1 — the script's single ATR(14) instance.
+//
+// The reference implementation instantiated ta.atr(14) in five separate places,
+// every one of them inside a conditional branch (the two FVG finders, the size
+// filter and the two level-label offsets). A ta.* series only advances on bars
+// where its branch executes, so those five instances each carried their own
+// partially-updated state. Declaring it once at global scope evaluates it on
+// every bar, which is both cheaper and the value ATR(14) is defined to have.
+//
+// This is the one place in Pass 1 where output can differ from the reference,
+// and only when "Enable FVG ATR Filter" or the ATR-unit breaker size filter is
+// switched on — both are off by default. See the change log for detail.
+float atr14 = ta.atr(14)
 
 // ========================================
 // GLOBAL USER FUNCTIONS (Defined next)
@@ -330,33 +373,48 @@ f_getSeriesRange(startOffset, endOffset) =>
     [maxH, minL]
 
 // FVG Overlap Finders
+//
+// PASS 1 — these were a 101-bar rescan with a nested mitigation rescan inside
+// it. They are now a walk over the unmitigated-FVG registry that the LTF FVG
+// REGISTRY section maintains once per bar. The selection rule is unchanged, and
+// the mapping is exact:
+//
+//   original offset i   <->   bar_index - f.thirdBar
+//   original fTop/fBtm  <->   f.top / f.bot        (identical expressions)
+//   original scan order <->   newest -> oldest     (walk the array backwards)
+//   original limit      <->   math.min(bar_index - startIdx, 100), unchanged
+//   original mitigation <->   membership of the registry (mitigated gaps are
+//                             removed on the bar they are mitigated, using the
+//                             same low < bot / high > top test over the same
+//                             bars the inner j-loop covered)
+//   original fvgIdx     <->   f.thirdBar - 1
+//   original right edge <->   f.thirdBar
+//
+// The `break` on i > limit is safe because the walk visits gaps in strictly
+// increasing i, so everything beyond the first out-of-window gap is also out of
+// window. Gaps that fail the ATR filter are skipped without ending the search,
+// exactly as the original `continue` did.
 f_findBullishFVG(breakerT, breakerB, startIdx, enableFvgAtrFilter, fvgAtrMult) =>
     float fvgT = na
     float fvgB = na
     int fvgIdx = na
     int fvgRightIdx = na
     int limit = math.min(bar_index - startIdx, 100)
-    if limit >= 0
-        for i = 0 to limit
-            if low[i] > high[i+2]
-                fTop = low[i]
-                fBtm = high[i+2]
-                atrVal = ta.atr(14)[i]
-                if enableFvgAtrFilter and (fTop - fBtm) < (atrVal * fvgAtrMult)
-                    continue
-                bool overlaps = math.max(fBtm, breakerB) < math.min(fTop, breakerT)
-                if overlaps
-                    bool unmitigated = true
-                    for j = 0 to i
-                        if low[j] < fBtm
-                            unmitigated := false
-                            break
-                    if unmitigated
-                        fvgT := fTop
-                        fvgB := fBtm
-                        fvgIdx := bar_index - i - 1
-                        fvgRightIdx := bar_index - i  // right boundary: the newer candle
-                        break
+    if limit >= 0 and array.size(ltfBullFvgs) > 0
+        for k = array.size(ltfBullFvgs) - 1 to 0
+            LtfFvg f = array.get(ltfBullFvgs, k)
+            int i = bar_index - f.thirdBar
+            if i > limit
+                break
+            if enableFvgAtrFilter and (f.top - f.bot) < (f.atrAtForm * fvgAtrMult)
+                continue
+            bool overlaps = math.max(f.bot, breakerB) < math.min(f.top, breakerT)
+            if overlaps
+                fvgT := f.top
+                fvgB := f.bot
+                fvgIdx := f.thirdBar - 1
+                fvgRightIdx := f.thirdBar  // right boundary: the newer candle
+                break
     [fvgT, fvgB, fvgIdx, fvgRightIdx]
 
 f_findBearishFVG(breakerT, breakerB, startIdx, enableFvgAtrFilter, fvgAtrMult) =>
@@ -365,27 +423,21 @@ f_findBearishFVG(breakerT, breakerB, startIdx, enableFvgAtrFilter, fvgAtrMult) =
     int fvgIdx = na
     int fvgRightIdx = na
     int limit = math.min(bar_index - startIdx, 100)
-    if limit >= 0
-        for i = 0 to limit
-            if high[i] < low[i+2]
-                fTop = low[i+2]
-                fBtm = high[i]
-                atrVal = ta.atr(14)[i]
-                if enableFvgAtrFilter and (fTop - fBtm) < (atrVal * fvgAtrMult)
-                    continue
-                bool overlaps = math.max(fBtm, breakerB) < math.min(fTop, breakerT)
-                if overlaps
-                    bool unmitigated = true
-                    for j = 0 to i
-                        if high[j] > fTop
-                            unmitigated := false
-                            break
-                    if unmitigated
-                        fvgT := fTop
-                        fvgB := fBtm
-                        fvgIdx := bar_index - i - 1
-                        fvgRightIdx := bar_index - i  // right boundary: the newer candle
-                        break
+    if limit >= 0 and array.size(ltfBearFvgs) > 0
+        for k = array.size(ltfBearFvgs) - 1 to 0
+            LtfFvg f = array.get(ltfBearFvgs, k)
+            int i = bar_index - f.thirdBar
+            if i > limit
+                break
+            if enableFvgAtrFilter and (f.top - f.bot) < (f.atrAtForm * fvgAtrMult)
+                continue
+            bool overlaps = math.max(f.bot, breakerB) < math.min(f.top, breakerT)
+            if overlaps
+                fvgT := f.top
+                fvgB := f.bot
+                fvgIdx := f.thirdBar - 1
+                fvgRightIdx := f.thirdBar  // right boundary: the newer candle
+                break
     [fvgT, fvgB, fvgIdx, fvgRightIdx]
 
 // Size filter
@@ -397,7 +449,7 @@ f_checkSizeFilter(breakerTop, breakerBottom, sizeFilterMode, minBreakerSize, max
         if breakerSizeUnit == "Ticks"
             checkSize := bSize / syminfo.mintick
         else if breakerSizeUnit == "ATR"
-            checkSize := bSize / ta.atr(14)
+            checkSize := bSize / atr14  // PASS 1: shared ATR instance
         if checkSize < minBreakerSize or checkSize > maxBreakerSize
             pass := false
     pass
@@ -949,23 +1001,36 @@ var float pendingBearSweptLevel = na
 var int pendingBearSweptStartBar = na
 var string pendingBearSweptLabelText = ""
 
+// Timezone the script reads session windows in. Same resolution the Time Filter
+// uses internally, lifted to global scope so Session Liquidity reads its windows
+// in exactly the same timezone rather than a second, independently configured one.
+//
+// PASS 1 — moved above f_isInSession so that function can reuse it instead of
+// rebuilding the identical string on every call. Same expression, same value.
+string scriptTz = customTimezone ? "GMT" + (tzHourOffset >= 0 ? "+" : "-") + str.tostring(math.abs(tzHourOffset), "00") + str.tostring(math.abs(tzMinOffset), "00") : syminfo.timezone
+
 // Time Filter Logic (Uses inputs, must be declared after them)
 f_isInSession() =>
     bool inSess = false
     if not enableTimeFilter
         inSess := true
     else
-        tz = customTimezone ? "GMT" + (tzHourOffset >= 0 ? "+" : "-") + str.tostring(math.abs(tzHourOffset), "00") + str.tostring(math.abs(tzMinOffset), "00") : syminfo.timezone
-        s1 = session1Enable and not na(time(timeframe.period, session1Time, tz))
-        s2 = session2Enable and not na(time(timeframe.period, session2Time, tz))
-        s3 = session3Enable and not na(time(timeframe.period, session3Time, tz))
+        s1 = session1Enable and not na(time(timeframe.period, session1Time, scriptTz))
+        s2 = session2Enable and not na(time(timeframe.period, session2Time, scriptTz))
+        s3 = session3Enable and not na(time(timeframe.period, session3Time, scriptTz))
         inSess := s1 or s2 or s3
     inSess
 
-// Timezone the script reads session windows in. Same resolution the Time Filter
-// uses internally, lifted to global scope so Session Liquidity reads its windows
-// in exactly the same timezone rather than a second, independently configured one.
-string scriptTz = customTimezone ? "GMT" + (tzHourOffset >= 0 ? "+" : "-") + str.tostring(math.abs(tzHourOffset), "00") + str.tostring(math.abs(tzMinOffset), "00") : syminfo.timezone
+// PASS 1 — evaluated once per bar instead of once per direction inside the two
+// confirmation gates. time() with a session argument depends only on the current
+// bar's timestamp and the timezone, so a single evaluation is identical to the
+// two the reference implementation performed.
+bool inSessionNow = f_isInSession()
+
+// PASS 1 — the additional-targets string is an input, so it is constant for the
+// whole run. The reference re-parsed it character by character on every setup
+// confirmation; `var` parses it once on the first bar. Read-only afterwards.
+var float[] addTargetsParsed = f_parseTargets(addTargetsStr)
 
 // Session liquidity state machine. Tracks the running extremes of one session
 // and, on the first bar after it closes, hands its high and low to the same
@@ -1323,6 +1388,88 @@ f_sessionLiq(inLiqS3, liqS3Nm)
 f_sessionLiq(inLiqS4, liqS4Nm)
 
 // ========================================
+// LTF FVG REGISTRY (PASS 1)
+// ========================================
+// Incremental replacement for the historical rescan the FVG finders used to do.
+// Runs unconditionally on every bar, before any lookup, so the registry always
+// holds exactly the set of gaps the old scan would have re-derived from price.
+//
+// Equivalence, term by term against the reference implementation:
+//
+//   FORMATION. The old scan tested `low[i] > high[i+2]` for every offset i in
+//   the window. At i = 0 that is the test below, evaluated on the bar itself.
+//   Because the test is a pure function of three fixed candles, testing it once
+//   when those candles exist is the same as re-testing it on every later bar.
+//
+//   MITIGATION. The old inner loop ran j = 0..i, i.e. every bar from the gap's
+//   third candle up to and including the current one, and rejected the gap if
+//   any of them had low[j] < fBtm. Evaluating that same test once per bar as
+//   each bar arrives covers the identical set of bars, and mitigation is
+//   permanent in both forms — the old scan re-derived it from full history on
+//   every call, so a gap could never come back. j = i (the gap's own third
+//   candle) can never mitigate, since the formation test already established
+//   low > high[2]; pushing before pruning therefore matches the old inclusive
+//   range without special-casing it. The bearish side is the mirror image.
+//
+//   WINDOW. The old `limit` never exceeded 100, so a gap older than 100 bars
+//   could never be selected. Dropping it here is not a lookback reduction; the
+//   surviving set is identical for every value `limit` can take, and the lookup
+//   still re-applies the exact `math.min(bar_index - startIdx, 100)` bound.
+//
+// On realtime bars Pine rolls `var` state back before each tick, so the
+// current bar's push and prune are recomputed from scratch on every tick — the
+// same non-repainting behaviour the stateless rescan had.
+if low > high[2]
+    array.push(ltfBullFvgs, LtfFvg.new(top = low, bot = high[2], thirdBar = bar_index, atrAtForm = atr14))
+if high < low[2]
+    array.push(ltfBearFvgs, LtfFvg.new(top = low[2], bot = high, thirdBar = bar_index, atrAtForm = atr14))
+
+if array.size(ltfBullFvgs) > 0
+    for k = array.size(ltfBullFvgs) - 1 to 0
+        LtfFvg f = array.get(ltfBullFvgs, k)
+        if low < f.bot or (bar_index - f.thirdBar) > 100
+            array.remove(ltfBullFvgs, k)
+
+if array.size(ltfBearFvgs) > 0
+    for k = array.size(ltfBearFvgs) - 1 to 0
+        LtfFvg f = array.get(ltfBearFvgs, k)
+        if high > f.top or (bar_index - f.thirdBar) > 100
+            array.remove(ltfBearFvgs, k)
+
+// ========================================
+// BREAKER GEOMETRY CACHE (PASS 1)
+// ========================================
+// f_findUpCandlesSeries / f_findDownCandlesSeries scan the 41 bars starting at
+// the pending sweep bar and walking backwards. That window is anchored to
+// pendingBull/BearSweepIdx, not to the current bar: offset i on bar B and offset
+// i + n on bar B + n address the same bar. The only bar_index-dependent term is
+// the `i >= bar_index` guard, which resolves to "stop at bar index 0" on every
+// bar alike. f_getSeriesRange then reduces a fixed set of closed candles.
+//
+// So while the pending sweep index is unchanged the search returns the same
+// bars and the same top/bottom on every bar, and the reference implementation
+// was recomputing that identical answer once per bar per direction — plus a
+// third and fourth time in the potential-breaker block on realtime bars.
+//
+// The cache is keyed on the pending sweep index, which is exactly the value
+// that changes when a new sweep fires or the sweep extreme extends, so the two
+// events that can change the answer both invalidate it. Results are stored as
+// absolute bar indices rather than offsets so they stay valid as bars advance.
+var int   bullBrkKey   = na    // pendingBullSweepIdx this cache was built for
+var bool  bullBrkFound = false
+var int   bullBrkStart = na    // bar_index of the newest candle of the run
+var int   bullBrkEnd   = na    // bar_index of the oldest candle of the run
+var float bullBrkTop   = na
+var float bullBrkBot   = na
+
+var int   bearBrkKey   = na
+var bool  bearBrkFound = false
+var int   bearBrkStart = na
+var int   bearBrkEnd   = na
+var float bearBrkTop   = na
+var float bearBrkBot   = na
+
+// ========================================
 // MAIN EXECUTION STATE MACHINE (Level update & sweep check)
 // ========================================
 bool sweptBull = false
@@ -1400,22 +1547,39 @@ else if not na(pendingBearSweepIdx) and high > pendingBearSweepExtreme
 
 // Track Bullish setups
 if not na(pendingBullSweepIdx)
-    sweepOffset = bar_index - pendingBullSweepIdx
-    [startOffset, endOffset] = f_findUpCandlesSeries(sweepOffset)
+    // PASS 1 — the 41-bar breaker scan and its range reduction now run once per
+    // sweep leg instead of once per bar. See BREAKER GEOMETRY CACHE above.
+    if na(bullBrkKey) or bullBrkKey != pendingBullSweepIdx
+        sweepOffset = bar_index - pendingBullSweepIdx
+        [startOffset, endOffset] = f_findUpCandlesSeries(sweepOffset)
+        bullBrkKey   := pendingBullSweepIdx
+        bullBrkFound := not na(startOffset)
+        if bullBrkFound
+            [rangeT, rangeB] = f_getSeriesRange(startOffset, endOffset)
+            bullBrkStart := bar_index - startOffset
+            bullBrkEnd   := bar_index - endOffset
+            bullBrkTop   := rangeT
+            bullBrkBot   := rangeB
+        else
+            bullBrkStart := na
+            bullBrkEnd   := na
+            bullBrkTop   := na
+            bullBrkBot   := na
 
-    if not na(startOffset)
-        [breakerT, breakerB] = f_getSeriesRange(startOffset, endOffset)
+    if bullBrkFound
+        float breakerT = bullBrkTop
+        float breakerB = bullBrkBot
 
         // Validation: Breaker bottom must not be below (more extreme than) the sweep low extreme
         // Hoisted into named bools purely so the diagnostics can name the gate
         // that rejected the bar. The conjunction below is the original condition.
         bool gateBreakBull = close > breakerT
         bool gateSweepBull = breakerB >= pendingBullSweepExtreme
-        bool gateSessBull  = f_isInSession()
+        bool gateSessBull  = inSessionNow
 
         if gateBreakBull and gateSweepBull and gateSessBull
             if f_checkSizeFilter(breakerT, breakerB, sizeFilterMode, minBreakerSize, maxBreakerSize, breakerSizeUnit)
-                breakerStartBar = bar_index - endOffset
+                breakerStartBar = bullBrkEnd
                 [fvgT, fvgB, fvgIdx, fvgRightIdx] = f_findBullishFVG(breakerT, breakerB, breakerStartBar, enableFvgAtrFilter, fvgAtrMult)
                 hasFvg = not na(fvgIdx)
 
@@ -1430,8 +1594,8 @@ if not na(pendingBullSweepIdx)
                              sweepExtreme = pendingBullSweepExtreme,
                              sweptLevel = pendingBullSweptLevel,
                              sweptLevelStartBar = pendingBullSweptStartBar,
-                             breakerStartIdx = bar_index - startOffset,
-                             breakerEndIdx = bar_index - endOffset,
+                             breakerStartIdx = bullBrkStart,
+                             breakerEndIdx = bullBrkEnd,
                              breakerTop = breakerT,
                              breakerBottom = breakerB,
                              isConfirmed = true,
@@ -1467,7 +1631,7 @@ if not na(pendingBullSweepIdx)
 
                         newBull.levelLabel := label.new(
                              x = lineStartB,
-                             y = newBull.sweptLevel + (nz(ta.atr(14)) * 0.1),
+                             y = newBull.sweptLevel + (nz(atr14) * 0.1),
                              text = pendingBullSweptLabelText,
                              color = color.new(na, na),
                              textcolor = labelTextColor,
@@ -1477,7 +1641,7 @@ if not na(pendingBullSweepIdx)
                              )
 
                         newBull.breakerBox := box.new(
-                             left = bar_index - endOffset,
+                             left = bullBrkEnd,
                              top = newBull.breakerTop,
                              right = bar_index,
                              bottom = newBull.breakerBottom,
@@ -1541,7 +1705,7 @@ if not na(pendingBullSweepIdx)
                             array.push(newBull.targetLabels, lbl)
 
                         if showAddTargets
-                            tgts = f_parseTargets(addTargetsStr)
+                            tgts = addTargetsParsed  // PASS 1: parsed once on bar 0
                             if array.size(tgts) > 0
                                 for i = 0 to array.size(tgts) - 1
                                     m = array.get(tgts, i)
@@ -1603,7 +1767,7 @@ if not na(pendingBullSweepIdx)
                     else if debugMode
                         f_dbg(true, "BULL rejected: risk<=0\nclose=" + str.tostring(close, format.mintick) + " inval=" + str.tostring(invPrice, format.mintick))
                 else if debugMode
-                    f_dbg(true, "BULL rejected: no FVG\nUnicorn Mode is ON and no unmitigated bullish FVG overlaps the breaker on this bar.\nbreaker=" + str.tostring(breakerB, format.mintick) + "-" + str.tostring(breakerT, format.mintick) + "\nscanned " + str.tostring(math.min(endOffset, 100)) + " bars back")
+                    f_dbg(true, "BULL rejected: no FVG\nUnicorn Mode is ON and no unmitigated bullish FVG overlaps the breaker on this bar.\nbreaker=" + str.tostring(breakerB, format.mintick) + "-" + str.tostring(breakerT, format.mintick) + "\nscanned " + str.tostring(math.min(bar_index - bullBrkEnd, 100)) + " bars back")
             else if debugMode
                 f_dbg(true, "BULL rejected: size filter\nsize=" + str.tostring(breakerT - breakerB, format.mintick) + " pts (" + str.tostring(minBreakerSize) + "-" + str.tostring(maxBreakerSize) + " " + breakerSizeUnit + ")")
         else if debugMode and (gateBreakBull or debugNoSweep)
@@ -1615,22 +1779,39 @@ else if debugMode and debugNoSweep
 
 // Track Bearish setups
 if not na(pendingBearSweepIdx)
-    sweepOffset = bar_index - pendingBearSweepIdx
-    [startOffset, endOffset] = f_findDownCandlesSeries(sweepOffset)
+    // PASS 1 — the 41-bar breaker scan and its range reduction now run once per
+    // sweep leg instead of once per bar. See BREAKER GEOMETRY CACHE above.
+    if na(bearBrkKey) or bearBrkKey != pendingBearSweepIdx
+        sweepOffset = bar_index - pendingBearSweepIdx
+        [startOffset, endOffset] = f_findDownCandlesSeries(sweepOffset)
+        bearBrkKey   := pendingBearSweepIdx
+        bearBrkFound := not na(startOffset)
+        if bearBrkFound
+            [rangeT, rangeB] = f_getSeriesRange(startOffset, endOffset)
+            bearBrkStart := bar_index - startOffset
+            bearBrkEnd   := bar_index - endOffset
+            bearBrkTop   := rangeT
+            bearBrkBot   := rangeB
+        else
+            bearBrkStart := na
+            bearBrkEnd   := na
+            bearBrkTop   := na
+            bearBrkBot   := na
 
-    if not na(startOffset)
-        [breakerT, breakerB] = f_getSeriesRange(startOffset, endOffset)
+    if bearBrkFound
+        float breakerT = bearBrkTop
+        float breakerB = bearBrkBot
 
         // Validation: Breaker top must not be above (more extreme than) the sweep high extreme
         // Hoisted into named bools purely so the diagnostics can name the gate
         // that rejected the bar. The conjunction below is the original condition.
         bool gateBreakBear = close < breakerB
         bool gateSweepBear = breakerT <= pendingBearSweepExtreme
-        bool gateSessBear  = f_isInSession()
+        bool gateSessBear  = inSessionNow
 
         if gateBreakBear and gateSweepBear and gateSessBear
             if f_checkSizeFilter(breakerT, breakerB, sizeFilterMode, minBreakerSize, maxBreakerSize, breakerSizeUnit)
-                breakerStartBar = bar_index - endOffset
+                breakerStartBar = bearBrkEnd
                 [fvgT, fvgB, fvgIdx, fvgRightIdx] = f_findBearishFVG(breakerT, breakerB, breakerStartBar, enableFvgAtrFilter, fvgAtrMult)
                 hasFvg = not na(fvgIdx)
 
@@ -1645,8 +1826,8 @@ if not na(pendingBearSweepIdx)
                              sweepExtreme = pendingBearSweepExtreme,
                              sweptLevel = pendingBearSweptLevel,
                              sweptLevelStartBar = pendingBearSweptStartBar,
-                             breakerStartIdx = bar_index - startOffset,
-                             breakerEndIdx = bar_index - endOffset,
+                             breakerStartIdx = bearBrkStart,
+                             breakerEndIdx = bearBrkEnd,
                              breakerTop = breakerT,
                              breakerBottom = breakerB,
                              isConfirmed = true,
@@ -1682,7 +1863,7 @@ if not na(pendingBearSweepIdx)
 
                         newBear.levelLabel := label.new(
                              x = lineStartB,
-                             y = newBear.sweptLevel + (nz(ta.atr(14)) * 0.1),
+                             y = newBear.sweptLevel + (nz(atr14) * 0.1),
                              text = pendingBearSweptLabelText,
                              color = color.new(na, na),
                              textcolor = labelTextColor,
@@ -1692,7 +1873,7 @@ if not na(pendingBearSweepIdx)
                              )
 
                         newBear.breakerBox := box.new(
-                             left = bar_index - endOffset,
+                             left = bearBrkEnd,
                              top = newBear.breakerTop,
                              right = bar_index,
                              bottom = newBear.breakerBottom,
@@ -1756,7 +1937,7 @@ if not na(pendingBearSweepIdx)
                             array.push(newBear.targetLabels, lbl)
 
                         if showAddTargets
-                            tgts = f_parseTargets(addTargetsStr)
+                            tgts = addTargetsParsed  // PASS 1: parsed once on bar 0
                             if array.size(tgts) > 0
                                 for i = 0 to array.size(tgts) - 1
                                     m = array.get(tgts, i)
@@ -1818,7 +1999,7 @@ if not na(pendingBearSweepIdx)
                     else if debugMode
                         f_dbg(false, "BEAR rejected: risk<=0\nclose=" + str.tostring(close, format.mintick) + " inval=" + str.tostring(invPrice, format.mintick))
                 else if debugMode
-                    f_dbg(false, "BEAR rejected: no FVG\nUnicorn Mode is ON and no unmitigated bearish FVG overlaps the breaker on this bar.\nbreaker=" + str.tostring(breakerB, format.mintick) + "-" + str.tostring(breakerT, format.mintick) + "\nscanned " + str.tostring(math.min(endOffset, 100)) + " bars back")
+                    f_dbg(false, "BEAR rejected: no FVG\nUnicorn Mode is ON and no unmitigated bearish FVG overlaps the breaker on this bar.\nbreaker=" + str.tostring(breakerB, format.mintick) + "-" + str.tostring(breakerT, format.mintick) + "\nscanned " + str.tostring(math.min(bar_index - bearBrkEnd, 100)) + " bars back")
             else if debugMode
                 f_dbg(false, "BEAR rejected: size filter\nsize=" + str.tostring(breakerT - breakerB, format.mintick) + " pts (" + str.tostring(minBreakerSize) + "-" + str.tostring(maxBreakerSize) + " " + breakerSizeUnit + ")")
         else if debugMode and (gateBreakBear or debugNoSweep)
@@ -1926,25 +2107,25 @@ while array.size(activeSetups) > historyCount
 // ========================================
 // POTENTIAL BREAKER ALERT (ON UNCONFIRMED BAR)
 // ========================================
+// PASS 1 — this block used to repeat the full breaker scan and range reduction
+// a third and fourth time per realtime tick, with arguments identical to the
+// ones the tracking blocks had already used. It now reads the same cache.
+//
+// The cache is guaranteed current here: whenever pendingBull/BearSweepIdx is
+// not na, the corresponding tracking block ran earlier on this same bar and
+// refreshed it; when a setup confirmed, that index was set to na and the branch
+// below is skipped — exactly as the reference behaved.
 var int lastPotentialAlertBar = na
 if alertPotential and barstate.isrealtime and not barstate.isconfirmed and bar_index != lastPotentialAlertBar
-    if not na(pendingBullSweepIdx)
-        sweepOffset = bar_index - pendingBullSweepIdx
-        [startOff, endOff] = f_findUpCandlesSeries(sweepOffset)
-        if not na(startOff)
-            [bTop, bBtm] = f_getSeriesRange(startOff, endOff)
-            if close > bTop and bBtm >= pendingBullSweepExtreme
-                alert("Potential Breaker: Potential Bullish Breaker forming on " + syminfo.ticker, alert.freq_once_per_bar)
-                lastPotentialAlertBar := bar_index
+    if not na(pendingBullSweepIdx) and bullBrkFound
+        if close > bullBrkTop and bullBrkBot >= pendingBullSweepExtreme
+            alert("Potential Breaker: Potential Bullish Breaker forming on " + syminfo.ticker, alert.freq_once_per_bar)
+            lastPotentialAlertBar := bar_index
 
-    if not na(pendingBearSweepIdx)
-        sweepOffset = bar_index - pendingBearSweepIdx
-        [startOff, endOff] = f_findDownCandlesSeries(sweepOffset)
-        if not na(startOff)
-            [bTop, bBtm] = f_getSeriesRange(startOff, endOff)
-            if close < bBtm and bTop <= pendingBearSweepExtreme
-                alert("Potential Breaker: Potential Bearish Breaker forming on " + syminfo.ticker, alert.freq_once_per_bar)
-                lastPotentialAlertBar := bar_index
+    if not na(pendingBearSweepIdx) and bearBrkFound
+        if close < bearBrkBot and bearBrkTop <= pendingBearSweepExtreme
+            alert("Potential Breaker: Potential Bearish Breaker forming on " + syminfo.ticker, alert.freq_once_per_bar)
+            lastPotentialAlertBar := bar_index
 
 // ========================================
 // SETUP GRADE HELPERS (NEW)
