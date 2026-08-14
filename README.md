@@ -35,3 +35,4 @@ without it.
 - `prisma/schema.prisma` — data model
 - `prisma/seed.ts` — seeds the editable ICT tag lists, starter rule-violation checklist, and
   instrument tick values
+- `pine/` — TradingView Pine indicators used alongside the dashboard (see `pine/README.md`)

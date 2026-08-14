@@ -1,0 +1,55 @@
+# Pine Scripts
+
+TradingView indicators used alongside the dashboard. Paste the `.pine` file into the
+TradingView Pine Editor and "Add to chart".
+
+## `ict-htf-candles.pine`
+
+A fork of **ICT HTF Candles (fadi)** by fadizeidan (MPL-2.0) — the indicator that draws up to
+six higher-timeframe candle sets to the right of the live chart, with fair value gaps and
+volume imbalances inside each set.
+
+### What's changed from the original
+
+#### 1. Previous Candle Levels
+
+Marks the **high**, **low**, and **middle (50%)** of the last *closed* candle on every
+timeframe, and carries those levels across the candle that is still forming — so a sweep,
+bounce, or breakout of the prior candle is visible while you're trading a lower timeframe.
+
+- The high and the low are the candle's extremes (wick to wick).
+- The middle is the 50% marker, measured either **High to Low** (default) or **Open to
+  Close** — the setting is in the *Previous Candle Levels* group.
+- Each level has its own color / style / width, defaulting to solid gray for the extremes and
+  a dotted gray for the 50%.
+- `Extend past the open candle` adds N bars of run-off to the right of the forming candle.
+- `Extend back to the live chart` projects the levels left, back to the bar where the prior
+  HTF candle opened, so they sit over live price action instead of only over the HTF panel.
+- Optional `PH` / `50%` / `PL` labels at the right end of each line.
+
+The levels are redrawn from the current set on every realtime tick, so when an HTF candle
+closes, the levels roll forward to it automatically.
+
+#### 2. FVG consequent encroachment (50%)
+
+Fair value gaps now get an optional dotted midline at the 50% of the gap — the level price
+most often reacts to when it trades back into the gap. Toggle, color, and line style live in
+the *Imbalance* group.
+
+#### 3. Cleaner default styling
+
+Defaults only — every one of these is still a normal input you can change:
+
+- Bodies use the standard teal/red (`#26a69a` / `#ef5350`) instead of `color.green` /
+  `color.red`, with borders and wicks in a slightly darker matching hue rather than black.
+  Candles read as one solid shape instead of a black-outlined block.
+- Fair value gaps are a soft neutral gray at 85% transparency (was gray at 80%), so they sit
+  behind the candles instead of competing with them.
+- Volume imbalances are a light pink at 82% transparency (was red at 50%).
+- Default candle width is 2 (4 bars wide) with the existing 1-bar gap, giving the wider,
+  better-separated candles of the reference layout.
+
+### Licensing
+
+The original is MPL-2.0; this modified copy stays under the same license and keeps the
+original author's attribution in the file header.
