@@ -1109,7 +1109,11 @@ if not na(pendingBullSweepIdx)
 
                 if (not unicornMode or (unicornMode and hasFvg)) and htfDeliveryOkBull
                     float invPrice = useSwingInvalidation ? pendingBullSweepExtreme : breakerB
-                    float riskRange = close - invPrice
+                    // R is measured across the breaker - from the breaker top down to the
+                    // invalidation - so the confirmation candle's extension above the
+                    // breaker no longer inflates the risk. With the default invalidation
+                    // this is exactly the breaker range (breakerTop - breakerBottom).
+                    float riskRange = breakerT - invPrice
                     
                     if riskRange > 0
                         Setup newBull = Setup.new(
@@ -1287,7 +1291,11 @@ if not na(pendingBearSweepIdx)
 
                 if (not unicornMode or (unicornMode and hasFvg)) and htfDeliveryOkBear
                     float invPrice = useSwingInvalidation ? pendingBearSweepExtreme : breakerT
-                    float riskRange = invPrice - close
+                    // R is measured across the breaker - from the breaker bottom up to the
+                    // invalidation - so the confirmation candle's extension below the
+                    // breaker no longer inflates the risk. With the default invalidation
+                    // this is exactly the breaker range (breakerTop - breakerBottom).
+                    float riskRange = invPrice - breakerB
                     
                     if riskRange > 0
                         Setup newBear = Setup.new(
@@ -1600,7 +1608,7 @@ if array.size(activeSetups) > 0
             if array.size(s.targetLines) > 0
                 showTargetPrice := line.get_y1(array.get(s.targetLines, 0))
             else
-                showTargetPrice := s.entryPrice + (s.dir == "BULL" ? 1 : -1) * rrRatio * math.abs(s.entryPrice - s.invalidationPrice)
+                showTargetPrice := s.entryPrice + (s.dir == "BULL" ? 1 : -1) * rrRatio * (s.dir == "BULL" ? s.breakerTop - s.invalidationPrice : s.invalidationPrice - s.breakerBottom)
             break
 
 var table dashboardTable = table.new(
