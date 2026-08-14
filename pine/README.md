@@ -82,7 +82,18 @@ Fair value gaps now get an optional dotted midline at the 50% of the gap — the
 most often reacts to when it trades back into the gap. Toggle, color, and line style live in
 the *Imbalance* group.
 
-#### 4. Cleaner default styling
+#### 4. Gaps disappear once price closes through them
+
+The original drew every gap it found, including ones price had long since traded away from.
+A gap is now dropped once a later candle has closed beyond its **far** edge — above the top of
+a bearish gap, or below the bottom of a bullish one. Trading into a gap, or even closing
+inside it, leaves it on the chart; only acceptance past the whole thing removes it.
+
+Only settled candles invalidate a gap. The candle still forming is left out of the test, so a
+gap doesn't blink out and back in mid-candle as price probes through it — it goes when that
+candle closes. `Hide a gap once price closes through it` turns the behavior off.
+
+#### 5. Cleaner default styling
 
 Defaults only — every one of these is still a normal input you can change:
 

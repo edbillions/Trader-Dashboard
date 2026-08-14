@@ -98,6 +98,7 @@ type Settings
 	bool fvg_ce_show
 	color fvg_ce_color
 	string fvg_ce_style
+	bool fvg_hide_closed
 	bool vi_show
 	color vi_color
 	bool pcl_show
@@ -309,6 +310,7 @@ settings.fvg_color              := input.color(color.new(#787b86, 85), '', inlin
 settings.fvg_ce_show            := input.bool(true, 'FVG 50% (CE)     ', group = group_imbalance, inline = 'fvgce')
 settings.fvg_ce_color           := input.color(color.new(#787b86, 25), '', inline = 'fvgce', group = group_imbalance)
 settings.fvg_ce_style           := input.string('····', '', options = ['⎯⎯⎯', '----', '····'], inline = 'fvgce', group = group_imbalance)
+settings.fvg_hide_closed        := input.bool(true, 'Hide a gap once price closes through it', group = group_imbalance, tooltip = 'Drops a fair value gap once a later candle has closed beyond its far edge — above the top of a bearish gap, or below the bottom of a bullish one. Only closed candles count, so a gap is not removed by the candle that is still forming.')
 
 settings.vi_show                := input.bool(true, 'Volume Imbalance', group = group_imbalance, inline = 'vi')
 settings.vi_color               := input.color(color.new(#ef5350, 82), '', inline = 'vi', group = group_imbalance)
@@ -641,20 +643,36 @@ method FindImbalance(CandleSet candleSet) =>
                 candle2 = candleSet.candles.get(i + 2)
                 candle3 = candleSet.candles.get(i + 1)
 
+                // Widest close printed by the candles that followed the gap. Index 0 is still
+                // forming so it is left out — a gap is only invalidated by a settled close.
+                float after_low_c = na
+                float after_high_c = na
+                if settings.fvg_hide_closed and i > 1
+                    for j = 1 to i - 1 by 1
+                        float cc = candleSet.candles.get(j).c
+                        after_low_c := na(after_low_c) ? cc : math.min(after_low_c, cc)
+                        after_high_c := na(after_high_c) ? cc : math.max(after_high_c, cc)
+
                 if candle1.l > candle2.h and math.min(candle1.o, candle1.c) > math.max(candle2.o, candle2.c)
-                    Imbalance imb = Imbalance.new()
-                    imb.b := box.new(box.get_left(candle2.body), candle2.h, box.get_right(candle1.body), candle1.l, bgcolor = settings.fvg_color, border_color = color_transparent, xloc = xloc.bar_index)
-                    if settings.fvg_ce_show
-                        float ce = math.avg(candle2.h, candle1.l)
-                        imb.ce := line.new(box.get_left(candle2.body), ce, box.get_right(candle1.body), ce, xloc = xloc.bar_index, color = settings.fvg_ce_color, style = helper.LineStyle(settings.fvg_ce_style), width = 1)
-                    candleSet.imbalances.push(imb)
+                    // Bullish gap spanning [candle2.h, candle1.l] — dead once a close is below it
+                    bool closed_through = not na(after_low_c) and after_low_c < candle2.h
+                    if not closed_through
+                        Imbalance imb = Imbalance.new()
+                        imb.b := box.new(box.get_left(candle2.body), candle2.h, box.get_right(candle1.body), candle1.l, bgcolor = settings.fvg_color, border_color = color_transparent, xloc = xloc.bar_index)
+                        if settings.fvg_ce_show
+                            float ce = math.avg(candle2.h, candle1.l)
+                            imb.ce := line.new(box.get_left(candle2.body), ce, box.get_right(candle1.body), ce, xloc = xloc.bar_index, color = settings.fvg_ce_color, style = helper.LineStyle(settings.fvg_ce_style), width = 1)
+                        candleSet.imbalances.push(imb)
                 if candle1.h < candle2.l and math.max(candle1.o, candle1.c) < math.min(candle2.o, candle2.c)
-                    Imbalance imb = Imbalance.new()
-                    imb.b := box.new(box.get_right(candle1.body), candle1.h, box.get_left(candle2.body), candle2.l, bgcolor = settings.fvg_color, border_color = color_transparent)
-                    if settings.fvg_ce_show
-                        float ce = math.avg(candle1.h, candle2.l)
-                        imb.ce := line.new(box.get_left(candle2.body), ce, box.get_right(candle1.body), ce, xloc = xloc.bar_index, color = settings.fvg_ce_color, style = helper.LineStyle(settings.fvg_ce_style), width = 1)
-                    candleSet.imbalances.push(imb)
+                    // Bearish gap spanning [candle1.h, candle2.l] — dead once a close is above it
+                    bool closed_through = not na(after_high_c) and after_high_c > candle2.l
+                    if not closed_through
+                        Imbalance imb = Imbalance.new()
+                        imb.b := box.new(box.get_right(candle1.body), candle1.h, box.get_left(candle2.body), candle2.l, bgcolor = settings.fvg_color, border_color = color_transparent)
+                        if settings.fvg_ce_show
+                            float ce = math.avg(candle1.h, candle2.l)
+                            imb.ce := line.new(box.get_left(candle2.body), ce, box.get_right(candle1.body), ce, xloc = xloc.bar_index, color = settings.fvg_ce_color, style = helper.LineStyle(settings.fvg_ce_style), width = 1)
+                        candleSet.imbalances.push(imb)
                 box temp = box.copy(candle3.body)
                 box.delete(candle3.body)
                 candle3.body := temp
