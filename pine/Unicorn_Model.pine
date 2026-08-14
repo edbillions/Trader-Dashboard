@@ -1207,7 +1207,8 @@ if not na(pendingBullSweepIdx)
                              text_font_family = font.family_monospace
                              )
                         
-                        primaryTargetPrice = close + rrRatio * riskRange
+                        // Projected from the breaker top so 1R equals exactly one breaker range
+                        primaryTargetPrice = breakerT + rrRatio * riskRange
                         if showRRTarget
                             l = line.new(
                                  x1 = newBull.breakerEndIdx,
@@ -1237,7 +1238,7 @@ if not na(pendingBullSweepIdx)
                             if array.size(tgts) > 0
                                 for i = 0 to array.size(tgts) - 1
                                     m = array.get(tgts, i)
-                                    tgtVal = close + m * riskRange
+                                    tgtVal = breakerT + m * riskRange
                                     l = line.new(
                                          x1 = newBull.breakerEndIdx,
                                          y1 = tgtVal,
@@ -1389,7 +1390,8 @@ if not na(pendingBearSweepIdx)
                              text_font_family = font.family_monospace
                              )
                         
-                        primaryTargetPrice = close - rrRatio * riskRange
+                        // Projected from the breaker bottom so 1R equals exactly one breaker range
+                        primaryTargetPrice = breakerB - rrRatio * riskRange
                         if showRRTarget
                             l = line.new(
                                  x1 = newBear.breakerEndIdx,
@@ -1419,7 +1421,7 @@ if not na(pendingBearSweepIdx)
                             if array.size(tgts) > 0
                                 for i = 0 to array.size(tgts) - 1
                                     m = array.get(tgts, i)
-                                    tgtVal = close - m * riskRange
+                                    tgtVal = breakerB - m * riskRange
                                     l = line.new(
                                          x1 = newBear.breakerEndIdx,
                                          y1 = tgtVal,
@@ -1608,7 +1610,7 @@ if array.size(activeSetups) > 0
             if array.size(s.targetLines) > 0
                 showTargetPrice := line.get_y1(array.get(s.targetLines, 0))
             else
-                showTargetPrice := s.entryPrice + (s.dir == "BULL" ? 1 : -1) * rrRatio * (s.dir == "BULL" ? s.breakerTop - s.invalidationPrice : s.invalidationPrice - s.breakerBottom)
+                showTargetPrice := s.dir == "BULL" ? s.breakerTop + rrRatio * (s.breakerTop - s.invalidationPrice) : s.breakerBottom - rrRatio * (s.invalidationPrice - s.breakerBottom)
             break
 
 var table dashboardTable = table.new(
