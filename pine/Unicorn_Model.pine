@@ -460,6 +460,21 @@ useD = input.bool(true, "Source D", inline="src_d", tooltip="Enable or disable S
 tfD = input.timeframe("1440", "", inline="src_d", tooltip="Timeframe for Source D (ignored if Mode is Automatic).", group=GRP_LIQ, active=useD and htfMode == "Manual")
 typeD = input.string("OHLC + Swing", "", options=["OHLC", "Swing", "OHLC + Swing"], inline="src_d", tooltip="Liquidity level type for Source D.", group=GRP_LIQ, active=useD)
 
+// Session Liquidity (NEW - session highs/lows feed the same liquidity engine as Sources A-D)
+useSessionLiq = input.bool(false, "Session Liquidity", tooltip="When enabled, the high and low of each completed session below are registered as liquidity levels, exactly like the Source A-D levels. They can then be swept to build a Unicorn setup. Sessions use the Time Filter timezone setting.", group=GRP_LIQ)
+
+sessLiq1Use = input.bool(true, "Session 1", inline="sess_liq_1", tooltip="Enable Session 1 liquidity.", group=GRP_LIQ, active=useSessionLiq)
+sessLiq1Time = input.session("2000-0000", "", inline="sess_liq_1", tooltip="Session 1 window. Its high and low are registered once the session closes.", group=GRP_LIQ, active=useSessionLiq and sessLiq1Use)
+
+sessLiq2Use = input.bool(true, "Session 2", inline="sess_liq_2", tooltip="Enable Session 2 liquidity.", group=GRP_LIQ, active=useSessionLiq)
+sessLiq2Time = input.session("0200-0500", "", inline="sess_liq_2", tooltip="Session 2 window. Its high and low are registered once the session closes.", group=GRP_LIQ, active=useSessionLiq and sessLiq2Use)
+
+sessLiq3Use = input.bool(true, "Session 3", inline="sess_liq_3", tooltip="Enable Session 3 liquidity.", group=GRP_LIQ, active=useSessionLiq)
+sessLiq3Time = input.session("0930-1200", "", inline="sess_liq_3", tooltip="Session 3 window. Its high and low are registered once the session closes.", group=GRP_LIQ, active=useSessionLiq and sessLiq3Use)
+
+sessLiq4Use = input.bool(true, "Session 4", inline="sess_liq_4", tooltip="Enable Session 4 liquidity.", group=GRP_LIQ, active=useSessionLiq)
+sessLiq4Time = input.session("1330-1600", "", inline="sess_liq_4", tooltip="Session 4 window. Its high and low are registered once the session closes.", group=GRP_LIQ, active=useSessionLiq and sessLiq4Use)
+
 // ========================================
 // INPUTS - Group 4: Target Projections (Separate, No Inlines)
 // ========================================
@@ -729,6 +744,57 @@ if useD_resolved
         if sl_D != lastSl_D or (na(lastSl_D) and not na(sl_D))
             lastSl_D := sl_D
             f_registerLevel(f_getTFLabel(htfD_resolved), "Swing", false, sl_D)
+
+// ========================================
+// SESSION LIQUIDITY SOURCES
+// ========================================
+// Tracks the running high/low of each enabled session and, the moment the
+// session closes, registers both extremes through the SAME f_registerLevel()
+// used by Sources A-D. From that point on they are ordinary liquidity levels:
+// the existing sweep, bias, breaker and Unicorn logic handles them unchanged.
+// Nothing here runs while "Session Liquidity" is off.
+
+// Same timezone resolution the Time Filter uses, so both agree on session times
+string sessLiqTZ = customTimezone ? "GMT" + (tzHourOffset >= 0 ? "+" : "-") + str.tostring(math.abs(tzHourOffset), "00") + str.tostring(math.abs(tzMinOffset), "00") : syminfo.timezone
+
+// Evaluated unconditionally so session state stays consistent bar to bar
+bool inSessLiq1 = not na(time(timeframe.period, sessLiq1Time, sessLiqTZ))
+bool inSessLiq2 = not na(time(timeframe.period, sessLiq2Time, sessLiqTZ))
+bool inSessLiq3 = not na(time(timeframe.period, sessLiq3Time, sessLiqTZ))
+bool inSessLiq4 = not na(time(timeframe.period, sessLiq4Time, sessLiqTZ))
+
+// Per-session running extremes and active state
+var float[] sessLiqHighs = array.new_float(4, na)
+var float[] sessLiqLows = array.new_float(4, na)
+var bool[] sessLiqWasActive = array.new_bool(4, false)
+
+// Registers the completed session's high and low as liquidity
+f_processSessionLiquidity(int idx, bool useSess, bool inSess, string sessLabel) =>
+    if useSess
+        bool wasActive = array.get(sessLiqWasActive, idx)
+        if inSess
+            if not wasActive
+                // First bar of a new session - start a fresh range
+                array.set(sessLiqHighs, idx, high)
+                array.set(sessLiqLows, idx, low)
+                array.set(sessLiqWasActive, idx, true)
+            else
+                array.set(sessLiqHighs, idx, math.max(nz(array.get(sessLiqHighs, idx), high), high))
+                array.set(sessLiqLows, idx, math.min(nz(array.get(sessLiqLows, idx), low), low))
+        else if wasActive
+            // Session just closed - its extremes become liquidity
+            float sessHigh = array.get(sessLiqHighs, idx)
+            float sessLow = array.get(sessLiqLows, idx)
+            array.set(sessLiqWasActive, idx, false)
+            if not na(sessHigh)
+                f_registerLevel(sessLabel, "Session", true, sessHigh)
+            if not na(sessLow)
+                f_registerLevel(sessLabel, "Session", false, sessLow)
+
+f_processSessionLiquidity(0, useSessionLiq and sessLiq1Use, inSessLiq1, "S1")
+f_processSessionLiquidity(1, useSessionLiq and sessLiq2Use, inSessLiq2, "S2")
+f_processSessionLiquidity(2, useSessionLiq and sessLiq3Use, inSessLiq3, "S3")
+f_processSessionLiquidity(3, useSessionLiq and sessLiq4Use, inSessLiq4, "S4")
 
 // ========================================
 // MAIN EXECUTION STATE MACHINE (Level update & sweep check)
@@ -1566,6 +1632,8 @@ if barstate.islast and showDashboard
         activeSrcs := activeSrcs + "C "
     if useD_resolved
         activeSrcs := activeSrcs + "D "
+    if useSessionLiq
+        activeSrcs := activeSrcs + "S "
     table.cell(dashboardTable, 1, 3, activeSrcs, text_color=color.orange, text_size=tSize, text_font_family=font.family_monospace)
     table.cell(dashboardTable, 2, 3, "(" + htfMode + ")", text_color=color.gray, text_size=tSize, text_font_family=font.family_monospace)
     
