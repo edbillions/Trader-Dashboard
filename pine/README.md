@@ -50,13 +50,21 @@ line never change.
 
 #### 2. Swing highs and lows
 
-Every confirmed swing inside the displayed candles gets a blue dotted line running from the
-swing candle to the right edge of the set — the same clean treatment as a swept level.
+A swing high or low gets a blue dotted line running from the swing candle to the right edge of
+the set — but only while that swing is being **swept**, so the panel stays clean and a line
+showing up means something is happening at that price right now.
 
 A swing is a fractal: a candle whose high sits above the highs of `Candles either side`
 candles on both sides of it, and the mirror of that for a low. The default of 1 is a classic
 3-candle fractal; raise it for fewer, more significant swings. Equal highs don't qualify, so
 a double top doesn't draw two stacked lines.
+
+A swing counts as swept when some candle printed after it has traded through the level while
+none has closed through it — the same take-but-no-acceptance test the previous candle levels
+use, run across every later candle rather than just the one still forming. So the line appears
+the moment price runs the swing, stays for as long as price keeps failing back, and vanishes
+once a candle closes through. `Only draw a swing while it is swept` turns this off if you'd
+rather see a line on every swing.
 
 The candle still forming can never be a swing — there's nothing to its right yet — so a swing
 only appears once enough candles have printed after it. The *previous* candle is also left out

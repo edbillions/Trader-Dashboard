@@ -122,6 +122,7 @@ type Settings
 	string pcl_label_size
 	bool swing_show
 	int swing_strength
+	bool swing_swept_only
 	color swing_h_color
 	string swing_h_style
 	int swing_h_size
@@ -337,6 +338,7 @@ settings.pcl_label_size         := input.string(size.tiny, '', [size.tiny, size.
 
 settings.swing_show             := input.bool(true, 'Mark swing highs & lows', group = group_swing)
 settings.swing_strength         := input.int(1, 'Candles either side', minval = 1, maxval = 5, group = group_swing, tooltip = 'A candle is a swing high when its high is above the highs of this many candles on both sides of it, and a swing low when its low is below the lows of the same. 1 is a classic 3-candle fractal; raise it for fewer, more significant swings.')
+settings.swing_swept_only       := input.bool(true, 'Only draw a swing while it is swept', group = group_swing, tooltip = 'A swing is swept once a later candle has traded through it but none has closed through it. With this on, the line appears at the moment of the sweep and disappears again as soon as a candle closes through the swing. Turn it off to keep a line on every swing.')
 settings.swing_h_color          := input.color(#2962ff, 'High     ', inline = 'swh', group = group_swing)
 settings.swing_h_style          := input.string('····', '', options = ['⎯⎯⎯', '----', '····'], inline = 'swh', group = group_swing)
 settings.swing_h_size           := input.int(1, '', options = [1, 2, 3, 4], inline = 'swh', group = group_swing)
@@ -782,10 +784,11 @@ method PreviousLevels(CandleSet candleSet) =>
             pl.l_label := label(na)
     candleSet
 
-// Marks every confirmed swing high and swing low still inside the displayed candles. A swing
-// is a fractal: a candle whose high sits above the highs of `swing_strength` candles on both
-// sides of it (and the mirror of that for a low). Index 0 is the candle that is still forming,
-// so it can never qualify — a swing only appears once enough candles have printed after it.
+// Marks the swing highs and swing lows inside the displayed candles that are currently being
+// swept. A swing is a fractal: a candle whose high sits above the highs of `swing_strength`
+// candles on both sides of it (and the mirror of that for a low). Index 0 is the candle that
+// is still forming, so it can never qualify — a swing only appears once enough candles have
+// printed after it.
 method FindSwings(CandleSet candleSet) =>
     if barstate.isrealtime or barstate.islast
         if candleSet.swings.size() > 0
@@ -818,9 +821,32 @@ method FindSwings(CandleSet candleSet) =>
                     if newer.l <= c.l or older.l <= c.l
                         is_low := false
 
-                if is_high
+                // A swing is swept once a later candle has traded through it while none has
+                // closed through it — the same take-but-no-acceptance test the previous candle
+                // levels use, run across every candle printed after the swing.
+                bool h_taken = false
+                bool h_closed = false
+                bool l_taken = false
+                bool l_closed = false
+
+                if (is_high or is_low) and settings.swing_swept_only
+                    for j = 0 to i - 1 by 1
+                        Candle after = candleSet.candles.get(j)
+                        if after.h > c.h
+                            h_taken := true
+                        if after.c > c.h
+                            h_closed := true
+                        if after.l < c.l
+                            l_taken := true
+                        if after.c < c.l
+                            l_closed := true
+
+                bool show_h = is_high and (not settings.swing_swept_only or (h_taken and not h_closed))
+                bool show_l = is_low and (not settings.swing_swept_only or (l_taken and not l_closed))
+
+                if show_h
                     candleSet.swings.push(line.new(box.get_left(c.body), c.h, right, c.h, xloc = xloc.bar_index, color = settings.swing_h_color, style = helper.LineStyle(settings.swing_h_style), width = settings.swing_h_size))
-                if is_low
+                if show_l
                     candleSet.swings.push(line.new(box.get_left(c.body), c.l, right, c.l, xloc = xloc.bar_index, color = settings.swing_l_color, style = helper.LineStyle(settings.swing_l_style), width = settings.swing_l_size))
     candleSet
 
