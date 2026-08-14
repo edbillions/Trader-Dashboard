@@ -828,16 +828,23 @@ method FindSwings(CandleSet candleSet) =>
                 bool h_closed = false
                 bool l_taken = false
                 bool l_closed = false
+                int h_sweeper = -1
+                int l_sweeper = -1
 
-                if (is_high or is_low) and settings.swing_swept_only
+                if is_high or is_low
+                    // j counts back towards the swing, so the last match is the first candle
+                    // printed after it that took the level out — that is the wick the line
+                    // should stop at rather than running past.
                     for j = 0 to i - 1 by 1
                         Candle after = candleSet.candles.get(j)
                         if after.h > c.h
                             h_taken := true
+                            h_sweeper := j
                         if after.c > c.h
                             h_closed := true
                         if after.l < c.l
                             l_taken := true
+                            l_sweeper := j
                         if after.c < c.l
                             l_closed := true
 
@@ -845,9 +852,11 @@ method FindSwings(CandleSet candleSet) =>
                 bool show_l = is_low and (not settings.swing_swept_only or (l_taken and not l_closed))
 
                 if show_h
-                    candleSet.swings.push(line.new(box.get_left(c.body), c.h, right, c.h, xloc = xloc.bar_index, color = settings.swing_h_color, style = helper.LineStyle(settings.swing_h_style), width = settings.swing_h_size))
+                    int x2_h = h_sweeper >= 0 ? line.get_x1(candleSet.candles.get(h_sweeper).wick_up) : right
+                    candleSet.swings.push(line.new(box.get_left(c.body), c.h, x2_h, c.h, xloc = xloc.bar_index, color = settings.swing_h_color, style = helper.LineStyle(settings.swing_h_style), width = settings.swing_h_size))
                 if show_l
-                    candleSet.swings.push(line.new(box.get_left(c.body), c.l, right, c.l, xloc = xloc.bar_index, color = settings.swing_l_color, style = helper.LineStyle(settings.swing_l_style), width = settings.swing_l_size))
+                    int x2_l = l_sweeper >= 0 ? line.get_x1(candleSet.candles.get(l_sweeper).wick_down) : right
+                    candleSet.swings.push(line.new(box.get_left(c.body), c.l, x2_l, c.l, xloc = xloc.bar_index, color = settings.swing_l_color, style = helper.LineStyle(settings.swing_l_style), width = settings.swing_l_size))
     candleSet
 
 method Monitor(CandleSet candleSet) =>

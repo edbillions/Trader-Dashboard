@@ -50,9 +50,12 @@ line never change.
 
 #### 2. Swing highs and lows
 
-A swing high or low gets a blue dotted line running from the swing candle to the right edge of
-the set — but only while that swing is being **swept**, so the panel stays clean and a line
-showing up means something is happening at that price right now.
+A swing high or low gets a blue dotted line running from the swing candle to the wick of the
+candle that swept it — but only while that swing is being **swept**, so the panel stays clean
+and a line showing up means something is happening at that price right now. The line stops at
+the sweeping wick rather than running past it, so it reads as "this candle took that level".
+An unswept swing (only visible with the swept-only option off) runs to the right edge of the
+set instead.
 
 A swing is a fractal: a candle whose high sits above the highs of `Candles either side`
 candles on both sides of it, and the mirror of that for a low. The default of 1 is a classic
