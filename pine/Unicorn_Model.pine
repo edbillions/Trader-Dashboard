@@ -1071,12 +1071,12 @@ f_attachHTFDeliveryFVG(Setup s, int idx) =>
              )
         if showHtfDeliveryLabel
             s.htfDeliveryLabel := label.new(
-                 x = f.startBar,
+                 x = bar_index,
                  y = isBull ? f.bottom : f.top,
                  text = f.tfLabel + (isBull ? " Bullish HTF FVG" : " Bearish HTF FVG"),
                  color = color.new(na, na),
-                 textcolor = isBull ? htfBullFvgBorder : htfBearFvgBorder,
-                 style = isBull ? label.style_label_upper_left : label.style_label_lower_left,
+                 textcolor = labelTextColor,
+                 style = label.style_label_right,
                  size = size.tiny,
                  tooltip = "HTF Delivery: YES\n" +
                            "HTF FVG: " + f.tfLabel + (isBull ? " Bullish" : " Bearish") + "\n" +
@@ -1517,6 +1517,8 @@ if array.size(activeSetups) > 0
                 // [HTF FVG DELIVERY] Extend the delivery zone alongside the breaker box
                 if not na(setup.htfDeliveryBox)
                     box.set_right(setup.htfDeliveryBox, bar_index)
+                if not na(setup.htfDeliveryLabel)
+                    label.set_x(setup.htfDeliveryLabel, bar_index)
                 
                 // Track targets hit
                 int activeTargets = 0
