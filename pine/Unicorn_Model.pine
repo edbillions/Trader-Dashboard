@@ -412,61 +412,6 @@ f_registerLevel(string tfLabel, string lvlType, bool isHigh, float priceVal) =>
                      )
                 array.push(activeHTFLevels, newLvl)
 
-// Position Sizing Calculations (From MTF MA Model)
-getContractSize() =>
-    ticker = syminfo.ticker
-    if str.contains(ticker, "ES") or str.contains(ticker, "MES")
-        50.0
-    else if str.contains(ticker, "NQ") or str.contains(ticker, "MNQ")
-        20.0
-    else if str.contains(ticker, "YM") or str.contains(ticker, "MYM")
-        5.0
-    else if str.contains(ticker, "RTY") or str.contains(ticker, "M2K")
-        50.0
-    else if str.contains(ticker, "CL") or str.contains(ticker, "MCL")
-        1000.0
-    else if str.contains(ticker, "GC") or str.contains(ticker, "MGC")
-        100.0
-    else if str.contains(ticker, "SI") or str.contains(ticker, "SIL")
-        5000.0
-    else if str.contains(ticker, "BTC")
-        1.0
-    else if str.contains(ticker, "ETH")
-        1.0
-    else
-        1.0
-
-calculatePositionSize(float entry, float stop, float riskUsd) =>
-    riskPerUnit = math.abs(entry - stop)
-    positionSize = riskPerUnit != 0 ? riskUsd / riskPerUnit : 0
-    
-    detectedMarket = syminfo.type
-    if detectedMarket == "forex"
-        ticker = syminfo.ticker
-        needsConversion = not (str.contains(ticker, "USD") and str.endswith(ticker, "USD")) or str.contains(ticker, "6")
-        if needsConversion
-            positionSize := (positionSize * entry) / 100000.0
-        else
-            positionSize := positionSize / 100000.0
-    else if detectedMarket == "futures" or detectedMarket == "future" or detectedMarket == "cfd" or detectedMarket == "index"
-        contractSize = getContractSize()
-        positionSize := positionSize / contractSize
-    
-    positionSize
-
-formatPositionSize(float size) =>
-    detectedMarket = syminfo.type
-    sizeText = ""
-    if detectedMarket == "forex"
-        sizeText := str.tostring(size, '#.##') + ' lots'
-    else if detectedMarket == "futures" or detectedMarket == "future" or detectedMarket == "cfd" or detectedMarket == "index"
-        sizeText := str.tostring(size, '#.##') + ' ct'
-    else if detectedMarket == "crypto" or detectedMarket == "stock"
-        sizeText := str.tostring(size, '#.####') + ' units'
-    else
-        sizeText := str.tostring(size, '#.####')
-    sizeText
-
 // ========================================
 // INPUTS - Group 1: Alerts
 // ========================================
@@ -583,16 +528,7 @@ session3Enable = input.bool(false, "Session 3", inline="sess3_inline", tooltip="
 session3Time = input.session("1900-2200", "", inline="sess3_inline", tooltip="Session 3 time range.", group=GRP_TIME, active=session3Enable)
 
 // ========================================
-// INPUTS - Group 8: Position Sizing Settings
-// ========================================
-string GRP_SIZE_SESS = "Position Sizing"
-showPositionSize = input.bool(false, "Show Position Size", group=GRP_SIZE_SESS)
-accountBalance = input.float(10000.0, "Account Balance (USD)", minval=0.0, group=GRP_SIZE_SESS, active=showPositionSize)
-riskType = input.string("Percentage", "Risk Type", options=["Percentage", "Fixed Amount"], group=GRP_SIZE_SESS, active=showPositionSize)
-riskAmount = input.float(1.0, "Risk Amount (% or USD)", minval=0.0, group=GRP_SIZE_SESS, active=showPositionSize)
-
-// ========================================
-// INPUTS - Group 9: Dashboard Settings
+// INPUTS - Group 8: Dashboard Settings
 // ========================================
 string GRP_DASH = "Dashboard Settings"
 showDashboard = input.bool(true, "Show Dashboard", tooltip="Display summary table on the chart.", group=GRP_DASH)
@@ -608,7 +544,7 @@ tableFrameColor = input.color(color.black, "Table Frame Color", tooltip="Dashboa
 tableFrameWidth = input.int(1, "Table Frame Width", minval=0, maxval=5, tooltip="Dashboard outer border width.", group=GRP_DASH)
 
 // ========================================
-// INPUTS - Group 10: HTF FVG Delivery (NEW - additive layer)
+// INPUTS - Group 9: HTF FVG Delivery (NEW - additive layer)
 // ========================================
 string GRP_HTF_FVG = "HTF FVG Delivery"
 requireHtfFvg = input.bool(false, "Require HTF FVG Delivery?", tooltip="When enabled, a Unicorn setup is only registered if price has already tapped a matching, still-valid higher-timeframe FVG. When disabled, the indicator behaves exactly like the original Unicorn Model.", group=GRP_HTF_FVG)
@@ -1579,8 +1515,6 @@ string showSetupDir = "NONE"
 float showEntryPrice = na
 float showInvalidationPrice = na
 float showTargetPrice = na
-float showRiskUsd = na
-float showPositionSizeVal = na
 
 if array.size(activeSetups) > 0
     for i = array.size(activeSetups) - 1 to 0
@@ -1593,15 +1527,12 @@ if array.size(activeSetups) > 0
                 showTargetPrice := line.get_y1(array.get(s.targetLines, 0))
             else
                 showTargetPrice := s.entryPrice + (s.dir == "BULL" ? 1 : -1) * rrRatio * math.abs(s.entryPrice - s.invalidationPrice)
-            
-            showRiskUsd := riskType == "Percentage" ? (accountBalance * riskAmount / 100.0) : riskAmount
-            showPositionSizeVal := calculatePositionSize(showEntryPrice, showInvalidationPrice, showRiskUsd)
             break
 
 var table dashboardTable = table.new(
      position = f_getTablePosition(dashboardPosition),
      columns = 3,
-     rows = 14,
+     rows = 13,
      bgcolor = tableBgColor,
      border_width = tableBorderWidth,
      border_color = tableBorderColor,
@@ -1671,25 +1602,16 @@ if barstate.islast and showDashboard
         table.cell(dashboardTable, 0, 11, "Target (" + str.tostring(rrRatio, "#.##") + "R):", text_color=tableTextColor, text_size=tSize, text_halign=text.align_left, text_font_family=font.family_monospace)
         table.cell(dashboardTable, 1, 11, str.tostring(showTargetPrice, format.mintick), text_color=color.green, text_size=tSize, text_font_family=font.family_monospace)
         table.cell(dashboardTable, 2, 11, "", text_size=tSize)
-        
-        if showPositionSize and not na(showPositionSizeVal)
-            table.cell(dashboardTable, 0, 12, "Size:", text_color=tableTextColor, text_size=tSize, text_halign=text.align_left, text_font_family=font.family_monospace)
-            table.cell(dashboardTable, 1, 12, formatPositionSize(showPositionSizeVal), text_color=color.aqua, text_size=tSize, text_font_family=font.family_monospace)
-            table.cell(dashboardTable, 2, 12, "", text_size=tSize)
-        else
-            table.cell(dashboardTable, 0, 12, "", text_size=tSize)
-            table.cell(dashboardTable, 1, 12, "", text_size=tSize)
-            table.cell(dashboardTable, 2, 12, "", text_size=tSize)
     else
         table.cell(dashboardTable, 0, 8, "No active setups detected.", text_color=color.gray, text_size=tSize, text_font_family=font.family_monospace)
         table.merge_cells(dashboardTable, 0, 8, 2, 8)
-        for r = 9 to 12
+        for r = 9 to 11
             table.cell(dashboardTable, 0, r, "", text_size=tSize)
             table.merge_cells(dashboardTable, 0, r, 2, r)
 
     // [HTF FVG DELIVERY] Status row (additive - no existing row is touched)
-    table.cell(dashboardTable, 0, 13, "HTF Delivery:", text_color=tableTextColor, text_size=tSize, text_halign=text.align_left, text_font_family=font.family_monospace)
-    table.cell(dashboardTable, 1, 13, htfFilterActive ? "ON" : (requireHtfFvg ? "ON (no TF)" : "OFF"), text_color=htfFilterActive ? color.green : (requireHtfFvg ? color.orange : color.gray), text_size=tSize, text_font_family=font.family_monospace)
+    table.cell(dashboardTable, 0, 12, "HTF Delivery:", text_color=tableTextColor, text_size=tSize, text_halign=text.align_left, text_font_family=font.family_monospace)
+    table.cell(dashboardTable, 1, 12, htfFilterActive ? "ON" : (requireHtfFvg ? "ON (no TF)" : "OFF"), text_color=htfFilterActive ? color.green : (requireHtfFvg ? color.orange : color.gray), text_size=tSize, text_font_family=font.family_monospace)
     string htfTfList = ""
     if requireHtfFvg
         if htfUse1
@@ -1700,4 +1622,4 @@ if barstate.islast and showDashboard
             htfTfList := htfTfList + f_getHTFFvgTFLabel(htfTf3) + " "
         if htfUse4
             htfTfList := htfTfList + f_getHTFFvgTFLabel(htfTf4) + " "
-    table.cell(dashboardTable, 2, 13, htfTfList, text_color=color.gray, text_size=tSize, text_font_family=font.family_monospace)
+    table.cell(dashboardTable, 2, 12, htfTfList, text_color=color.gray, text_size=tSize, text_font_family=font.family_monospace)
