@@ -5,8 +5,9 @@
 // Changes in this fork:
 //   1. Previous Candle Levels — high / low / 50% of the prior candle on every timeframe,
 //      restyled while a level is being swept (traded through, not closed through)
-//   2. Fair Value Gap consequent encroachment (50%) midline
-//   3. Cleaner default candle + imbalance styling (matching-hue bodies, borders and wicks)
+//   2. Swing highs / lows marked on every timeframe's candles
+//   3. Fair Value Gap consequent encroachment (50%) midline
+//   4. Cleaner default candle + imbalance styling (matching-hue bodies, borders and wicks)
 
 // Prev Published: 1008
 // Curr Published: 1046
@@ -119,6 +120,15 @@ type Settings
 	bool pcl_extend_left
 	bool pcl_label_show
 	string pcl_label_size
+	bool swing_show
+	int swing_strength
+	color swing_h_color
+	string swing_h_style
+	int swing_h_size
+	color swing_l_color
+	string swing_l_style
+	int swing_l_size
+	int swing_extend
 	bool htf_label_show
 	color htf_label_color
 	string htf_label_size
@@ -137,6 +147,7 @@ type CandleSet
 	label tfTimerTop
     label tfTimerBottom
 	PrevLevels levels
+	array<line> swings
 
 type Helper
 	string name = 'Helper'
@@ -171,41 +182,54 @@ var PrevLevels levels_4 = PrevLevels.new()
 var PrevLevels levels_5 = PrevLevels.new()
 var PrevLevels levels_6 = PrevLevels.new()
 
+var array<line> swings_1 = array.new<line>()
+var array<line> swings_2 = array.new<line>()
+var array<line> swings_3 = array.new<line>()
+var array<line> swings_4 = array.new<line>()
+var array<line> swings_5 = array.new<line>()
+var array<line> swings_6 = array.new<line>()
+
 var CandleSet htf1 = CandleSet.new()
 htf1.settings := SettingsHTF1
 htf1.candles := candles_1
 htf1.imbalances := imbalances_1
 htf1.levels := levels_1
+htf1.swings := swings_1
 
 var CandleSet htf2 = CandleSet.new()
 htf2.settings := SettingsHTF2
 htf2.candles := candles_2
 htf2.imbalances := imbalances_2
 htf2.levels := levels_2
+htf2.swings := swings_2
 
 var CandleSet htf3 = CandleSet.new()
 htf3.settings := SettingsHTF3
 htf3.candles := candles_3
 htf3.imbalances := imbalances_3
 htf3.levels := levels_3
+htf3.swings := swings_3
 
 var CandleSet htf4 = CandleSet.new()
 htf4.settings := SettingsHTF4
 htf4.candles := candles_4
 htf4.imbalances := imbalances_4
 htf4.levels := levels_4
+htf4.swings := swings_4
 
 var CandleSet htf5 = CandleSet.new()
 htf5.settings := SettingsHTF5
 htf5.candles := candles_5
 htf5.imbalances := imbalances_5
 htf5.levels := levels_5
+htf5.swings := swings_5
 
 var CandleSet htf6 = CandleSet.new()
 htf6.settings := SettingsHTF6
 htf6.candles := candles_6
 htf6.imbalances := imbalances_6
 htf6.levels := levels_6
+htf6.swings := swings_6
 
 //+------------------------------------------------------------------------------------------------------------+//
 //+--- Settings                                                                                             ---+//
@@ -215,6 +239,7 @@ string group_style              = "Styling  ━━━━━━━━━━━━
 string group_label              = "Label Settings  ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
 string group_imbalance          = "Imbalance  ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
 string group_prev               = "Previous Candle Levels  ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
+string group_swing              = "Swing Highs & Lows  ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
 string group_trace              = "Trace  ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
 
 htf1.settings.show              := input.bool(true, 'HTF 1      ', inline = 'htf1')
@@ -309,6 +334,16 @@ settings.pcl_extend             := input.int(2, 'Extend past the open candle (ba
 settings.pcl_extend_left        := input.bool(false, 'Extend back to the live chart', group = group_prev)
 settings.pcl_label_show         := input.bool(true, 'Level labels        ', inline = 'pcllbl', group = group_prev)
 settings.pcl_label_size         := input.string(size.tiny, '', [size.tiny, size.small, size.normal, size.large, size.huge], inline = 'pcllbl', group = group_prev)
+
+settings.swing_show             := input.bool(true, 'Mark swing highs & lows', group = group_swing)
+settings.swing_strength         := input.int(1, 'Candles either side', minval = 1, maxval = 5, group = group_swing, tooltip = 'A candle is a swing high when its high is above the highs of this many candles on both sides of it, and a swing low when its low is below the lows of the same. 1 is a classic 3-candle fractal; raise it for fewer, more significant swings.')
+settings.swing_h_color          := input.color(#2962ff, 'High     ', inline = 'swh', group = group_swing)
+settings.swing_h_style          := input.string('····', '', options = ['⎯⎯⎯', '----', '····'], inline = 'swh', group = group_swing)
+settings.swing_h_size           := input.int(1, '', options = [1, 2, 3, 4], inline = 'swh', group = group_swing)
+settings.swing_l_color          := input.color(#2962ff, 'Low      ', inline = 'swl', group = group_swing)
+settings.swing_l_style          := input.string('····', '', options = ['⎯⎯⎯', '----', '····'], inline = 'swl', group = group_swing)
+settings.swing_l_size           := input.int(1, '', options = [1, 2, 3, 4], inline = 'swl', group = group_swing)
+settings.swing_extend           := input.int(2, 'Extend past the open candle (bars)', minval = 0, maxval = 50, group = group_swing)
 
 settings.trace_show             := input.bool(false, 'Trace lines', group = group_trace)
 settings.trace_o_color          := input.color(color.new(color.gray, 50), 'Open    ', inline = '1', group = group_trace)
@@ -747,6 +782,48 @@ method PreviousLevels(CandleSet candleSet) =>
             pl.l_label := label(na)
     candleSet
 
+// Marks every confirmed swing high and swing low still inside the displayed candles. A swing
+// is a fractal: a candle whose high sits above the highs of `swing_strength` candles on both
+// sides of it (and the mirror of that for a low). Index 0 is the candle that is still forming,
+// so it can never qualify — a swing only appears once enough candles have printed after it.
+method FindSwings(CandleSet candleSet) =>
+    if barstate.isrealtime or barstate.islast
+        if candleSet.swings.size() > 0
+            for i = candleSet.swings.size() - 1 to 0 by 1
+                line.delete(candleSet.swings.get(i))
+                candleSet.swings.pop()
+
+        int strength = settings.swing_strength
+        int size = candleSet.candles.size()
+
+        // The previous candle already carries its own high / low lines, so leave it out of the
+        // scan when those are on rather than stacking two differently-styled lines on one price.
+        int first = settings.pcl_show ? math.max(strength, 2) : strength
+        int lastIdx = size - strength - 1
+
+        if settings.swing_show and lastIdx >= first
+            Candle newest = candleSet.candles.first()
+            int right = box.get_right(newest.body) + settings.swing_extend
+
+            for i = first to lastIdx by 1
+                Candle c = candleSet.candles.get(i)
+                bool is_high = true
+                bool is_low = true
+
+                for k = 1 to strength by 1
+                    Candle newer = candleSet.candles.get(i - k)
+                    Candle older = candleSet.candles.get(i + k)
+                    if newer.h >= c.h or older.h >= c.h
+                        is_high := false
+                    if newer.l <= c.l or older.l <= c.l
+                        is_low := false
+
+                if is_high
+                    candleSet.swings.push(line.new(box.get_left(c.body), c.h, right, c.h, xloc = xloc.bar_index, color = settings.swing_h_color, style = helper.LineStyle(settings.swing_h_style), width = settings.swing_h_size))
+                if is_low
+                    candleSet.swings.push(line.new(box.get_left(c.body), c.l, right, c.l, xloc = xloc.bar_index, color = settings.swing_l_color, style = helper.LineStyle(settings.swing_l_style), width = settings.swing_l_size))
+    candleSet
+
 method Monitor(CandleSet candleSet) =>
     HTFBarTime = time(candleSet.settings.htf, 'america/New_York')
     isNewHTFCandle = ta.change(HTFBarTime) > 0
@@ -908,7 +985,7 @@ if htf1.settings.show and helper.ValidTimeframe(htf1.settings.htf)
         showTrace := true
         showTrace
     htf1.UpdateTime(offset)
-    htf1.Monitor().Update(offset, showTrace).FindImbalance().PreviousLevels()
+    htf1.Monitor().Update(offset, showTrace).FindImbalance().PreviousLevels().FindSwings()
     cnt := cnt + 1
     offset := offset + (cnt > 0 ? htf1.candles.size() * settings.width + (htf1.candles.size() > 0 ? (htf1.candles.size() - 1) * settings.buffer : 0) + settings.htf_buffer : 0)
     offset
@@ -921,7 +998,7 @@ if htf2.settings.show and helper.ValidTimeframe(htf2.settings.htf) and cnt < las
         showTrace := true
         showTrace
     htf2.UpdateTime(offset)
-    htf2.Monitor().Update(offset, showTrace).FindImbalance().PreviousLevels()
+    htf2.Monitor().Update(offset, showTrace).FindImbalance().PreviousLevels().FindSwings()
     cnt := cnt + 1
     offset := offset + (cnt > 0 ? htf2.candles.size() * settings.width + (htf2.candles.size() > 0 ? (htf2.candles.size() - 1) * settings.buffer : 0) + settings.htf_buffer : 0)
     offset
@@ -934,7 +1011,7 @@ if htf3.settings.show and helper.ValidTimeframe(htf3.settings.htf) and cnt < las
         showTrace := true
         showTrace
     htf3.UpdateTime(offset)
-    htf3.Monitor().Update(offset, showTrace).FindImbalance().PreviousLevels()
+    htf3.Monitor().Update(offset, showTrace).FindImbalance().PreviousLevels().FindSwings()
     cnt := cnt + 1
     offset := offset + (cnt > 0 ? htf3.candles.size() * settings.width + (htf3.candles.size() > 0 ? (htf3.candles.size() - 1) * settings.buffer : 0) + settings.htf_buffer : 0)
     offset
@@ -947,7 +1024,7 @@ if htf4.settings.show and helper.ValidTimeframe(htf4.settings.htf) and cnt < las
         showTrace := true
         showTrace
     htf4.UpdateTime(offset)
-    htf4.Monitor().Update(offset, showTrace).FindImbalance().PreviousLevels()
+    htf4.Monitor().Update(offset, showTrace).FindImbalance().PreviousLevels().FindSwings()
     cnt := cnt + 1
     offset := offset + (cnt > 0 ? htf4.candles.size() * settings.width + (htf4.candles.size() > 0 ? (htf4.candles.size() - 1) * settings.buffer : 0) + settings.htf_buffer : 0)
     offset
@@ -960,7 +1037,7 @@ if htf5.settings.show and helper.ValidTimeframe(htf5.settings.htf) and cnt < las
         showTrace := true
         showTrace
     htf5.UpdateTime(offset)
-    htf5.Monitor().Update(offset, showTrace).FindImbalance().PreviousLevels()
+    htf5.Monitor().Update(offset, showTrace).FindImbalance().PreviousLevels().FindSwings()
     cnt := cnt + 1
     offset := offset + (cnt > 0 ? htf5.candles.size() * settings.width + (htf5.candles.size() > 0 ? (htf5.candles.size() - 1) * settings.buffer : 0) + settings.htf_buffer : 0)
     offset
@@ -973,4 +1050,4 @@ if htf6.settings.show and helper.ValidTimeframe(htf6.settings.htf) and cnt < las
         showTrace := true
         showTrace
     htf6.UpdateTime(offset)
-    htf6.Monitor().Update(offset, showTrace).FindImbalance().PreviousLevels()
+    htf6.Monitor().Update(offset, showTrace).FindImbalance().PreviousLevels().FindSwings()

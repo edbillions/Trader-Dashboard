@@ -22,6 +22,13 @@ bounce, or breakout of the prior candle is visible while you're trading a lower 
   Close** — the setting is in the *Previous Candle Levels* group.
 - Each level has its own color / style / width, defaulting to solid black for the extremes and
   a soft dotted black for the 50%.
+- `Extend past the open candle` adds N bars of run-off to the right of the forming candle.
+- `Extend back to the live chart` projects the levels left, back to the bar where the prior
+  HTF candle opened, so they sit over live price action instead of only over the HTF panel.
+- Optional `PH` / `50%` / `PL` labels at the right end of each line.
+
+The levels are redrawn from the current set on every realtime tick, so when an HTF candle
+closes, the levels roll forward to it automatically.
 
 **Sweep state.** Each level is restyled — dotted blue by default — for as long as it is being
 *swept*: the open candle has traded through the level but has not closed through it. The
@@ -40,21 +47,31 @@ still forming, so the state updates tick by tick and resets when that candle clo
 levels roll forward to it. The swept color / style / width are their own inputs, and
 `Sweep styling applies to` limits the behavior to the high and low if you'd rather the 50%
 line never change.
-- `Extend past the open candle` adds N bars of run-off to the right of the forming candle.
-- `Extend back to the live chart` projects the levels left, back to the bar where the prior
-  HTF candle opened, so they sit over live price action instead of only over the HTF panel.
-- Optional `PH` / `50%` / `PL` labels at the right end of each line.
 
-The levels are redrawn from the current set on every realtime tick, so when an HTF candle
-closes, the levels roll forward to it automatically.
+#### 2. Swing highs and lows
 
-#### 2. FVG consequent encroachment (50%)
+Every confirmed swing inside the displayed candles gets a blue dotted line running from the
+swing candle to the right edge of the set — the same clean treatment as a swept level.
+
+A swing is a fractal: a candle whose high sits above the highs of `Candles either side`
+candles on both sides of it, and the mirror of that for a low. The default of 1 is a classic
+3-candle fractal; raise it for fewer, more significant swings. Equal highs don't qualify, so
+a double top doesn't draw two stacked lines.
+
+The candle still forming can never be a swing — there's nothing to its right yet — so a swing
+only appears once enough candles have printed after it. The *previous* candle is also left out
+of the scan while Previous Candle Levels are on, since it already carries its own high/low
+lines and would otherwise get two differently-styled lines at one price.
+
+Colors, styles, widths, and the right-side run-off are in the *Swing Highs & Lows* group.
+
+#### 3. FVG consequent encroachment (50%)
 
 Fair value gaps now get an optional dotted midline at the 50% of the gap — the level price
 most often reacts to when it trades back into the gap. Toggle, color, and line style live in
 the *Imbalance* group.
 
-#### 3. Cleaner default styling
+#### 4. Cleaner default styling
 
 Defaults only — every one of these is still a normal input you can change:
 
