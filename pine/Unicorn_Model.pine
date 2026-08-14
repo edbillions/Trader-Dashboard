@@ -464,15 +464,19 @@ typeD = input.string("OHLC + Swing", "", options=["OHLC", "Swing", "OHLC + Swing
 useSessionLiq = input.bool(false, "Session Liquidity", tooltip="When enabled, the high and low of each completed session below are registered as liquidity levels, exactly like the Source A-D levels. They can then be swept to build a Unicorn setup. Sessions use the Time Filter timezone setting.", group=GRP_LIQ)
 
 sessLiq1Use = input.bool(true, "Session 1", inline="sess_liq_1", tooltip="Enable Session 1 liquidity.", group=GRP_LIQ, active=useSessionLiq)
+sessLiq1Name = input.string("S1", "", inline="sess_liq_1", tooltip="Name for Session 1. It is shown on the swept level label, e.g. \"Asia Session\". Leave blank to fall back to S1.", group=GRP_LIQ, active=useSessionLiq and sessLiq1Use)
 sessLiq1Time = input.session("2000-0000", "", inline="sess_liq_1", tooltip="Session 1 window. Its high and low are registered once the session closes.", group=GRP_LIQ, active=useSessionLiq and sessLiq1Use)
 
 sessLiq2Use = input.bool(true, "Session 2", inline="sess_liq_2", tooltip="Enable Session 2 liquidity.", group=GRP_LIQ, active=useSessionLiq)
+sessLiq2Name = input.string("S2", "", inline="sess_liq_2", tooltip="Name for Session 2. It is shown on the swept level label, e.g. \"Asia Session\". Leave blank to fall back to S2.", group=GRP_LIQ, active=useSessionLiq and sessLiq2Use)
 sessLiq2Time = input.session("0200-0500", "", inline="sess_liq_2", tooltip="Session 2 window. Its high and low are registered once the session closes.", group=GRP_LIQ, active=useSessionLiq and sessLiq2Use)
 
 sessLiq3Use = input.bool(true, "Session 3", inline="sess_liq_3", tooltip="Enable Session 3 liquidity.", group=GRP_LIQ, active=useSessionLiq)
+sessLiq3Name = input.string("S3", "", inline="sess_liq_3", tooltip="Name for Session 3. It is shown on the swept level label, e.g. \"Asia Session\". Leave blank to fall back to S3.", group=GRP_LIQ, active=useSessionLiq and sessLiq3Use)
 sessLiq3Time = input.session("0930-1200", "", inline="sess_liq_3", tooltip="Session 3 window. Its high and low are registered once the session closes.", group=GRP_LIQ, active=useSessionLiq and sessLiq3Use)
 
 sessLiq4Use = input.bool(true, "Session 4", inline="sess_liq_4", tooltip="Enable Session 4 liquidity.", group=GRP_LIQ, active=useSessionLiq)
+sessLiq4Name = input.string("S4", "", inline="sess_liq_4", tooltip="Name for Session 4. It is shown on the swept level label, e.g. \"Asia Session\". Leave blank to fall back to S4.", group=GRP_LIQ, active=useSessionLiq and sessLiq4Use)
 sessLiq4Time = input.session("1330-1600", "", inline="sess_liq_4", tooltip="Session 4 window. Its high and low are registered once the session closes.", group=GRP_LIQ, active=useSessionLiq and sessLiq4Use)
 
 // ========================================
@@ -768,6 +772,10 @@ var float[] sessLiqHighs = array.new_float(4, na)
 var float[] sessLiqLows = array.new_float(4, na)
 var bool[] sessLiqWasActive = array.new_bool(4, false)
 
+// Falls back to the default tag when the name field is left blank
+f_getSessionName(string nameInput, string fallback) =>
+    str.length(nameInput) > 0 ? nameInput : fallback
+
 // Registers the completed session's high and low as liquidity
 f_processSessionLiquidity(int idx, bool useSess, bool inSess, string sessLabel) =>
     if useSess
@@ -791,10 +799,10 @@ f_processSessionLiquidity(int idx, bool useSess, bool inSess, string sessLabel) 
             if not na(sessLow)
                 f_registerLevel(sessLabel, "Session", false, sessLow)
 
-f_processSessionLiquidity(0, useSessionLiq and sessLiq1Use, inSessLiq1, "S1")
-f_processSessionLiquidity(1, useSessionLiq and sessLiq2Use, inSessLiq2, "S2")
-f_processSessionLiquidity(2, useSessionLiq and sessLiq3Use, inSessLiq3, "S3")
-f_processSessionLiquidity(3, useSessionLiq and sessLiq4Use, inSessLiq4, "S4")
+f_processSessionLiquidity(0, useSessionLiq and sessLiq1Use, inSessLiq1, f_getSessionName(sessLiq1Name, "S1"))
+f_processSessionLiquidity(1, useSessionLiq and sessLiq2Use, inSessLiq2, f_getSessionName(sessLiq2Name, "S2"))
+f_processSessionLiquidity(2, useSessionLiq and sessLiq3Use, inSessLiq3, f_getSessionName(sessLiq3Name, "S3"))
+f_processSessionLiquidity(3, useSessionLiq and sessLiq4Use, inSessLiq4, f_getSessionName(sessLiq4Name, "S4"))
 
 // ========================================
 // MAIN EXECUTION STATE MACHINE (Level update & sweep check)
