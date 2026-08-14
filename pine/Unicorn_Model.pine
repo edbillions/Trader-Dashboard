@@ -47,10 +47,11 @@ type Setup
 type HTF_FVG
     string direction          // "BULL" or "BEAR"
     string tfLabel            // "5M" / "15M" / "1H" / "4H"
+    int slot                  // Timeframe slot (0-3) that produced this gap
     float top                 // Upper boundary of the gap
     float bottom              // Lower boundary of the gap
     int startBar              // Chart bar index at which the HTF FVG became confirmed
-    int htfBarNo              // Sequential index of the confirming HTF bar (used for the HTF-bar lookback window)
+    int htfBarNo              // Sequential index of the confirming HTF bar of THAT slot (HTF-bar lookback window)
     bool tapped               // Has price interacted with the gap?
     int tapBar                // Chart bar index of the first tap
     bool invalidated          // Has price fully closed through the gap?
@@ -611,8 +612,23 @@ tableFrameWidth = input.int(1, "Table Frame Width", minval=0, maxval=5, tooltip=
 // ========================================
 string GRP_HTF_FVG = "HTF FVG Delivery"
 requireHtfFvg = input.bool(false, "Require HTF FVG Delivery?", tooltip="When enabled, a Unicorn setup is only registered if price has already tapped a matching, still-valid higher-timeframe FVG. When disabled, the indicator behaves exactly like the original Unicorn Model.", group=GRP_HTF_FVG)
-htfFvgTimeframe = input.timeframe("15", "HTF FVG Timeframe", options=["5", "15", "60", "240"], tooltip="Timeframe used to detect the delivery FVG (5 = 5M, 15 = 15M, 60 = 1H, 240 = 4H). Fully independent from the Liquidity Sources timeframes.", group=GRP_HTF_FVG, active=requireHtfFvg)
-htfFvgLookback = input.int(1000, "HTF FVG Lookback Bars", minval=100, maxval=5000, tooltip="Search window measured in bars of the SELECTED HTF timeframe (not chart bars). 1000 with a 1H selection means roughly 1000 hourly candles.", group=GRP_HTF_FVG, active=requireHtfFvg)
+
+// --- Timeframes: each slot is scanned independently and simultaneously ---
+htfTfUse1 = input.bool(false, "Timeframe 1", inline="htf_tf1", tooltip="Enable this HTF FVG timeframe slot. Any number of slots can run at once - a setup is delivered by whichever enabled timeframe qualifies.", group=GRP_HTF_FVG, active=requireHtfFvg)
+htfTf1 = input.timeframe("5", "", options=["5", "15", "60", "240"], inline="htf_tf1", tooltip="Timeframe for slot 1 (5 = 5M, 15 = 15M, 60 = 1H, 240 = 4H).", group=GRP_HTF_FVG, active=requireHtfFvg and htfTfUse1)
+
+htfTfUse2 = input.bool(true, "Timeframe 2", inline="htf_tf2", tooltip="Enable this HTF FVG timeframe slot.", group=GRP_HTF_FVG, active=requireHtfFvg)
+htfTf2 = input.timeframe("15", "", options=["5", "15", "60", "240"], inline="htf_tf2", tooltip="Timeframe for slot 2 (5 = 5M, 15 = 15M, 60 = 1H, 240 = 4H).", group=GRP_HTF_FVG, active=requireHtfFvg and htfTfUse2)
+
+htfTfUse3 = input.bool(false, "Timeframe 3", inline="htf_tf3", tooltip="Enable this HTF FVG timeframe slot.", group=GRP_HTF_FVG, active=requireHtfFvg)
+htfTf3 = input.timeframe("60", "", options=["5", "15", "60", "240"], inline="htf_tf3", tooltip="Timeframe for slot 3 (5 = 5M, 15 = 15M, 60 = 1H, 240 = 4H).", group=GRP_HTF_FVG, active=requireHtfFvg and htfTfUse3)
+
+htfTfUse4 = input.bool(false, "Timeframe 4", inline="htf_tf4", tooltip="Enable this HTF FVG timeframe slot.", group=GRP_HTF_FVG, active=requireHtfFvg)
+htfTf4 = input.timeframe("240", "", options=["5", "15", "60", "240"], inline="htf_tf4", tooltip="Timeframe for slot 4 (5 = 5M, 15 = 15M, 60 = 1H, 240 = 4H).", group=GRP_HTF_FVG, active=requireHtfFvg and htfTfUse4)
+
+htfFvgLookback = input.int(1000, "HTF FVG Lookback Bars", minval=100, maxval=5000, tooltip="Search window measured in bars of EACH selected HTF timeframe (not chart bars). 1000 with a 1H slot means roughly 1000 hourly candles for that slot.", group=GRP_HTF_FVG, active=requireHtfFvg)
+htfTapWindowEnable = input.bool(false, "Limit Tap Interaction Window?", tooltip="When enabled, the HTF FVG tap must have happened within the interaction window below. When disabled, an older tap still qualifies as long as the FVG is inside the lookback window and has not been invalidated.", group=GRP_HTF_FVG, active=requireHtfFvg)
+htfTapWindow = input.int(30, "Interaction Window (bars)", minval=1, maxval=5000, tooltip="Maximum number of CHART bars between the HTF FVG tap and the Unicorn confirmation.", group=GRP_HTF_FVG, active=requireHtfFvg and htfTapWindowEnable)
 showHtfDeliveryFvg = input.bool(true, "Show HTF Delivery FVG", tooltip="Draw a separate box (and label) for the exact HTF FVG that delivered the setup. The existing Unicorn FVG box is unaffected.", group=GRP_HTF_FVG, active=requireHtfFvg)
 showHtfDeliveryLabel = input.bool(true, "Show HTF Delivery FVG Label", tooltip="Display a small label such as \"15M Bullish HTF FVG\" on the delivery zone.", group=GRP_HTF_FVG, active=requireHtfFvg and showHtfDeliveryFvg)
 htfBullFvgColor = input.color(color.new(#089981, 80), "Bullish HTF Delivery FVG", inline="htf_bull_inline", tooltip="Fill color of the bullish HTF delivery FVG.", group=GRP_HTF_FVG, active=requireHtfFvg and showHtfDeliveryFvg)
@@ -896,12 +912,28 @@ f_htfFvgScan() =>
     [bearIs, bearT, bearB] = f_findHTFBearishFVG()
     [bullIs, bullT, bullB, bearIs, bearT, bearB, time[1]]
 
-[htfBullIsFvg, htfBullFvgTop, htfBullFvgBtm, htfBearIsFvg, htfBearFvgTop, htfBearFvgBtm, htfFvgConfTime] = request.security(syminfo.tickerid, htfFvgTimeframe, f_htfFvgScan(), barmerge.gaps_off, barmerge.lookahead_off)
+// Resolved slot toggles. A slot pointing at a timeframe already covered by an
+// earlier enabled slot is ignored so the same gap is never tracked twice.
+bool htfUse1 = requireHtfFvg and htfTfUse1
+bool htfUse2 = requireHtfFvg and htfTfUse2 and not (htfUse1 and htfTf2 == htfTf1)
+bool htfUse3 = requireHtfFvg and htfTfUse3 and not (htfUse1 and htfTf3 == htfTf1) and not (htfUse2 and htfTf3 == htfTf2)
+bool htfUse4 = requireHtfFvg and htfTfUse4 and not (htfUse1 and htfTf4 == htfTf1) and not (htfUse2 and htfTf4 == htfTf2) and not (htfUse3 and htfTf4 == htfTf3)
+
+// The filter can only gate setups when at least one timeframe slot is enabled.
+// With every slot unchecked the layer stays inert instead of silently blocking
+// every setup.
+bool htfFilterActive = htfUse1 or htfUse2 or htfUse3 or htfUse4
+
+// One independent request per slot - all enabled slots are scanned simultaneously
+[htf1BullIs, htf1BullT, htf1BullB, htf1BearIs, htf1BearT, htf1BearB, htf1ConfTime] = request.security(syminfo.tickerid, htfTf1, f_htfFvgScan(), barmerge.gaps_off, barmerge.lookahead_off)
+[htf2BullIs, htf2BullT, htf2BullB, htf2BearIs, htf2BearT, htf2BearB, htf2ConfTime] = request.security(syminfo.tickerid, htfTf2, f_htfFvgScan(), barmerge.gaps_off, barmerge.lookahead_off)
+[htf3BullIs, htf3BullT, htf3BullB, htf3BearIs, htf3BearT, htf3BearB, htf3ConfTime] = request.security(syminfo.tickerid, htfTf3, f_htfFvgScan(), barmerge.gaps_off, barmerge.lookahead_off)
+[htf4BullIs, htf4BullT, htf4BullB, htf4BearIs, htf4BearT, htf4BearB, htf4ConfTime] = request.security(syminfo.tickerid, htfTf4, f_htfFvgScan(), barmerge.gaps_off, barmerge.lookahead_off)
 
 // Left edge for the delivery box: roughly the three HTF candles that built the gap
-f_getHTFFvgLeftBar() =>
+f_getHTFFvgLeftBar(string tf) =>
     float chartSec = math.max(1.0, timeframe.in_seconds(timeframe.period))
-    float htfSec = math.max(chartSec, timeframe.in_seconds(htfFvgTimeframe))
+    float htfSec = math.max(chartSec, timeframe.in_seconds(tf))
     int back = int(math.round(3.0 * htfSec / chartSec))
     int leftBar = bar_index - back
     leftBar < 0 ? 0 : leftBar
@@ -909,41 +941,52 @@ f_getHTFFvgLeftBar() =>
 // ========================================
 // HTF FVG TYPE / STATE
 // ========================================
-var int htfBarCounter = 0       // Sequential count of confirmed HTF bars seen so far
-var int lastHTFFvgConfTime = 0  // Open time of the last confirmed HTF bar processed (0 = none yet)
+// Per-slot state: each timeframe counts its own HTF bars, so the lookback
+// window is always measured in bars of that slot's own timeframe.
+var int[] htfBarCounters = array.new_int(4, 0)    // Confirmed HTF bars seen per slot
+var int[] lastHTFConfTimes = array.new_int(4, 0)  // Last processed HTF bar open time per slot (0 = none yet)
 
-// Intake: runs once per newly confirmed HTF bar (never per chart bar)
-if requireHtfFvg and not na(htfFvgConfTime) and htfFvgConfTime != lastHTFFvgConfTime
-    lastHTFFvgConfTime := htfFvgConfTime
-    htfBarCounter += 1
-    string tfLbl = f_getHTFFvgTFLabel(htfFvgTimeframe)
-    int leftBar = f_getHTFFvgLeftBar()
+// Intake for one slot: runs once per newly confirmed HTF bar of that slot
+f_processHTFSlot(int slot, bool useSlot, string tf, bool bullIs, float bullT, float bullB, bool bearIs, float bearT, float bearB, int confTime) =>
+    if useSlot and not na(confTime) and confTime != array.get(lastHTFConfTimes, slot)
+        array.set(lastHTFConfTimes, slot, confTime)
+        int barNo = array.get(htfBarCounters, slot) + 1
+        array.set(htfBarCounters, slot, barNo)
+        string tfLbl = f_getHTFFvgTFLabel(tf)
+        int leftBar = f_getHTFFvgLeftBar(tf)
 
-    if htfBullIsFvg and not na(htfBullFvgTop) and not na(htfBullFvgBtm) and htfBullFvgTop > htfBullFvgBtm
-        array.push(activeHTFFVGs, HTF_FVG.new(
-             direction = "BULL",
-             tfLabel = tfLbl,
-             top = htfBullFvgTop,
-             bottom = htfBullFvgBtm,
-             startBar = leftBar,
-             htfBarNo = htfBarCounter,
-             tapped = false,
-             tapBar = na,
-             invalidated = false
-             ))
+        if bullIs and not na(bullT) and not na(bullB) and bullT > bullB
+            array.push(activeHTFFVGs, HTF_FVG.new(
+                 direction = "BULL",
+                 tfLabel = tfLbl,
+                 slot = slot,
+                 top = bullT,
+                 bottom = bullB,
+                 startBar = leftBar,
+                 htfBarNo = barNo,
+                 tapped = false,
+                 tapBar = na,
+                 invalidated = false
+                 ))
 
-    if htfBearIsFvg and not na(htfBearFvgTop) and not na(htfBearFvgBtm) and htfBearFvgTop > htfBearFvgBtm
-        array.push(activeHTFFVGs, HTF_FVG.new(
-             direction = "BEAR",
-             tfLabel = tfLbl,
-             top = htfBearFvgTop,
-             bottom = htfBearFvgBtm,
-             startBar = leftBar,
-             htfBarNo = htfBarCounter,
-             tapped = false,
-             tapBar = na,
-             invalidated = false
-             ))
+        if bearIs and not na(bearT) and not na(bearB) and bearT > bearB
+            array.push(activeHTFFVGs, HTF_FVG.new(
+                 direction = "BEAR",
+                 tfLabel = tfLbl,
+                 slot = slot,
+                 top = bearT,
+                 bottom = bearB,
+                 startBar = leftBar,
+                 htfBarNo = barNo,
+                 tapped = false,
+                 tapBar = na,
+                 invalidated = false
+                 ))
+
+f_processHTFSlot(0, htfUse1, htfTf1, htf1BullIs, htf1BullT, htf1BullB, htf1BearIs, htf1BearT, htf1BearB, htf1ConfTime)
+f_processHTFSlot(1, htfUse2, htfTf2, htf2BullIs, htf2BullT, htf2BullB, htf2BearIs, htf2BearT, htf2BearB, htf2ConfTime)
+f_processHTFSlot(2, htfUse3, htfTf3, htf3BullIs, htf3BullT, htf3BullB, htf3BearIs, htf3BearT, htf3BearB, htf3ConfTime)
+f_processHTFSlot(3, htfUse4, htfTf4, htf4BullIs, htf4BullT, htf4BullB, htf4BearIs, htf4BearT, htf4BearB, htf4ConfTime)
 
 // ========================================
 // HTF FVG TAP DETECTION / HTF FVG INVALIDATION
@@ -953,12 +996,12 @@ if requireHtfFvg and not na(htfFvgConfTime) and htfFvgConfTime != lastHTFFvgConf
 //   - flag a tap on any overlap between the candle range and the gap
 //   - flag invalidation only when a candle CLOSES fully through the gap
 // A tap never invalidates a gap; the gap stays available as a delivery zone.
-if requireHtfFvg and array.size(activeHTFFVGs) > 0
+if htfFilterActive and array.size(activeHTFFVGs) > 0
     for i = array.size(activeHTFFVGs) - 1 to 0
         f = array.get(activeHTFFVGs, i)
 
-        // Outside the lookback window (measured in HTF bars) - no longer usable
-        if htfBarCounter - f.htfBarNo > htfFvgLookback
+        // Outside the lookback window (measured in bars of that slot's own HTF) - no longer usable
+        if array.get(htfBarCounters, f.slot) - f.htfBarNo > htfFvgLookback
             array.remove(activeHTFFVGs, i)
             continue
 
@@ -973,22 +1016,27 @@ if requireHtfFvg and array.size(activeHTFFVGs) > 0
             f.invalidated := true
             array.remove(activeHTFFVGs, i)
 
-// Hard memory cap (defensive - the lookback prune above normally keeps this small)
-while array.size(activeHTFFVGs) > 500
+// Hard memory cap across all enabled timeframes
+// (defensive - the lookback prune and invalidation above normally keep this small)
+while array.size(activeHTFFVGs) > 1000
     array.shift(activeHTFFVGs)
 
 // ========================================
 // HTF FVG DELIVERY VALIDATION
 // ========================================
-// Returns the array index of the most recent HTF FVG that is direction-matched,
-// still valid, inside the lookback window and already tapped at or before the
-// current bar. Returns -1 when no gap qualifies.
+// Scans every enabled timeframe at once and returns the array index of the most
+// recently confirmed HTF FVG that is direction-matched, still valid, inside its
+// own lookback window and already tapped at or before the current bar.
+// With the interaction window enabled the tap must also be recent enough.
+// Returns -1 when no gap qualifies.
 f_getHTFDeliveryFVG(string dir) =>
     int found = -1
     if array.size(activeHTFFVGs) > 0
         for i = array.size(activeHTFFVGs) - 1 to 0
             f = array.get(activeHTFFVGs, i)
-            if f.direction == dir and not f.invalidated and f.tapped and f.tapBar <= bar_index and (htfBarCounter - f.htfBarNo) <= htfFvgLookback
+            bool inLookback = (array.get(htfBarCounters, f.slot) - f.htfBarNo) <= htfFvgLookback
+            bool inTapWindow = not htfTapWindowEnable or (bar_index - f.tapBar) <= htfTapWindow
+            if f.direction == dir and not f.invalidated and f.tapped and f.tapBar <= bar_index and inLookback and inTapWindow
                 found := i
                 break
     found
@@ -1046,8 +1094,8 @@ if not na(pendingBullSweepIdx)
 
                 // [HTF FVG DELIVERY] Evaluated BEFORE the setup is registered.
                 // htfDeliveryOkBull is always true while the filter is OFF.
-                int htfDelIdxBull = requireHtfFvg ? f_getHTFDeliveryFVG("BULL") : -1
-                bool htfDeliveryOkBull = not requireHtfFvg or htfDelIdxBull >= 0
+                int htfDelIdxBull = htfFilterActive ? f_getHTFDeliveryFVG("BULL") : -1
+                bool htfDeliveryOkBull = not htfFilterActive or htfDelIdxBull >= 0
 
                 if (not unicornMode or (unicornMode and hasFvg)) and htfDeliveryOkBull
                     float invPrice = useSwingInvalidation ? pendingBullSweepExtreme : breakerB
@@ -1124,7 +1172,7 @@ if not na(pendingBullSweepIdx)
                                  )
 
                         // [HTF FVG DELIVERY] Highlight the exact HTF FVG that delivered this setup
-                        if requireHtfFvg and htfDelIdxBull >= 0
+                        if htfFilterActive and htfDelIdxBull >= 0
                             f_attachHTFDeliveryFVG(newBull, htfDelIdxBull)
 
                         labelText = hasFvg ? "+Unicorn" : "+Breaker"
@@ -1224,8 +1272,8 @@ if not na(pendingBearSweepIdx)
 
                 // [HTF FVG DELIVERY] Evaluated BEFORE the setup is registered.
                 // htfDeliveryOkBear is always true while the filter is OFF.
-                int htfDelIdxBear = requireHtfFvg ? f_getHTFDeliveryFVG("BEAR") : -1
-                bool htfDeliveryOkBear = not requireHtfFvg or htfDelIdxBear >= 0
+                int htfDelIdxBear = htfFilterActive ? f_getHTFDeliveryFVG("BEAR") : -1
+                bool htfDeliveryOkBear = not htfFilterActive or htfDelIdxBear >= 0
 
                 if (not unicornMode or (unicornMode and hasFvg)) and htfDeliveryOkBear
                     float invPrice = useSwingInvalidation ? pendingBearSweepExtreme : breakerT
@@ -1302,7 +1350,7 @@ if not na(pendingBearSweepIdx)
                                  )
 
                         // [HTF FVG DELIVERY] Highlight the exact HTF FVG that delivered this setup
-                        if requireHtfFvg and htfDelIdxBear >= 0
+                        if htfFilterActive and htfDelIdxBear >= 0
                             f_attachHTFDeliveryFVG(newBear, htfDelIdxBear)
 
                         labelText = hasFvg ? "-Unicorn" : "-Breaker"
@@ -1641,5 +1689,15 @@ if barstate.islast and showDashboard
 
     // [HTF FVG DELIVERY] Status row (additive - no existing row is touched)
     table.cell(dashboardTable, 0, 13, "HTF Delivery:", text_color=tableTextColor, text_size=tSize, text_halign=text.align_left, text_font_family=font.family_monospace)
-    table.cell(dashboardTable, 1, 13, requireHtfFvg ? "ON" : "OFF", text_color=requireHtfFvg ? color.green : color.gray, text_size=tSize, text_font_family=font.family_monospace)
-    table.cell(dashboardTable, 2, 13, requireHtfFvg ? f_getHTFFvgTFLabel(htfFvgTimeframe) : "", text_color=color.gray, text_size=tSize, text_font_family=font.family_monospace)
+    table.cell(dashboardTable, 1, 13, htfFilterActive ? "ON" : (requireHtfFvg ? "ON (no TF)" : "OFF"), text_color=htfFilterActive ? color.green : (requireHtfFvg ? color.orange : color.gray), text_size=tSize, text_font_family=font.family_monospace)
+    string htfTfList = ""
+    if requireHtfFvg
+        if htfUse1
+            htfTfList := htfTfList + f_getHTFFvgTFLabel(htfTf1) + " "
+        if htfUse2
+            htfTfList := htfTfList + f_getHTFFvgTFLabel(htfTf2) + " "
+        if htfUse3
+            htfTfList := htfTfList + f_getHTFFvgTFLabel(htfTf3) + " "
+        if htfUse4
+            htfTfList := htfTfList + f_getHTFFvgTFLabel(htfTf4) + " "
+    table.cell(dashboardTable, 2, 13, htfTfList, text_color=color.gray, text_size=tSize, text_font_family=font.family_monospace)
