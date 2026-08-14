@@ -11,13 +11,13 @@ diffed and so both can be loaded on the same chart for regression testing.
 git diff --no-index pine/unicorn-model.original.pine pine/unicorn-model.pine
 ```
 
-That diff is **409 insertions, 4 deletions**. The four changed lines are:
+That diff is **533 insertions, 4 deletions**. The four changed lines are:
 
 | Original line | Change |
 |---|---|
 | `if riskRange > 0` (bullish block) | → `if riskRange > 0 and confluencePass` |
 | `if riskRange > 0` (bearish block) | → `if riskRange > 0 and confluencePass` |
-| `rows = 14,` (dashboard table) | → `rows = 18,` |
+| `rows = 14,` (dashboard table) | → `rows = 20,` |
 | last line (no trailing newline) | trailing newline added |
 
 Everything else is purely additive.
@@ -29,18 +29,22 @@ Everything else is purely additive.
 ### Inputs — new group "HTF FVG Delivery & Confluence"
 
 **Filter 1 — Require Delivery from HTF FVG** (default `false`)
-- HTF FVG Timeframe Mode: Automatic / Manual. Automatic = Liquidity **Source B**'s resolved
-  timeframe (mid of the existing hierarchy: 1H on a 5m chart, 4H on a 15m chart).
-- Manual HTF FVG Timeframe (default `60`)
+- HTF FVG Timeframe Mode: Automatic / Manual
+- **Three independent HTF FVG timeframes**, each with its own enable toggle:
+  TF 1 = `15`, TF 2 = `60`, TF 3 = `240` by default (15M / 1H / 4H). In Automatic mode the three
+  slots follow Liquidity Sources **B, C and D**'s resolved timeframes.
+- **Require Delivery From**: `Any Timeframe` (default) / `All Enabled Timeframes`
 - **Delivery Requirement**: `Touch` / `Enter` / `50%` (default `Touch`)
 - FVG Mitigation Rule: `Close Through` (default) / `Wick Through`
 - **Max HTF FVG Age (HTF Bars)** — default 50, counted in **HTF bars**
 - Min HTF FVG Size (× HTF ATR) — default 0 (off)
 - Show HTF FVGs (default off) + two box colors
 
-**Filter 2 — Require Session Liquidity Delivery** (default `false`)
-- Asian (`1800-0300`), London (`0300-0800`), New York (`0800-1700`) — each with its own
-  enable toggle and editable session string
+**Filter 2 — Session Liquidity** (default `false`)
+- **Four freely-defined sessions**, each with an enable toggle, a start/end time range and a
+  free-text name. Defaults: `Asia 2000-0000`, `London 0200-0500`, `NY AM 0930-1200`,
+  `NY PM 1330-1600`. The name is shown in the setup tooltip when that session's liquidity
+  qualified the setup.
 - **Session Sweep Validity (Chart Bars)** — default 100, counted in **chart bars**
 - Show Session Liquidity (default off)
 
@@ -54,16 +58,25 @@ confirmation window are in chart bars, and each label says so.
 
 ### Engine
 
-- `type HTFFVG` / `type SessLevel` + two bounded state arrays (`htfFvgs` capped at 40,
-  `sessLevels` capped at 24; pruned entries have their boxes/lines deleted).
-- `f_htfFvgData()` + one extra `request.security(..., barmerge.lookahead_off)`.
+- `type HTFFVG` (carries its source `tfSlot` + `tfLabel`) / `type SessLevel` + two bounded state
+  arrays. Each HTF FVG timeframe gets its **own memory budget of 20 gaps**, so a fast timeframe
+  can never crowd the slower ones out; `sessLevels` is capped at 32. Pruned entries have their
+  boxes/lines deleted.
+- `f_htfFvgData()` + three extra `request.security(..., barmerge.lookahead_off)` calls, one per
+  HTF FVG timeframe (7 security calls total, well inside TradingView's limit).
+- Each timeframe slot has its **own confirmed-HTF-bar clock**, so `Max HTF FVG Age (HTF Bars)`
+  means 50 15M bars for the 15M slot and 50 4H bars for the 4H slot — ages are never measured
+  with the wrong ruler.
 - New "CONFLUENCE LAYER STATE UPDATE" section, placed between the existing
   "2. Process & Track Sweeps" and "3. Track & Confirm Pending Setups", so every flag a gate
   reads is already latched for the current bar before confirmation runs.
-- Helpers: `f_confTz`, `f_trackSession`, `f_pushSessLevel`, `f_htfFvgGateOK`,
-  `f_sessionGateOK`, `f_volumeGateOK`, `f_confluenceGate`, `f_confluenceTagText`.
-- Dashboard rows 13–17 (`── CONFLUENCE ──` + one row per enabled filter, live per-direction
-  state `↑✓ ↓✕`), populated **only** when at least one filter is enabled.
+- Helpers: `f_confTz`, `f_trackSession`, `f_pushSessLevel`, `f_pruneHtfFvgSlot`,
+  `f_registerHtfFvgSlot`, `f_htfFvgSlotOK`, `f_htfFvgGateOK`, `f_htfTfStatusText`,
+  `f_sessionGateOK`, `f_sessionSweptName`, `f_volumeGateOK`, `f_confluenceGate`,
+  `f_confluenceTagText`.
+- Dashboard rows 13–18 (`── CONFLUENCE ──`, one row per enabled filter with live per-direction
+  state `↑✓ ↓✕`, plus two per-timeframe breakdown rows such as `15m✓ 1H✕ 4H✓` when the HTF FVG
+  filter is on), populated **only** when at least one filter is enabled.
 - Setup tooltip gets one extra `Confluence: …` line, **only** when a filter is enabled.
 - `plotchar` marker on volume-spike bars, drawn only when Show Volume Confirmation is on.
 
@@ -82,6 +95,21 @@ The 50% test is a range intersection with the equilibrium level, not a one-sided
 candle that has already travelled completely through/past the gap cannot register a 50% delivery.
 No directional-approach requirement is bundled into these modes; if one is wanted it should be
 added later as its own explicit input.
+
+### Multiple HTF FVG timeframes
+
+Gaps from all three enabled timeframes live in one array, each tagged with the slot that produced
+it. The gate computes a verdict **per slot** and then combines:
+
+| Require Delivery From | Bullish setup qualifies when… |
+|---|---|
+| `Any Timeframe` (default) | at least one **enabled** timeframe has a valid, unmitigated, in-age bullish FVG whose selected delivery flag is set |
+| `All Enabled Timeframes` | **every** enabled timeframe does |
+| (no timeframe enabled) | never — the filter fails closed |
+
+Everything else (delivery mode, mitigation rule, max age, min size) applies to all three
+timeframes. With `Show HTF FVGs` on, each box is labelled with its timeframe so 15M, 1H and 4H
+gaps are distinguishable on the chart.
 
 ### Volume window
 
@@ -235,7 +263,16 @@ On a chart with `Show HTF FVGs` on, switch Delivery Requirement between Touch �
 confirm the qualifying set shrinks (Touch ⊇ Enter, Touch ⊇ 50%). If all three modes produce
 identical results on a symbol with plenty of HTF gaps, something is wrong.
 
-### 5.5 Real-time / replay
+### 5.5 Multi-timeframe behaviour
+
+- [ ] With `Show HTF FVGs` on, boxes appear for all three timeframes and each carries its
+      timeframe label; disabling a timeframe slot stops new boxes for that timeframe
+- [ ] `Any Timeframe` vs `All Enabled Timeframes`: the All setting must produce a subset of the
+      Any setting's signals, never a signal Any did not produce
+- [ ] The dashboard's `↑ TFs` / `↓ TFs` rows agree with the boxes on the chart
+- [ ] Enabling the filter with all three timeframe slots disabled produces no signals at all
+
+### 5.6 Real-time / replay
 
 - [ ] Bar Replay through a region containing signals — signals appear on the same bars as in
       historical mode and do not move once the bar closes

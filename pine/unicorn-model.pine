@@ -45,7 +45,9 @@ type HTFFVG
     float top            // upper boundary of the gap
     float bottom         // lower boundary of the gap
     bool  isBull         // true = bullish gap (delivery from below), false = bearish
-    int   formHtfIdx     // htfBarCount when confirmed - FVG age is measured in HTF bars
+    int   tfSlot         // 0/1/2 - which HTF FVG timeframe produced this gap
+    string tfLabel       // that timeframe's label, e.g. "15m" / "1H" / "4H"
+    int   formHtfIdx     // that SLOT's confirmed-HTF-bar count when the gap formed (age clock)
     int   formBar        // chart bar_index on which the gap became known
     float atrAtForm      // CONFIRMED HTF ATR(14) at formation (optional min-size filter)
     bool  mitigated      // traded through per the mitigation rule - never valid again
@@ -634,7 +636,13 @@ string GRP_CONF = "HTF FVG Delivery & Confluence"
 // --- Filter 1: HTF FVG delivery ---
 requireHtfFvg = input.bool(false, "Require Delivery from HTF FVG", tooltip="Optional quality filter. An existing Unicorn setup is only confirmed when price is delivering from an unmitigated higher-timeframe FVG in the same direction. This is ADDITIONAL to Unicorn Mode's LTF FVG requirement, it does not replace it.", group=GRP_CONF)
 htfFvgTfMode = input.string("Automatic", "HTF FVG Timeframe Mode", options=["Automatic", "Manual"], tooltip="Automatic uses Liquidity Source B's resolved timeframe. Manual uses the timeframe below.", group=GRP_CONF, active=requireHtfFvg)
-htfFvgManualTf = input.timeframe("60", "Manual HTF FVG Timeframe", tooltip="Timeframe scanned for HTF FVGs when Mode is Manual.", group=GRP_CONF, active=requireHtfFvg and htfFvgTfMode == "Manual")
+htfFvgTf1Enable = input.bool(true, "HTF FVG TF 1", inline="conf_tf1", tooltip="Enable the first HTF FVG timeframe.", group=GRP_CONF, active=requireHtfFvg)
+htfFvgTf1 = input.timeframe("15", "", inline="conf_tf1", tooltip="First HTF FVG timeframe (used when Mode is Manual). In Automatic mode this slot follows Liquidity Source B.", group=GRP_CONF, active=requireHtfFvg and htfFvgTf1Enable and htfFvgTfMode == "Manual")
+htfFvgTf2Enable = input.bool(true, "HTF FVG TF 2", inline="conf_tf2", tooltip="Enable the second HTF FVG timeframe.", group=GRP_CONF, active=requireHtfFvg)
+htfFvgTf2 = input.timeframe("60", "", inline="conf_tf2", tooltip="Second HTF FVG timeframe (used when Mode is Manual). In Automatic mode this slot follows Liquidity Source C.", group=GRP_CONF, active=requireHtfFvg and htfFvgTf2Enable and htfFvgTfMode == "Manual")
+htfFvgTf3Enable = input.bool(true, "HTF FVG TF 3", inline="conf_tf3", tooltip="Enable the third HTF FVG timeframe.", group=GRP_CONF, active=requireHtfFvg)
+htfFvgTf3 = input.timeframe("240", "", inline="conf_tf3", tooltip="Third HTF FVG timeframe (used when Mode is Manual). In Automatic mode this slot follows Liquidity Source D.", group=GRP_CONF, active=requireHtfFvg and htfFvgTf3Enable and htfFvgTfMode == "Manual")
+htfFvgConfluenceMode = input.string("Any Timeframe", "Require Delivery From", options=["Any Timeframe", "All Enabled Timeframes"], tooltip="Any Timeframe: delivery from a valid HTF FVG on ANY enabled timeframe qualifies the setup. All Enabled Timeframes: EVERY enabled timeframe must have a valid delivering FVG - a much tighter filter. If all three timeframe slots are disabled the filter fails closed (no setups qualify).", group=GRP_CONF, active=requireHtfFvg)
 htfFvgDelivery = input.string("Touch", "Delivery Requirement", options=["Touch", "Enter", "50%"], tooltip="Touch: the bar range overlaps any part of the gap, boundary included. Enter: the bar range overlaps the gap INTERIOR, so a boundary-only kiss does not qualify. 50%: the bar range must straddle the gap's 50% equilibrium level.", group=GRP_CONF, active=requireHtfFvg)
 htfFvgMitigation = input.string("Close Through", "FVG Mitigation Rule", options=["Close Through", "Wick Through"], tooltip="Close Through: the gap dies when a chart bar closes beyond its far boundary. Wick Through: a wick beyond the far boundary is enough. A mitigated gap can never qualify a setup.", group=GRP_CONF, active=requireHtfFvg)
 htfFvgMaxAge = input.int(50, "Max HTF FVG Age (HTF Bars)", minval=1, maxval=500, tooltip="Maximum age of a valid HTF FVG, counted in HTF BARS (not chart bars).", group=GRP_CONF, active=requireHtfFvg)
@@ -644,13 +652,19 @@ htfFvgBullColor = input.color(color.new(#089981, 88), "HTF FVG Colors", inline="
 htfFvgBearColor = input.color(color.new(#f23645, 88), "", inline="conf_fvg_col", tooltip="Bearish HTF FVG box color.", group=GRP_CONF, active=showHtfFvgs)
 
 // --- Filter 2: Session liquidity delivery ---
-requireSessionLiq = input.bool(false, "Require Session Liquidity Delivery", tooltip="Optional quality filter. Bullish setups require a swept session LOW, bearish setups a swept session HIGH, inside the validity window below. Completely separate from the existing HTF liquidity engine.", group=GRP_CONF)
-sessAsiaEnable = input.bool(true, "Asian Session", inline="conf_asia", tooltip="Track the Asian session high/low as session liquidity.", group=GRP_CONF, active=requireSessionLiq)
-sessAsiaTime = input.session("1800-0300", "", inline="conf_asia", tooltip="Asian session range. Uses the chart timezone, or the Time Filter's custom timezone when that is enabled.", group=GRP_CONF, active=requireSessionLiq and sessAsiaEnable)
-sessLondonEnable = input.bool(true, "London Session", inline="conf_ldn", tooltip="Track the London session high/low as session liquidity.", group=GRP_CONF, active=requireSessionLiq)
-sessLondonTime = input.session("0300-0800", "", inline="conf_ldn", tooltip="London session range.", group=GRP_CONF, active=requireSessionLiq and sessLondonEnable)
-sessNyEnable = input.bool(true, "New York Session", inline="conf_ny", tooltip="Track the New York session high/low as session liquidity.", group=GRP_CONF, active=requireSessionLiq)
-sessNyTime = input.session("0800-1700", "", inline="conf_ny", tooltip="New York session range.", group=GRP_CONF, active=requireSessionLiq and sessNyEnable)
+requireSessionLiq = input.bool(false, "Session Liquidity", tooltip="Optional quality filter. Bullish setups require a swept session LOW, bearish setups a swept session HIGH, inside the validity window below. Completely separate from the existing HTF liquidity engine.", group=GRP_CONF)
+sess1Enable = input.bool(true, "Session 1", inline="cs1", tooltip="Track this session's high and low as liquidity.", group=GRP_CONF, active=requireSessionLiq)
+sess1Time = input.session("2000-0000", "", inline="cs1", tooltip="Session 1 range. Uses the chart timezone, or the Time Filter's custom timezone when that is enabled.", group=GRP_CONF, active=requireSessionLiq and sess1Enable)
+sess1Name = input.string("Asia", "", inline="cs1", tooltip="Name for session 1 (used in the session liquidity labels).", group=GRP_CONF, active=requireSessionLiq and sess1Enable)
+sess2Enable = input.bool(true, "Session 2", inline="cs2", tooltip="Track this session's high and low as liquidity.", group=GRP_CONF, active=requireSessionLiq)
+sess2Time = input.session("0200-0500", "", inline="cs2", tooltip="Session 2 range.", group=GRP_CONF, active=requireSessionLiq and sess2Enable)
+sess2Name = input.string("London", "", inline="cs2", tooltip="Name for session 2.", group=GRP_CONF, active=requireSessionLiq and sess2Enable)
+sess3Enable = input.bool(true, "Session 3", inline="cs3", tooltip="Track this session's high and low as liquidity.", group=GRP_CONF, active=requireSessionLiq)
+sess3Time = input.session("0930-1200", "", inline="cs3", tooltip="Session 3 range.", group=GRP_CONF, active=requireSessionLiq and sess3Enable)
+sess3Name = input.string("NY AM", "", inline="cs3", tooltip="Name for session 3.", group=GRP_CONF, active=requireSessionLiq and sess3Enable)
+sess4Enable = input.bool(true, "Session 4", inline="cs4", tooltip="Track this session's high and low as liquidity.", group=GRP_CONF, active=requireSessionLiq)
+sess4Time = input.session("1330-1600", "", inline="cs4", tooltip="Session 4 range.", group=GRP_CONF, active=requireSessionLiq and sess4Enable)
+sess4Name = input.string("NY PM", "", inline="cs4", tooltip="Name for session 4.", group=GRP_CONF, active=requireSessionLiq and sess4Enable)
 sessionSweepWindow = input.int(100, "Session Sweep Validity (Chart Bars)", minval=1, maxval=1000, tooltip="How many CHART BARS a session sweep stays valid for a later Unicorn confirmation.", group=GRP_CONF, active=requireSessionLiq)
 showSessionLiq = input.bool(false, "Show Session Liquidity", tooltip="Draw lines for published session highs/lows. Off by default.", group=GRP_CONF)
 
@@ -693,8 +707,8 @@ var int pendingBearSweptStartBar = na
 var string pendingBearSweptLabelText = ""
 
 // Confluence Layer State (additive - never read or written while the filters are off)
-var int htfBarCount = 0             // count of confirmed HTF bars seen: the clock for FVG age
-var int lastHtfFvgTime = na         // time of the last confirmed HTF bar already processed
+var int[] htfTfBarCount = array.new_int(3, 0)   // per-slot confirmed-HTF-bar clock (FVG age, in HTF bars)
+var int[] htfTfLastTime = array.new_int(3, 0)   // per-slot time of the last confirmed HTF bar processed
 var int lastVolSpikeBar = na        // chart bar_index of the most recent volume spike
 var int bullRejBreakerStart = na    // breaker identity of the last confluence-REJECTED bull confirmation
 var int bullRejBreakerEnd = na
@@ -716,8 +730,47 @@ f_isInSession() =>
         inSess := s1 or s2 or s3
     inSess
 
+// ========================================
+// FETCHING DATA RESOLUTION
+// ========================================
+[autoTA, autoTB, autoTC, autoTD] = getAutoHTFs()
+
+// Check if A is empty (e.g. on 15s chart resolution where k-1 < 0)
+bool autoA_valid = autoTA != ""
+string finalAutoTA = autoA_valid ? autoTA : timeframe.period
+
+// Resolve final timeframes
+htfA_resolved = htfMode == "Automatic" ? finalAutoTA : tfA
+htfB_resolved = htfMode == "Automatic" ? autoTB : tfB
+htfC_resolved = htfMode == "Automatic" ? autoTC : tfC
+htfD_resolved = htfMode == "Automatic" ? autoTD : tfD
+
+// Override the 'use' toggles in Automatic Mode if Source A is invalid
+useA_resolved = useA and (htfMode == "Manual" or (htfMode == "Automatic" and autoA_valid))
+useB_resolved = useB
+useC_resolved = useC
+useD_resolved = useD
+
+// Request security for all sources
+[prevH_A, prevL_A, sh_A, sl_A] = request.security(syminfo.tickerid, htfA_resolved, f_getHTFData(), barmerge.gaps_off, barmerge.lookahead_off)
+[prevH_B, prevL_B, sh_B, sl_B] = request.security(syminfo.tickerid, htfB_resolved, f_getHTFData(), barmerge.gaps_off, barmerge.lookahead_off)
+[prevH_C, prevL_C, sh_C, sl_C] = request.security(syminfo.tickerid, htfC_resolved, f_getHTFData(), barmerge.gaps_off, barmerge.lookahead_off)
+[prevH_D, prevL_D, sh_D, sl_D] = request.security(syminfo.tickerid, htfD_resolved, f_getHTFData(), barmerge.gaps_off, barmerge.lookahead_off)
+
+// HTF FVG source timeframes for the confluence layer - three independent slots.
+// Manual  = the three timeframes set in the inputs (15m / 1H / 4H by default).
+// Automatic = Liquidity Sources B, C and D's resolved timeframes.
+string htfFvgTF1 = htfFvgTfMode == "Manual" ? htfFvgTf1 : htfB_resolved
+string htfFvgTF2 = htfFvgTfMode == "Manual" ? htfFvgTf2 : htfC_resolved
+string htfFvgTF3 = htfFvgTfMode == "Manual" ? htfFvgTf3 : htfD_resolved
+
+[fvg1L1, fvg1H1, fvg1L3, fvg1H3, fvg1Atr, fvg1T] = request.security(syminfo.tickerid, htfFvgTF1, f_htfFvgData(), barmerge.gaps_off, barmerge.lookahead_off)
+[fvg2L1, fvg2H1, fvg2L3, fvg2H3, fvg2Atr, fvg2T] = request.security(syminfo.tickerid, htfFvgTF2, f_htfFvgData(), barmerge.gaps_off, barmerge.lookahead_off)
+[fvg3L1, fvg3H1, fvg3L3, fvg3H3, fvg3Atr, fvg3T] = request.security(syminfo.tickerid, htfFvgTF3, f_htfFvgData(), barmerge.gaps_off, barmerge.lookahead_off)
+
 // ----------------------------------------
 // CONFLUENCE LAYER HELPERS
+// (declared after the HTF FVG requests so they can read the resolved timeframes)
 // ----------------------------------------
 
 // Timezone for the session liquidity engine (mirrors the existing Time Filter architecture)
@@ -771,21 +824,131 @@ f_pushSessLevel(string nm, bool isHigh, float px) =>
         pushed := true
     pushed
 
-// GATE 1 - an unmitigated, in-age, size-qualified HTF FVG in the requested direction whose
-// SELECTED delivery flag is set. Only the selected mode's flag is read, so Touch / Enter / 50%
-// produce genuinely different verdicts.
-f_htfFvgGateOK(bool isBull) =>
-    bool ok = false
+// Bound each HTF FVG timeframe's memory INDEPENDENTLY, so a fast timeframe can never crowd
+// the slower timeframes' gaps out of the shared array.
+f_pruneHtfFvgSlot(int slot, int maxPerSlot) =>
+    int cnt = 0
+    if array.size(htfFvgs) > 0
+        for i = 0 to array.size(htfFvgs) - 1
+            if array.get(htfFvgs, i).tfSlot == slot
+                cnt += 1
+    int toDrop = cnt - maxPerSlot
+    if toDrop > 0
+        for d = 1 to toDrop
+            int oldest = -1
+            if array.size(htfFvgs) > 0
+                for i = 0 to array.size(htfFvgs) - 1
+                    if array.get(htfFvgs, i).tfSlot == slot
+                        oldest := i
+                        break
+            if oldest >= 0
+                dropped = array.remove(htfFvgs, oldest)
+                if not na(dropped.vizBox)
+                    box.delete(dropped.vizBox)
+    cnt
+
+// Register the HTF FVGs of ONE timeframe slot. The body only runs when that slot reports a NEW
+// confirmed HTF bar, so a gap can never appear before its third HTF candle has closed.
+f_registerHtfFvgSlot(int slot, string tfLabel, bool enabled, float l1, float h1, float l3, float h3, float atrC, int t) =>
+    bool added = false
+    if enabled and not na(t)
+        int lastT = array.get(htfTfLastTime, slot)
+        if lastT == 0 or t != lastT
+            array.set(htfTfLastTime, slot, t)
+            array.set(htfTfBarCount, slot, array.get(htfTfBarCount, slot) + 1)
+            int cnt = array.get(htfTfBarCount, slot)
+
+            // Bullish HTF FVG: 3rd candle's low above the 1st candle's high
+            if not na(l1) and not na(h3) and l1 > h3
+                box vzBull = na
+                if showHtfFvgs
+                    vzBull := box.new(left = bar_index, top = l1, right = bar_index, bottom = h3, border_color = color.new(na, na), bgcolor = htfFvgBullColor, xloc = xloc.bar_index, text = tfLabel, text_size = size.tiny, text_color = color.new(color.gray, 10), text_halign = text.align_right, text_valign = text.align_center)
+                array.push(htfFvgs, HTFFVG.new(
+                     top = l1,
+                     bottom = h3,
+                     isBull = true,
+                     tfSlot = slot,
+                     tfLabel = tfLabel,
+                     formHtfIdx = cnt,
+                     formBar = bar_index,
+                     atrAtForm = atrC,
+                     mitigated = false,
+                     touched = false,
+                     entered = false,
+                     reached50 = false,
+                     vizBox = vzBull
+                     ))
+                added := true
+
+            // Bearish HTF FVG: 3rd candle's high below the 1st candle's low
+            if not na(h1) and not na(l3) and h1 < l3
+                box vzBear = na
+                if showHtfFvgs
+                    vzBear := box.new(left = bar_index, top = l3, right = bar_index, bottom = h1, border_color = color.new(na, na), bgcolor = htfFvgBearColor, xloc = xloc.bar_index, text = tfLabel, text_size = size.tiny, text_color = color.new(color.gray, 10), text_halign = text.align_right, text_valign = text.align_center)
+                array.push(htfFvgs, HTFFVG.new(
+                     top = l3,
+                     bottom = h1,
+                     isBull = false,
+                     tfSlot = slot,
+                     tfLabel = tfLabel,
+                     formHtfIdx = cnt,
+                     formBar = bar_index,
+                     atrAtForm = atrC,
+                     mitigated = false,
+                     touched = false,
+                     entered = false,
+                     reached50 = false,
+                     vizBox = vzBear
+                     ))
+                added := true
+
+            f_pruneHtfFvgSlot(slot, 20)
+    added
+
+// Per-slot delivery verdict. Age is measured against THAT slot's own confirmed-HTF-bar clock,
+// so a 15m gap and a 4H gap are never aged with the same ruler. Only the SELECTED delivery
+// mode's flag is read.
+f_htfFvgSlotOK(bool isBull) =>
+    bool ok0 = false
+    bool ok1 = false
+    bool ok2 = false
     if array.size(htfFvgs) > 0
         for i = array.size(htfFvgs) - 1 to 0
             g = array.get(htfFvgs, i)
-            if g.isBull == isBull and not g.mitigated and (htfBarCount - g.formHtfIdx) <= htfFvgMaxAge
+            if g.isBull == isBull and not g.mitigated and (array.get(htfTfBarCount, g.tfSlot) - g.formHtfIdx) <= htfFvgMaxAge
                 bool sizeOK = htfFvgMinAtr <= 0.0 or (not na(g.atrAtForm) and (g.top - g.bottom) >= (g.atrAtForm * htfFvgMinAtr))
                 bool delivered = htfFvgDelivery == "Touch" ? g.touched : htfFvgDelivery == "Enter" ? g.entered : g.reached50
                 if sizeOK and delivered
-                    ok := true
-                    break
-    ok
+                    if g.tfSlot == 0
+                        ok0 := true
+                    else if g.tfSlot == 1
+                        ok1 := true
+                    else
+                        ok2 := true
+    [ok0, ok1, ok2]
+
+// GATE 1 - combine the per-slot verdicts across the ENABLED HTF FVG timeframes.
+// Any Timeframe: one enabled timeframe delivering is enough.
+// All Enabled Timeframes: every enabled timeframe must deliver.
+// No timeframe enabled at all: fails closed.
+f_htfFvgGateOK(bool isBull) =>
+    [ok0, ok1, ok2] = f_htfFvgSlotOK(isBull)
+    int enabledN = (htfFvgTf1Enable ? 1 : 0) + (htfFvgTf2Enable ? 1 : 0) + (htfFvgTf3Enable ? 1 : 0)
+    bool anyOK = (htfFvgTf1Enable and ok0) or (htfFvgTf2Enable and ok1) or (htfFvgTf3Enable and ok2)
+    bool allOK = (not htfFvgTf1Enable or ok0) and (not htfFvgTf2Enable or ok1) and (not htfFvgTf3Enable or ok2)
+    enabledN == 0 ? false : (htfFvgConfluenceMode == "All Enabled Timeframes" ? allOK : anyOK)
+
+// Compact per-timeframe status, e.g. "15m✓ 1H✕ 4H✓"
+f_htfTfStatusText(bool isBull) =>
+    [ok0, ok1, ok2] = f_htfFvgSlotOK(isBull)
+    string txt = ""
+    if htfFvgTf1Enable
+        txt := f_getTFLabel(htfFvgTF1) + (ok0 ? "✓" : "✕")
+    if htfFvgTf2Enable
+        txt := txt + (str.length(txt) > 0 ? " " : "") + f_getTFLabel(htfFvgTF2) + (ok1 ? "✓" : "✕")
+    if htfFvgTf3Enable
+        txt := txt + (str.length(txt) > 0 ? " " : "") + f_getTFLabel(htfFvgTF3) + (ok2 ? "✓" : "✕")
+    str.length(txt) > 0 ? txt : "none enabled"
 
 // GATE 2 - a session sweep in the correct direction inside the chart-bar validity window.
 // Bullish delivery needs a swept session LOW, bearish a swept session HIGH.
@@ -799,6 +962,18 @@ f_sessionGateOK(bool isBull) =>
                     ok := true
                     break
     ok
+
+// Name of the most recent qualifying swept session level, for the setup tooltip
+f_sessionSweptName(bool isBull) =>
+    string nm = ""
+    if array.size(sessLevels) > 0
+        for i = array.size(sessLevels) - 1 to 0
+            s = array.get(sessLevels, i)
+            if s.swept and not na(s.sweepBar) and s.isHigh == (not isBull)
+                if s.sweepBar <= bar_index and s.sweepBar >= (bar_index - sessionSweepWindow)
+                    nm := s.sessName
+                    break
+    nm
 
 // GATE 3 - volume spike inside [breaker series start - window, confirmation bar].
 // A spike from before that window can never qualify the setup.
@@ -821,47 +996,17 @@ f_confluenceGate(bool isBull, int breakerSeriesStartBar) =>
     ok
 
 // Compact confluence description appended to the setup tooltip (only when a filter is enabled)
-f_confluenceTagText() =>
+f_confluenceTagText(bool isBull) =>
     string t = ""
     if requireHtfFvg
-        t := "HTF FVG (" + htfFvgDelivery + ")"
+        t := "HTF FVG " + htfFvgDelivery + " [" + f_htfTfStatusText(isBull) + "]"
     if requireSessionLiq
-        t := t + (str.length(t) > 0 ? " | " : "") + "Session Liq"
+        string sName = f_sessionSweptName(isBull)
+        t := t + (str.length(t) > 0 ? " | " : "") + "Session Liq" + (str.length(sName) > 0 ? " [" + sName + "]" : "")
     if requireVolume
         t := t + (str.length(t) > 0 ? " | " : "") + "Volume"
     t
 
-// ========================================
-// FETCHING DATA RESOLUTION
-// ========================================
-[autoTA, autoTB, autoTC, autoTD] = getAutoHTFs()
-
-// Check if A is empty (e.g. on 15s chart resolution where k-1 < 0)
-bool autoA_valid = autoTA != ""
-string finalAutoTA = autoA_valid ? autoTA : timeframe.period
-
-// Resolve final timeframes
-htfA_resolved = htfMode == "Automatic" ? finalAutoTA : tfA
-htfB_resolved = htfMode == "Automatic" ? autoTB : tfB
-htfC_resolved = htfMode == "Automatic" ? autoTC : tfC
-htfD_resolved = htfMode == "Automatic" ? autoTD : tfD
-
-// Override the 'use' toggles in Automatic Mode if Source A is invalid
-useA_resolved = useA and (htfMode == "Manual" or (htfMode == "Automatic" and autoA_valid))
-useB_resolved = useB
-useC_resolved = useC
-useD_resolved = useD
-
-// Request security for all sources
-[prevH_A, prevL_A, sh_A, sl_A] = request.security(syminfo.tickerid, htfA_resolved, f_getHTFData(), barmerge.gaps_off, barmerge.lookahead_off)
-[prevH_B, prevL_B, sh_B, sl_B] = request.security(syminfo.tickerid, htfB_resolved, f_getHTFData(), barmerge.gaps_off, barmerge.lookahead_off)
-[prevH_C, prevL_C, sh_C, sl_C] = request.security(syminfo.tickerid, htfC_resolved, f_getHTFData(), barmerge.gaps_off, barmerge.lookahead_off)
-[prevH_D, prevL_D, sh_D, sl_D] = request.security(syminfo.tickerid, htfD_resolved, f_getHTFData(), barmerge.gaps_off, barmerge.lookahead_off)
-
-// HTF FVG source timeframe for the confluence layer.
-// Automatic = Liquidity Source B's resolved timeframe (mid of the existing hierarchy).
-string htfFvgTF = htfFvgTfMode == "Manual" ? htfFvgManualTf : htfB_resolved
-[htfFvgL1, htfFvgH1, htfFvgL3, htfFvgH3, htfFvgAtr, htfFvgTime] = request.security(syminfo.tickerid, htfFvgTF, f_htfFvgData(), barmerge.gaps_off, barmerge.lookahead_off)
 
 // Track formation bar index for each liquidity level
 var float lastPrevH_A = na
@@ -1046,48 +1191,10 @@ if curBearCtx != lastBearSweepCtx
     bearRejBreakerStart := na
     bearRejBreakerEnd := na
 
-// --- HTF FVG registration: only when a NEW CONFIRMED HTF bar arrives ---
-if not na(htfFvgTime) and (na(lastHtfFvgTime) or htfFvgTime != lastHtfFvgTime)
-    lastHtfFvgTime := htfFvgTime
-    htfBarCount += 1
-
-    // Bullish HTF FVG: 3rd candle's low above the 1st candle's high
-    if not na(htfFvgL1) and not na(htfFvgH3) and htfFvgL1 > htfFvgH3
-        box vzBull = na
-        if showHtfFvgs
-            vzBull := box.new(left = bar_index, top = htfFvgL1, right = bar_index, bottom = htfFvgH3, border_color = color.new(na, na), bgcolor = htfFvgBullColor, xloc = xloc.bar_index)
-        array.push(htfFvgs, HTFFVG.new(
-             top = htfFvgL1,
-             bottom = htfFvgH3,
-             isBull = true,
-             formHtfIdx = htfBarCount,
-             formBar = bar_index,
-             atrAtForm = htfFvgAtr,
-             mitigated = false,
-             touched = false,
-             entered = false,
-             reached50 = false,
-             vizBox = vzBull
-             ))
-
-    // Bearish HTF FVG: 3rd candle's high below the 1st candle's low
-    if not na(htfFvgH1) and not na(htfFvgL3) and htfFvgH1 < htfFvgL3
-        box vzBear = na
-        if showHtfFvgs
-            vzBear := box.new(left = bar_index, top = htfFvgL3, right = bar_index, bottom = htfFvgH1, border_color = color.new(na, na), bgcolor = htfFvgBearColor, xloc = xloc.bar_index)
-        array.push(htfFvgs, HTFFVG.new(
-             top = htfFvgL3,
-             bottom = htfFvgH1,
-             isBull = false,
-             formHtfIdx = htfBarCount,
-             formBar = bar_index,
-             atrAtForm = htfFvgAtr,
-             mitigated = false,
-             touched = false,
-             entered = false,
-             reached50 = false,
-             vizBox = vzBear
-             ))
+// --- HTF FVG registration across all enabled timeframes (only on NEW CONFIRMED HTF bars) ---
+f_registerHtfFvgSlot(0, f_getTFLabel(htfFvgTF1), htfFvgTf1Enable, fvg1L1, fvg1H1, fvg1L3, fvg1H3, fvg1Atr, fvg1T)
+f_registerHtfFvgSlot(1, f_getTFLabel(htfFvgTF2), htfFvgTf2Enable, fvg2L1, fvg2H1, fvg2L3, fvg2H3, fvg2Atr, fvg2T)
+f_registerHtfFvgSlot(2, f_getTFLabel(htfFvgTF3), htfFvgTf3Enable, fvg3L1, fvg3H1, fvg3L3, fvg3H3, fvg3Atr, fvg3T)
 
 // --- HTF FVG delivery flags + mitigation, evaluated on the current bar only ---
 if array.size(htfFvgs) > 0
@@ -1115,28 +1222,32 @@ if array.size(htfFvgs) > 0
             if showHtfFvgs and not na(g.vizBox) and not g.mitigated
                 box.set_right(g.vizBox, bar_index)
 
-// Bounded memory: drop the oldest HTF FVGs
-while array.size(htfFvgs) > 40
+// Bounded memory backstop (each timeframe slot is already capped at 20 by f_pruneHtfFvgSlot)
+while array.size(htfFvgs) > 80
     oldFvg = array.shift(htfFvgs)
     if not na(oldFvg.vizBox)
         box.delete(oldFvg.vizBox)
 
 // --- Session liquidity: levels are published only after a session CLOSES ---
 string confTz = f_confTz()
-bool inAsiaRaw = not na(time(timeframe.period, sessAsiaTime, confTz))
-bool inLdnRaw = not na(time(timeframe.period, sessLondonTime, confTz))
-bool inNyRaw = not na(time(timeframe.period, sessNyTime, confTz))
+bool inS1Raw = not na(time(timeframe.period, sess1Time, confTz))
+bool inS2Raw = not na(time(timeframe.period, sess2Time, confTz))
+bool inS3Raw = not na(time(timeframe.period, sess3Time, confTz))
+bool inS4Raw = not na(time(timeframe.period, sess4Time, confTz))
 
-[asiaHi, asiaLo] = f_trackSession(sessAsiaEnable, inAsiaRaw, inAsiaRaw and not inAsiaRaw[1], not inAsiaRaw and inAsiaRaw[1])
-[ldnHi, ldnLo] = f_trackSession(sessLondonEnable, inLdnRaw, inLdnRaw and not inLdnRaw[1], not inLdnRaw and inLdnRaw[1])
-[nyHi, nyLo] = f_trackSession(sessNyEnable, inNyRaw, inNyRaw and not inNyRaw[1], not inNyRaw and inNyRaw[1])
+[s1Hi, s1Lo] = f_trackSession(sess1Enable, inS1Raw, inS1Raw and not inS1Raw[1], not inS1Raw and inS1Raw[1])
+[s2Hi, s2Lo] = f_trackSession(sess2Enable, inS2Raw, inS2Raw and not inS2Raw[1], not inS2Raw and inS2Raw[1])
+[s3Hi, s3Lo] = f_trackSession(sess3Enable, inS3Raw, inS3Raw and not inS3Raw[1], not inS3Raw and inS3Raw[1])
+[s4Hi, s4Lo] = f_trackSession(sess4Enable, inS4Raw, inS4Raw and not inS4Raw[1], not inS4Raw and inS4Raw[1])
 
-f_pushSessLevel("Asia", true, asiaHi)
-f_pushSessLevel("Asia", false, asiaLo)
-f_pushSessLevel("London", true, ldnHi)
-f_pushSessLevel("London", false, ldnLo)
-f_pushSessLevel("NY", true, nyHi)
-f_pushSessLevel("NY", false, nyLo)
+f_pushSessLevel(sess1Name, true, s1Hi)
+f_pushSessLevel(sess1Name, false, s1Lo)
+f_pushSessLevel(sess2Name, true, s2Hi)
+f_pushSessLevel(sess2Name, false, s2Lo)
+f_pushSessLevel(sess3Name, true, s3Hi)
+f_pushSessLevel(sess3Name, false, s3Lo)
+f_pushSessLevel(sess4Name, true, s4Hi)
+f_pushSessLevel(sess4Name, false, s4Lo)
 
 // Sweep detection for published session levels (never on the bar the level was published)
 if array.size(sessLevels) > 0
@@ -1153,7 +1264,7 @@ if array.size(sessLevels) > 0
             line.set_x2(sl.vizLine, bar_index)
 
 // Bounded memory: drop the oldest session levels
-while array.size(sessLevels) > 24
+while array.size(sessLevels) > 32
     oldSess = array.shift(sessLevels)
     if not na(oldSess.vizLine)
         line.delete(oldSess.vizLine)
@@ -1290,7 +1401,7 @@ if not na(pendingBullSweepIdx)
                              )
 
                         if anyConfluenceOn
-                            label.set_tooltip(newBull.setupLabel, tooltipText + "\nConfluence: " + f_confluenceTagText())
+                            label.set_tooltip(newBull.setupLabel, tooltipText + "\nConfluence: " + f_confluenceTagText(true))
 
                         primaryTargetPrice = newBull.entryPrice + rrRatio * riskRange
                         if showRRTarget
@@ -1473,7 +1584,7 @@ if not na(pendingBearSweepIdx)
                              )
 
                         if anyConfluenceOn
-                            label.set_tooltip(newBear.setupLabel, tooltipText + "\nConfluence: " + f_confluenceTagText())
+                            label.set_tooltip(newBear.setupLabel, tooltipText + "\nConfluence: " + f_confluenceTagText(false))
 
                         primaryTargetPrice = newBear.entryPrice - rrRatio * riskRange
                         if showRRTarget
@@ -1674,7 +1785,7 @@ if array.size(activeSetups) > 0
 var table dashboardTable = table.new(
      position = f_getTablePosition(dashboardPosition),
      columns = 3,
-     rows = 18,
+     rows = 20,
      bgcolor = tableBgColor,
      border_width = tableBorderWidth,
      border_color = tableBorderColor,
@@ -1772,7 +1883,17 @@ if barstate.islast and showDashboard
             bool fvgBear = f_htfFvgGateOK(false)
             table.cell(dashboardTable, 0, confRow, "HTF FVG:", text_color=tableTextColor, text_size=tSize, text_halign=text.align_left, text_font_family=font.family_monospace)
             table.cell(dashboardTable, 1, confRow, (fvgBull ? "↑✓" : "↑✕") + " " + (fvgBear ? "↓✓" : "↓✕"), text_color=(fvgBull or fvgBear) ? color.green : color.gray, text_size=tSize, text_font_family=font.family_monospace)
-            table.cell(dashboardTable, 2, confRow, "(" + htfFvgDelivery + ")", text_color=color.gray, text_size=tSize, text_font_family=font.family_monospace)
+            table.cell(dashboardTable, 2, confRow, "(" + htfFvgDelivery + "·" + (htfFvgConfluenceMode == "All Enabled Timeframes" ? "All" : "Any") + ")", text_color=color.gray, text_size=tSize, text_font_family=font.family_monospace)
+            confRow += 1
+
+            table.cell(dashboardTable, 0, confRow, "  ↑ TFs:", text_color=tableTextColor, text_size=tSize, text_halign=text.align_left, text_font_family=font.family_monospace)
+            table.cell(dashboardTable, 1, confRow, f_htfTfStatusText(true), text_color=tableTextColor, text_size=tSize, text_font_family=font.family_monospace)
+            table.cell(dashboardTable, 2, confRow, "", text_size=tSize)
+            confRow += 1
+
+            table.cell(dashboardTable, 0, confRow, "  ↓ TFs:", text_color=tableTextColor, text_size=tSize, text_halign=text.align_left, text_font_family=font.family_monospace)
+            table.cell(dashboardTable, 1, confRow, f_htfTfStatusText(false), text_color=tableTextColor, text_size=tSize, text_font_family=font.family_monospace)
+            table.cell(dashboardTable, 2, confRow, "", text_size=tSize)
             confRow += 1
 
         if requireSessionLiq
