@@ -20,8 +20,26 @@ bounce, or breakout of the prior candle is visible while you're trading a lower 
 - The high and the low are the candle's extremes (wick to wick).
 - The middle is the 50% marker, measured either **High to Low** (default) or **Open to
   Close** — the setting is in the *Previous Candle Levels* group.
-- Each level has its own color / style / width, defaulting to solid gray for the extremes and
-  a dotted gray for the 50%.
+- Each level has its own color / style / width, defaulting to solid black for the extremes and
+  a soft dotted black for the 50%.
+
+**Sweep state.** Each level is restyled — dotted blue by default — for as long as it is being
+*swept*: the open candle has traded through the level but has not closed through it. The
+moment the candle closes through the level, it reverts to its normal solid styling; if price
+wicks through and closes back inside the previous candle's range, it stays blue and dotted.
+The level labels take the same color, so `PH` / `50%` / `PL` turn blue with their line.
+
+| Level | Swept (blue dotted) | Normal (solid black) |
+| --- | --- | --- |
+| High | `high > PH` and `close ≤ PH` | never reached, or `close > PH` |
+| Low | `low < PL` and `close ≥ PL` | never reached, or `close < PL` |
+| 50% | crossed, and close is back on the side the candle opened from | never crossed, or closed through |
+
+`high` / `low` / `close` here are the *running* values of the higher-timeframe candle that is
+still forming, so the state updates tick by tick and resets when that candle closes and the
+levels roll forward to it. The swept color / style / width are their own inputs, and
+`Sweep styling applies to` limits the behavior to the high and low if you'd rather the 50%
+line never change.
 - `Extend past the open candle` adds N bars of run-off to the right of the forming candle.
 - `Extend back to the live chart` projects the levels left, back to the bar where the prior
   HTF candle opened, so they sit over live price action instead of only over the HTF panel.

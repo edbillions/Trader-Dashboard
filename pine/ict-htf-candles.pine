@@ -3,7 +3,8 @@
 //
 // Modified from "ICT HTF Candles (fadi)" — original by fadizeidan, MPL-2.0.
 // Changes in this fork:
-//   1. Previous Candle Levels — high / low / 50% of the prior candle on every timeframe
+//   1. Previous Candle Levels — high / low / 50% of the prior candle on every timeframe,
+//      restyled while a level is being swept (traded through, not closed through)
 //   2. Fair Value Gap consequent encroachment (50%) midline
 //   3. Cleaner default candle + imbalance styling (matching-hue bodies, borders and wicks)
 
@@ -109,6 +110,11 @@ type Settings
 	color pcl_m_color
 	string pcl_m_style
 	int pcl_m_size
+	bool pcl_sweep_show
+	string pcl_sweep_apply
+	color pcl_sweep_color
+	string pcl_sweep_style
+	int pcl_sweep_size
 	int pcl_extend
 	bool pcl_extend_left
 	bool pcl_label_show
@@ -283,15 +289,22 @@ settings.vi_color               := input.color(color.new(#ef5350, 82), '', inlin
 
 settings.pcl_show               := input.bool(true, 'Previous candle levels', group = group_prev)
 settings.pcl_mid_source         := input.string('High to Low', 'Middle (50%) measured from', options = ['High to Low', 'Open to Close'], group = group_prev)
-settings.pcl_h_color            := input.color(color.new(#787b86, 0), 'High     ', inline = 'pclh', group = group_prev)
+settings.pcl_h_color            := input.color(color.new(#131722, 0), 'High     ', inline = 'pclh', group = group_prev)
 settings.pcl_h_style            := input.string('⎯⎯⎯', '', options = ['⎯⎯⎯', '----', '····'], inline = 'pclh', group = group_prev)
 settings.pcl_h_size             := input.int(1, '', options = [1, 2, 3, 4], inline = 'pclh', group = group_prev)
-settings.pcl_m_color            := input.color(color.new(#787b86, 40), 'Middle ', inline = 'pclm', group = group_prev)
+settings.pcl_m_color            := input.color(color.new(#131722, 55), 'Middle ', inline = 'pclm', group = group_prev)
 settings.pcl_m_style            := input.string('····', '', options = ['⎯⎯⎯', '----', '····'], inline = 'pclm', group = group_prev)
 settings.pcl_m_size             := input.int(1, '', options = [1, 2, 3, 4], inline = 'pclm', group = group_prev)
-settings.pcl_l_color            := input.color(color.new(#787b86, 0), 'Low      ', inline = 'pcll', group = group_prev)
+settings.pcl_l_color            := input.color(color.new(#131722, 0), 'Low      ', inline = 'pcll', group = group_prev)
 settings.pcl_l_style            := input.string('⎯⎯⎯', '', options = ['⎯⎯⎯', '----', '····'], inline = 'pcll', group = group_prev)
 settings.pcl_l_size             := input.int(1, '', options = [1, 2, 3, 4], inline = 'pcll', group = group_prev)
+
+settings.pcl_sweep_show         := input.bool(true, 'Restyle a level while it is swept', group = group_prev, tooltip = 'A level is "swept" once the open candle has traded through it but has not closed through it. It keeps the swept styling for as long as price stays back inside the previous range, and reverts to its normal styling the moment the candle closes through the level.')
+settings.pcl_sweep_color        := input.color(#2962ff, 'Swept  ', inline = 'pclsw', group = group_prev)
+settings.pcl_sweep_style        := input.string('····', '', options = ['⎯⎯⎯', '----', '····'], inline = 'pclsw', group = group_prev)
+settings.pcl_sweep_size         := input.int(1, '', options = [1, 2, 3, 4], inline = 'pclsw', group = group_prev)
+settings.pcl_sweep_apply        := input.string('All three levels', 'Sweep styling applies to', options = ['High & Low', 'All three levels'], group = group_prev)
+
 settings.pcl_extend             := input.int(2, 'Extend past the open candle (bars)', minval = 0, maxval = 50, group = group_prev)
 settings.pcl_extend_left        := input.bool(false, 'Extend back to the live chart', group = group_prev)
 settings.pcl_label_show         := input.bool(true, 'Level labels        ', inline = 'pcllbl', group = group_prev)
@@ -642,54 +655,76 @@ method PreviousLevels(CandleSet candleSet) =>
             int left = settings.pcl_extend_left and bar_index - prev.o_idx < 5000 ? prev.o_idx : box.get_left(prev.body)
             int right = box.get_right(current.body) + settings.pcl_extend
 
+            // A level is swept while the open candle has traded through it but has not closed
+            // through it. Closing through the level hands it back its normal styling; wicking
+            // through and closing back inside the previous range keeps it swept.
+            bool sweep_all = settings.pcl_sweep_apply == 'All three levels'
+            bool h_swept = settings.pcl_sweep_show and current.h > lvl_h and current.c <= lvl_h
+            bool l_swept = settings.pcl_sweep_show and current.l < lvl_l and current.c >= lvl_l
+            bool m_crossed = current.h > lvl_m and current.l < lvl_m
+            bool m_held = (current.o <= lvl_m and current.c <= lvl_m) or (current.o >= lvl_m and current.c >= lvl_m)
+            bool m_swept = settings.pcl_sweep_show and sweep_all and m_crossed and m_held
+
+            color h_color = h_swept ? settings.pcl_sweep_color : settings.pcl_h_color
+            string h_style = helper.LineStyle(h_swept ? settings.pcl_sweep_style : settings.pcl_h_style)
+            int h_width = h_swept ? settings.pcl_sweep_size : settings.pcl_h_size
+
+            color l_color = l_swept ? settings.pcl_sweep_color : settings.pcl_l_color
+            string l_style = helper.LineStyle(l_swept ? settings.pcl_sweep_style : settings.pcl_l_style)
+            int l_width = l_swept ? settings.pcl_sweep_size : settings.pcl_l_size
+
+            color m_color = m_swept ? settings.pcl_sweep_color : settings.pcl_m_color
+            string m_style = helper.LineStyle(m_swept ? settings.pcl_sweep_style : settings.pcl_m_style)
+            int m_width = m_swept ? settings.pcl_sweep_size : settings.pcl_m_size
+
             if na(pl.h)
-                pl.h := line.new(left, lvl_h, right, lvl_h, xloc = xloc.bar_index, color = settings.pcl_h_color, style = helper.LineStyle(settings.pcl_h_style), width = settings.pcl_h_size)
+                pl.h := line.new(left, lvl_h, right, lvl_h, xloc = xloc.bar_index, color = h_color, style = h_style, width = h_width)
             else
                 line.set_xy1(pl.h, left, lvl_h)
                 line.set_xy2(pl.h, right, lvl_h)
-                line.set_color(pl.h, settings.pcl_h_color)
-                line.set_style(pl.h, helper.LineStyle(settings.pcl_h_style))
-                line.set_width(pl.h, settings.pcl_h_size)
+                line.set_color(pl.h, h_color)
+                line.set_style(pl.h, h_style)
+                line.set_width(pl.h, h_width)
 
             if na(pl.l)
-                pl.l := line.new(left, lvl_l, right, lvl_l, xloc = xloc.bar_index, color = settings.pcl_l_color, style = helper.LineStyle(settings.pcl_l_style), width = settings.pcl_l_size)
+                pl.l := line.new(left, lvl_l, right, lvl_l, xloc = xloc.bar_index, color = l_color, style = l_style, width = l_width)
             else
                 line.set_xy1(pl.l, left, lvl_l)
                 line.set_xy2(pl.l, right, lvl_l)
-                line.set_color(pl.l, settings.pcl_l_color)
-                line.set_style(pl.l, helper.LineStyle(settings.pcl_l_style))
-                line.set_width(pl.l, settings.pcl_l_size)
+                line.set_color(pl.l, l_color)
+                line.set_style(pl.l, l_style)
+                line.set_width(pl.l, l_width)
 
             if na(pl.m)
-                pl.m := line.new(left, lvl_m, right, lvl_m, xloc = xloc.bar_index, color = settings.pcl_m_color, style = helper.LineStyle(settings.pcl_m_style), width = settings.pcl_m_size)
+                pl.m := line.new(left, lvl_m, right, lvl_m, xloc = xloc.bar_index, color = m_color, style = m_style, width = m_width)
             else
                 line.set_xy1(pl.m, left, lvl_m)
                 line.set_xy2(pl.m, right, lvl_m)
-                line.set_color(pl.m, settings.pcl_m_color)
-                line.set_style(pl.m, helper.LineStyle(settings.pcl_m_style))
-                line.set_width(pl.m, settings.pcl_m_size)
+                line.set_color(pl.m, m_color)
+                line.set_style(pl.m, m_style)
+                line.set_width(pl.m, m_width)
 
             if settings.pcl_label_show
                 if na(pl.h_label)
-                    pl.h_label := label.new(right, lvl_h, 'PH', xloc = xloc.bar_index, style = label.style_label_left, size = settings.pcl_label_size, color = color_transparent, textcolor = settings.pcl_h_color)
+                    pl.h_label := label.new(right, lvl_h, 'PH', xloc = xloc.bar_index, style = label.style_label_left, size = settings.pcl_label_size, color = color_transparent, textcolor = h_color)
                 else
                     label.set_xy(pl.h_label, right, lvl_h)
                     label.set_size(pl.h_label, settings.pcl_label_size)
-                    label.set_textcolor(pl.h_label, settings.pcl_h_color)
+                    label.set_textcolor(pl.h_label, h_color)
 
                 if na(pl.m_label)
-                    pl.m_label := label.new(right, lvl_m, '50%', xloc = xloc.bar_index, style = label.style_label_left, size = settings.pcl_label_size, color = color_transparent, textcolor = settings.pcl_m_color)
+                    pl.m_label := label.new(right, lvl_m, '50%', xloc = xloc.bar_index, style = label.style_label_left, size = settings.pcl_label_size, color = color_transparent, textcolor = m_color)
                 else
                     label.set_xy(pl.m_label, right, lvl_m)
                     label.set_size(pl.m_label, settings.pcl_label_size)
-                    label.set_textcolor(pl.m_label, settings.pcl_m_color)
+                    label.set_textcolor(pl.m_label, m_color)
 
                 if na(pl.l_label)
-                    pl.l_label := label.new(right, lvl_l, 'PL', xloc = xloc.bar_index, style = label.style_label_left, size = settings.pcl_label_size, color = color_transparent, textcolor = settings.pcl_l_color)
+                    pl.l_label := label.new(right, lvl_l, 'PL', xloc = xloc.bar_index, style = label.style_label_left, size = settings.pcl_label_size, color = color_transparent, textcolor = l_color)
                 else
                     label.set_xy(pl.l_label, right, lvl_l)
                     label.set_size(pl.l_label, settings.pcl_label_size)
-                    label.set_textcolor(pl.l_label, settings.pcl_l_color)
+                    label.set_textcolor(pl.l_label, l_color)
             else
                 label.delete(pl.h_label)
                 label.delete(pl.m_label)
