@@ -927,6 +927,11 @@ if array.size(activeHTFLevels) > 0
 while array.size(activeHTFLevels) > 100
     array.shift(activeHTFLevels)
 
+// [SWEEP DISPLAY] Keep every sweep tag pinned to the right edge of the chart
+if showSweeps and array.size(sweepDispLabels) > 0
+    for i = 0 to array.size(sweepDispLabels) - 1
+        label.set_x(array.get(sweepDispLabels, i), bar_index)
+
 // 2. Process & Track Sweeps (Corrected: updates on new sweep event OR extreme extension)
 if sweptBear and (biasSelect == "Neutral" or biasSelect == "Bullish")
     pendingBullSweepIdx := bar_index
