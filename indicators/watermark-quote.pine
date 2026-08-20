@@ -1,0 +1,186 @@
+//@version=6
+indicator("Watermark + Quote", overlay = true)
+
+// =============================================================================
+// Watermark + Quote
+// -----------------------------------------------------------------------------
+// Replaces two separate indicators with one:
+//
+//   * Watermark   - free-text title/subtitle, plus the chart's date and
+//                   "TICKER | TF" symbol line.
+//   * Quote       - a title and a multi-line body, e.g. a daily mantra.
+//
+// Each block carries its own screen position. TradingView only ever shows one
+// table per position, so blocks that land on the same position are merged into
+// a single table (in the order below) instead of drawing over each other:
+//
+//   quote title -> quote body -> watermark title -> watermark subtitle
+//   -> date -> symbol
+// =============================================================================
+
+
+// ── Inputs: text ─────────────────────────────────────────────────────────────
+G_TEXT = "Text"
+wmTitleTxt = input.string("", "Title",    group = G_TEXT)
+wmSubTxt   = input.string("", "Subtitle", group = G_TEXT)
+
+// ── Inputs: quote ────────────────────────────────────────────────────────────
+G_QUOTE = "Quote"
+showQuote = input.bool(true, "Show Quote", group = G_QUOTE)
+qTitleTxt = input.string("1% Better Daily, Be Rational", "Quote Title", group = G_QUOTE)
+qBodyTxt  = input.text_area("LESS IS MORE / 1-0 MENTALITY / GLORY TO GOD!", "Quote Body", group = G_QUOTE)
+
+// ── Inputs: positions ────────────────────────────────────────────────────────
+G_POS_Q = "Quote Position"
+qVert = input.string("top",    "Vertical Position",   options = ["top", "middle", "bottom"], group = G_POS_Q)
+qHorz = input.string("center", "Horizontal Position", options = ["left", "center", "right"], group = G_POS_Q)
+
+G_POS_WM = "Watermark Position"
+wmVert = input.string("bottom", "Vertical Position",   options = ["top", "middle", "bottom"], group = G_POS_WM)
+wmHorz = input.string("center", "Horizontal Position", options = ["left", "center", "right"], group = G_POS_WM)
+
+G_POS_SYM = "Symbol Position"
+showSymbolInfo = input.bool(true, "Show Symbol Info", group = G_POS_SYM)
+symVert = input.string("bottom", "Vertical Position",   options = ["top", "middle", "bottom"], group = G_POS_SYM)
+symHorz = input.string("center", "Horizontal Position", options = ["left", "center", "right"], group = G_POS_SYM)
+
+// ── Inputs: symbol info detail ───────────────────────────────────────────────
+G_SYM = "Symbol Info"
+showDate    = input.bool(true, "Show Date",   group = G_SYM)
+showTicker  = input.bool(true, "Show Symbol", group = G_SYM)
+dateFormat  = input.string("d/M/yyyy", "Date Format", group = G_SYM,
+     tooltip = "Pine date pattern. d/M/yyyy -> 20/8/2026, dd/MM/yyyy -> 20/08/2026, yyyy-MM-dd -> 2026-08-20.")
+dateTz      = input.string("", "Time Zone", group = G_SYM,
+     tooltip = "Leave empty to use the exchange time zone. Otherwise a UTC offset (\"UTC-5\") or an IANA name (\"America/New_York\").")
+useTickerId = input.bool(false, "Use Full Ticker ID", group = G_SYM,
+     tooltip = "Off: MNQ1!  |  On: CME_MINI:MNQ1!")
+
+// ── Inputs: cell size ────────────────────────────────────────────────────────
+G_CELL = "Cell Size"
+cellW = input.int(0, "Width",  minval = 0, maxval = 100, group = G_CELL, tooltip = "Percent of the chart's width. 0 = auto.")
+cellH = input.int(0, "Height", minval = 0, maxval = 100, group = G_CELL, tooltip = "Percent of the chart's height. 0 = auto.")
+
+// ── Inputs: styling ──────────────────────────────────────────────────────────
+G_ST_TITLE = "Title Settings"
+wmTitleCol   = input.color(#2a2e39, "Title Color", group = G_ST_TITLE)
+wmTitleSize  = input.string("large",  "Title Size",      options = ["auto", "tiny", "small", "normal", "large", "huge"], group = G_ST_TITLE)
+wmTitleAlign = input.string("center", "Title Alignment", options = ["left", "center", "right"],                          group = G_ST_TITLE)
+
+G_ST_SUB = "Subtitle Settings"
+wmSubCol   = input.color(#787b86, "Subtitle Color", group = G_ST_SUB)
+wmSubSize  = input.string("normal", "Subtitle Size",      options = ["auto", "tiny", "small", "normal", "large", "huge"], group = G_ST_SUB)
+wmSubAlign = input.string("center", "Subtitle Alignment", options = ["left", "center", "right"],                          group = G_ST_SUB)
+
+G_ST_SYM = "Symbol Settings"
+symCol   = input.color(#787b86, "Symbol Color", group = G_ST_SYM)
+symSize  = input.string("small",  "Symbol Size",      options = ["auto", "tiny", "small", "normal", "large", "huge"], group = G_ST_SYM)
+symAlign = input.string("center", "Symbol Alignment", options = ["left", "center", "right"],                          group = G_ST_SYM)
+
+G_ST_QT = "Quote Title Settings"
+qTitleCol   = input.color(#2962ff, "Quote Title Color", group = G_ST_QT)
+qTitleSize  = input.string("normal", "Quote Title Size",      options = ["auto", "tiny", "small", "normal", "large", "huge"], group = G_ST_QT)
+qTitleAlign = input.string("center", "Quote Title Alignment", options = ["left", "center", "right"],                          group = G_ST_QT)
+
+G_ST_QB = "Quote Body Settings"
+qBodyCol   = input.color(#787b86, "Quote Body Color", group = G_ST_QB)
+qBodySize  = input.string("small",  "Quote Body Size",      options = ["auto", "tiny", "small", "normal", "large", "huge"], group = G_ST_QB)
+qBodyAlign = input.string("center", "Quote Body Alignment", options = ["left", "center", "right"],                          group = G_ST_QB)
+
+G_BG = "Background"
+wmBg = input.color(color.new(color.white, 100), "Watermark Background", group = G_BG)
+qBg  = input.color(color.new(color.white, 100), "Quote Background",     group = G_BG)
+
+
+// ── Helpers ──────────────────────────────────────────────────────────────────
+
+// Nine screen positions, indexed 0..8 as (vertical * 3 + horizontal).
+posIndex(string vert, string horz) =>
+    vi = vert == "top" ? 0 : vert == "middle" ? 1 : 2
+    hi = horz == "left" ? 0 : horz == "center" ? 1 : 2
+    vi * 3 + hi
+
+posFromIndex(int i) =>
+    switch i
+        0 => position.top_left
+        1 => position.top_center
+        2 => position.top_right
+        3 => position.middle_left
+        4 => position.middle_center
+        5 => position.middle_right
+        6 => position.bottom_left
+        7 => position.bottom_center
+        => position.bottom_right
+
+sizeOf(string name) =>
+    switch name
+        "tiny"   => size.tiny
+        "small"  => size.small
+        "normal" => size.normal
+        "large"  => size.large
+        "huge"   => size.huge
+        => size.auto
+
+alignOf(string name) =>
+    switch name
+        "left"  => text.align_left
+        "right" => text.align_right
+        => text.align_center
+
+// "1M" on a 1-minute chart, "1H" on hourly, "1D" daily, "1Mo" monthly.
+tfLabel() =>
+    m = timeframe.multiplier
+    switch
+        timeframe.isseconds => str.tostring(m) + "S"
+        timeframe.isminutes => m >= 60 and m % 60 == 0 ? str.tostring(int(m / 60)) + "H" : str.tostring(m) + "M"
+        timeframe.isdaily   => str.tostring(m) + "D"
+        timeframe.isweekly  => str.tostring(m) + "W"
+        timeframe.ismonthly => str.tostring(m) + "Mo"
+        => timeframe.period
+
+MAX_ROWS = 6
+
+// Appends one line to whichever table owns the given position, keeping rows
+// contiguous so merged blocks stack cleanly.
+addRow(array<table> tbls, array<int> counts, string vert, string horz, string txt, color col, string sz, string al, color bg) =>
+    if txt != ""
+        pi = posIndex(vert, horz)
+        r  = array.get(counts, pi)
+        if r < MAX_ROWS
+            table.cell(array.get(tbls, pi), 0, r, txt,
+                 width       = cellW,
+                 height      = cellH,
+                 text_color  = col,
+                 text_halign = alignOf(al),
+                 text_valign = text.align_center,
+                 text_size   = sizeOf(sz),
+                 bgcolor     = bg)
+            array.set(counts, pi, r + 1)
+
+
+// ── Render ───────────────────────────────────────────────────────────────────
+
+// One table per position, created once and refilled on the last bar.
+var array<table> tables = array.new<table>(9, na)
+var bool inited = false
+
+if not inited
+    inited := true
+    for i = 0 to 8
+        array.set(tables, i, table.new(posFromIndex(i), 1, MAX_ROWS, bgcolor = color.new(color.white, 100)))
+
+if barstate.islast
+    for i = 0 to 8
+        table.clear(array.get(tables, i), 0, 0, 0, MAX_ROWS - 1)
+
+    counts = array.new_int(9, 0)
+
+    tz      = dateTz == "" ? syminfo.timezone : dateTz
+    dateTxt = showSymbolInfo and showDate ? str.format_time(time, dateFormat, tz) : ""
+    symTxt  = showSymbolInfo and showTicker ? (useTickerId ? syminfo.tickerid : syminfo.ticker) + " | " + tfLabel() : ""
+
+    addRow(tables, counts, qVert,   qHorz,   showQuote ? qTitleTxt : "", qTitleCol,   qTitleSize,  qTitleAlign,  qBg)
+    addRow(tables, counts, qVert,   qHorz,   showQuote ? qBodyTxt : "",  qBodyCol,    qBodySize,   qBodyAlign,   qBg)
+    addRow(tables, counts, wmVert,  wmHorz,  wmTitleTxt,                 wmTitleCol,  wmTitleSize, wmTitleAlign, wmBg)
+    addRow(tables, counts, wmVert,  wmHorz,  wmSubTxt,                   wmSubCol,    wmSubSize,   wmSubAlign,   wmBg)
+    addRow(tables, counts, symVert, symHorz, dateTxt,                    symCol,      symSize,     symAlign,     wmBg)
+    addRow(tables, counts, symVert, symHorz, symTxt,                     symCol,      symSize,     symAlign,     wmBg)
