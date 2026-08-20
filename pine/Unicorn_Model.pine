@@ -480,6 +480,19 @@ sessLiq4Name = input.string("S4", "", inline="sess_liq_4", tooltip="Name for Ses
 sessLiq4Time = input.session("1330-1600", "", inline="sess_liq_4", tooltip="Session 4 window. Its high and low are registered once the session closes.", group=GRP_LIQ, active=useSessionLiq and sessLiq4Use)
 
 // ========================================
+// INPUTS - Group 3B: Liquidity Sweeps (NEW - display only)
+// ========================================
+string GRP_SWEEP = "Liquidity Sweeps"
+showSweeps = input.bool(true, "Show Liquidity Sweeps?", tooltip="Draw a line and a BSL/SSL tag the moment a registered liquidity level is taken, whether or not a Unicorn setup follows. Purely visual - it does not affect setup detection.", group=GRP_SWEEP)
+sweepScope = input.string("All Levels", "Show Sweeps For", options=["All Levels", "Swing Only"], tooltip="All Levels marks every swept level (OHLC, Swing and Session). Swing Only limits the markers to swept swing highs and lows.", group=GRP_SWEEP, active=showSweeps)
+sweepSide = input.string("Both", "Sweep Side", options=["Both", "BSL Only", "SSL Only"], tooltip="BSL marks swept highs (buy-side liquidity), SSL marks swept lows (sell-side liquidity).", group=GRP_SWEEP, active=showSweeps)
+maxSweepLines = input.int(20, "Max Sweep Lines", minval=1, maxval=100, tooltip="Number of sweep markers kept on the chart. The oldest is removed when the limit is reached.", group=GRP_SWEEP, active=showSweeps)
+sweepDisplayStyle = input.string("Dotted", "Sweep Line Style", options=["Solid", "Dashed", "Dotted"], inline="sweep_disp_line", tooltip="Style of the sweep line.", group=GRP_SWEEP, active=showSweeps)
+sweepDisplayWidth = input.int(1, "", minval=1, maxval=4, inline="sweep_disp_line", tooltip="Width of the sweep line.", group=GRP_SWEEP, active=showSweeps)
+bslColor = input.color(color.new(#787b86, 0), "BSL / SSL Color", inline="sweep_disp_colors", tooltip="Color of swept high (BSL) markers.", group=GRP_SWEEP, active=showSweeps)
+sslColor = input.color(color.new(#787b86, 0), "", inline="sweep_disp_colors", tooltip="Color of swept low (SSL) markers.", group=GRP_SWEEP, active=showSweeps)
+
+// ========================================
 // INPUTS - Group 4: Target Projections (Separate, No Inlines)
 // ========================================
 string GRP_TGT = "Target Projections"
@@ -805,6 +818,63 @@ f_processSessionLiquidity(2, useSessionLiq and sessLiq3Use, inSessLiq3, f_getSes
 f_processSessionLiquidity(3, useSessionLiq and sessLiq4Use, inSessLiq4, f_getSessionName(sessLiq4Name, "S4"))
 
 // ========================================
+// LIQUIDITY SWEEP DISPLAY
+// ========================================
+// Marks sweeps as they happen. Driven by the existing sweep detection below -
+// when a registered level is taken, its price is drawn as a line running from
+// where the level formed to the bar that swept it, tagged M15 BSL / H1 SSL etc.
+// Display only: no setup, sweep, bias or alert behaviour depends on any of it.
+
+// "15m" -> "M15", "1H" -> "H1", "4H" -> "H4", "1D" -> "D1".
+// Session names (S1, Asia, ...) are left exactly as the user typed them.
+f_toSweepTag(string lbl) =>
+    string res = lbl
+    int n = str.length(lbl)
+    if n > 1
+        string unit = str.substring(lbl, n - 1, n)
+        string num = str.substring(lbl, 0, n - 1)
+        if (unit == "S" or unit == "m" or unit == "H" or unit == "D" or unit == "W" or unit == "M") and not na(str.tonumber(num))
+            res := (unit == "m" ? "M" : unit) + num
+    res
+
+// Rolling buffer so sweep markers can never exhaust the drawing limits
+var line[] sweepDispLines = array.new_line()
+var label[] sweepDispLabels = array.new_label()
+
+f_drawLiquiditySweep(HTFLevel lvl) =>
+    bool scopeOk = sweepScope == "All Levels" or lvl.levelType == "Swing"
+    bool sideOk = sweepSide == "Both" or (lvl.isHigh and sweepSide == "BSL Only") or (not lvl.isHigh and sweepSide == "SSL Only")
+    if showSweeps and scopeOk and sideOk
+        color sweepCol = lvl.isHigh ? bslColor : sslColor
+        int x1 = math.max(lvl.startBar, bar_index - 4500)
+        line sweepLn = line.new(
+             x1 = x1,
+             y1 = lvl.price,
+             x2 = bar_index,
+             y2 = lvl.price,
+             color = sweepCol,
+             style = f_getLineStyle(sweepDisplayStyle),
+             width = sweepDisplayWidth,
+             xloc = xloc.bar_index
+             )
+        label sweepLb = label.new(
+             x = bar_index,
+             y = lvl.price,
+             text = f_toSweepTag(lvl.tfLabel) + (lvl.isHigh ? " BSL" : " SSL"),
+             color = color.new(na, na),
+             textcolor = labelTextColor,
+             style = label.style_label_left,
+             size = f_getLabelSize(labelSizeStr),
+             tooltip = lvl.labelText + " swept at " + str.tostring(lvl.price, format.mintick),
+             text_font_family = font.family_monospace
+             )
+        array.push(sweepDispLines, sweepLn)
+        array.push(sweepDispLabels, sweepLb)
+        while array.size(sweepDispLines) > maxSweepLines
+            line.delete(array.shift(sweepDispLines))
+            label.delete(array.shift(sweepDispLabels))
+
+// ========================================
 // MAIN EXECUTION STATE MACHINE (Level update & sweep check)
 // ========================================
 bool sweptBull = false
@@ -848,6 +918,8 @@ if array.size(activeHTFLevels) > 0
         if swept
             lvl.isSwept := true
             lvl.sweepBar := bar_index
+            // [SWEEP DISPLAY] Mark the sweep on the chart as it happens
+            f_drawLiquiditySweep(lvl)
             // Performance Optimization: Immediately remove swept level from execution array
             array.remove(activeHTFLevels, idx)
 
