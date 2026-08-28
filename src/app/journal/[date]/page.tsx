@@ -351,6 +351,40 @@ export default async function JournalDayPage({
                 {t.writeup && (
                   <p className="mt-2 text-sm text-muted">{t.writeup}</p>
                 )}
+                {(t.htfChartLink || t.intermediateChartLink || t.entryChartLink) && (
+                  <div className="mt-2 flex flex-wrap gap-3 text-xs">
+                    {t.htfChartLink && (
+                      <a
+                        href={t.htfChartLink}
+                        target="_blank"
+                        rel="noreferrer"
+                        className="text-accent hover:underline"
+                      >
+                        HTF chart →
+                      </a>
+                    )}
+                    {t.intermediateChartLink && (
+                      <a
+                        href={t.intermediateChartLink}
+                        target="_blank"
+                        rel="noreferrer"
+                        className="text-accent hover:underline"
+                      >
+                        Intermediate chart →
+                      </a>
+                    )}
+                    {t.entryChartLink && (
+                      <a
+                        href={t.entryChartLink}
+                        target="_blank"
+                        rel="noreferrer"
+                        className="text-accent hover:underline"
+                      >
+                        Entry chart →
+                      </a>
+                    )}
+                  </div>
+                )}
                 {t.screenshots.length > 0 && (
                   <div className="mt-2 flex gap-2">
                     {t.screenshots.map((s) => (
